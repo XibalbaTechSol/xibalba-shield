@@ -72,3 +72,13 @@ To deploy to the actual **ITK Testnet**:
 2. Run deployment: `npx hardhat run scripts/deploy.ts --network itkTestnet`
 3. Update contract address values in `.env`.
 4. Launch production server: `npm run start`
+
+---
+
+## 📦 Standalone Repository Status
+
+The project is fully decoupled from the home directories and published:
+- **Repository Location**: [github.com/XibalbaTechSol/xibalba-shield](https://github.com/XibalbaTechSol/xibalba-shield)
+- **Local Isolation**: Standalone `.git` initialized inside `~/Projects/xibalba-shield`
+- **Exclusion Filters**: Enabled standard Next.js, Hardhat `.gitignore` parameters to secure local `.env` and private keys.
+
