@@ -1,36 +1,136 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Xibalba Shield — Cryptographic HIPAA Compliance-as-a-Service
 
-## Getting Started
+Xibalba Shield is an enterprise-grade clinical security portal and decentralized verification pipeline built on the **Integrity Token ($ITK)** and the **Integrity Protocol**. It empowers healthcare clinics, hospitals, and telemedicine networks to run high-performance AI inference models on patient data while cryptographically guaranteeing complete **HIPAA Technical Safeguards compliance (45 CFR § 164.312)**.
 
-First, run the development server:
+Through a dual-layer identity primitive, client-side zero-knowledge edge hashing, and soulbound compliance gating, Xibalba Shield guarantees that private **Protected Health Information (PHI) never touches the blockchain**.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 🚀 Key Architectural Pillars
+
+### 1. Dual-Layer Identity Primitive
+- **Operator ECDSA Keypair**: The human medical professional or administrator authenticates using standard public-key cryptography.
+- **Machine Agent SBT**: The autonomous AI model is registered as an on-chain asset mapped to a non-transferable Soulbound Token (`ReputationSBT.sol`) that tracks its real-time compliance metrics.
+
+### 2. Tri-Metric Agent Reputation Gating
+AI models are continuously audited across three performance vectors:
+- **Accuracy**: Integrity of clinical summaries, diagnosis codes, and billing classifications.
+- **Privacy**: Zero exposure of identifiable fields or accidental leakage of raw text.
+- **Reliability**: Query latency, contract execution consistency, and node health.
+
+If any vector dips below predefined enterprise thresholds, the SBT access token is dynamically revoked or locked.
+
+### 3. ZK Edge Blinding (Safe Harbor Method)
+Under the HIPAA Safe Harbor standard, raw text must be blinded pre-network interface. The Xibalba Shield Edge SDK hashes raw patient records locally:
+$$\text{ZK\_Hash} = \text{SHA256}(\text{clinicalData} + \text{nonce})$$
+Only this blind, cryptographic hash is sent to the blockchain for timestamping and anchoring, ensuring absolute privacy.
+
+### 4. Collateralized Staking & Slashing
+AI model performance is backed by financial stakes. If an agent experiences severe hallucinations or breaches compliance thresholds, the $ITK collateral is slashed and disbursed as an insurance callback to affected clinic systems.
+
+---
+
+## 🛠️ Smart Contract Ecosystem (`/contracts`)
+
+The underlying Web3 primitive layer comprises the following Solidity smart contracts:
+
+- **`SovereignAgent.sol`**: Manages registration, authorization, and ownership records of AI models.
+- **`ReputationSBT.sol`**: Implements soulbound reputation tracking using performance structs (`uint8 accuracy`, `uint8 privacy`, `uint8 reliability`).
+- **`AuditShield.sol`**: Handles cryptographic log anchoring. Employs duplicate transaction modifiers (`Log already anchored`) to prevent replay or hash reuse.
+- **`StakingReputation.sol`**: Manages $ITK collateral staking, delegation, and penalty execution (slashing).
+- **`MockPaymaster.sol`**: Underpins gasless Layer-2 transactions, subsidizing clinical audit logs with L2 paymaster networks.
+
+---
+
+## 📦 Client-Side Edge SDK (`src/lib/sdk/`)
+
+The edge SDK (`xibalba-shield-sdk.ts`) allows developers to easily integrate ZK compliance checks into outpatient scribes, billing bots, and triage channels:
+
+```typescript
+import { XibalbaShieldSDK } from "./sdk/shield-sdk";
+
+// Initialize with ITK Testnet provider
+const sdk = new XibalbaShieldSDK({
+  rpcUrl: "https://testnet.itk-protocol.io",
+  reputationSbtAddress: "0x...",
+  auditShieldAddress: "0x..."
+});
+
+// Perform local cryptographic blinding of patient data
+const { dataHash, payload } = await sdk.blindClinicalRecord({
+  patientId: "PAT-8831",
+  symptoms: "Persistent dry cough, fatigue, low-grade fever",
+  vitals: { temp: "100.1F", bp: "120/80" }
+});
+
+// Verify if the active AI model is compliant pre-inference
+const isCompliant = await sdk.verifyAgentCompliance("0xModelAgentAddress");
+if (isCompliant) {
+  // Send ZK Hash to on-chain AuditShield
+  const txHash = await sdk.anchorAuditLog("0xModelAgentAddress", dataHash);
+  console.log(`Compliance verified. Audit log anchored: ${txHash}`);
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Quickstart & Deployed Workspace
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Prerequisites
+- Node.js (v18 or higher)
+- Hardhat (`npx hardhat`)
+- `uv` (for Python-based agent sync and simulation scripts)
 
-## Learn More
+### Installation
+1. Clone the repository and install packages:
+   ```bash
+   npm install
+   ```
+2. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+### Running Local Development Environment
+1. Launch the local Hardhat Node simulating the ITK Testnet:
+   ```bash
+   npx hardhat node
+   ```
+2. Deploy the smart contracts to the local network:
+   ```bash
+   npx hardhat run scripts/deploy.ts --network localhost
+   ```
+3. Boot the Next.js dev portal:
+   ```bash
+   npm run dev
+   ```
+4. Access the clinical console landing page at `http://localhost:3000` and the secure command center dashboard at `http://localhost:3000/dashboard`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🔬 Simulation & Automated Tests
 
-## Deploy on Vercel
+To run the B2B outpatient simulation loop testing concurrent block mining and duplicate log prevention modifiers:
+```bash
+npx hardhat run scripts/test-scribe-loop.ts --network localhost
+```
+The simulation tests key parameters:
+1. **Happy Path**: Successful hashing, SBT lookup, gas paymaster subsidy, and block mining.
+2. **Duplicate Prevention Guard**: Re-submitting identical hashes successfully triggers the contract-level modifier, reverting with `Log already anchored`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🛡️ Regulatory Compliance Matrix
+
+Xibalba Shield maps directly to the **45 CFR § 164.312 HIPAA Technical Safeguards Matrix**:
+- **§ 164.312(a)(1) Access Control**: Enforced pre-inference via `ReputationSBT` checks.
+- **§ 164.312(b) Transmission Security**: Ensured locally via ZK-edge blinding hashing.
+- **§ 164.312(c)(1) Integrity**: Deriving local raw patient data offline and checking the hash against `AuditShield.sol` dynamically verifies file integrity.
+- **§ 164.312(d) Authentication**: Dual-Layer cryptographic identity primitive mapping machine SBT address and operator ECDSA signatures.
+
+---
+
+## 📄 License & Integrity Statement
+
+This codebase is published under the **MIT License**.
+*Form-First Engineering. Mathematical Certainty. Proliferating the Integrity Protocol.*
