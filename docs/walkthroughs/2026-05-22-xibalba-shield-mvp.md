@@ -82,3 +82,29 @@ The project is fully decoupled from the home directories and published:
 - **Local Isolation**: Standalone `.git` initialized inside `~/Projects/xibalba-shield`
 - **Exclusion Filters**: Enabled standard Next.js, Hardhat `.gitignore` parameters to secure local `.env` and private keys.
 
+---
+
+## 🎛️ Dashboard & Endpoint Verification
+
+We have validated the clinical command center dashboard and its underlying integration pipeline end-to-end:
+1. **Active Telemetry Loops**: Verified that the dashboard live log updates dynamically using asynchronous interval streams on the browser side.
+2. **End-to-End API Inference Endpoint POST**:
+   - Tested POST requests to `http://localhost:3000/api/inference`.
+   - **Smart Contract Duplicate Prevention**: Validated that duplicate clinical note submissions successfully trigger the on-chain duplicate log check modifier, returning a clean revert string: `execution reverted: "Log already anchored"`.
+   - **Unique ZK Execution Proof**: Submitting unique clinical patient variations dynamically hashes the PHI client-side, registers it to `AuditShield.sol` on the local Hardhat Node, and returns a verified JSON packet containing the exact data hash and actual blockchain transaction hash:
+     ```json
+     {
+       "success": true,
+       "inference": {
+         "summary": "Patient presents with symptoms consistent with acute pharyngitis.",
+         "suggestedBillingCode": "J02.9",
+         "confidence": 0.95
+       },
+       "audit": {
+         "dataHash": "0x9a25d13ab6a2050746d94b1e553e98b934c5a659670052b62f97d575af8a7b99",
+         "transactionHash": "0x12a67a5c9caa72fea16a97c0aa329d5bdd385a3f8e3332962b517eed03311c81"
+       }
+     }
+     ```
+
+
