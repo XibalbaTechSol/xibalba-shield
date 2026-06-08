@@ -6,14 +6,26 @@ export interface ShieldConfig {
   auditShieldAddress: string; // AuditShield contract address
   providerUrl: string;        // ITK L2 Testnet/Local RPC URL
   privateKey?: string;        // Optional operator private key for signing logs
-}
-
 export interface SecureSessionParams {
   clinicalData: Record<string, any>; // Private patient details (PHI)
   prompt: string;                    // Instruction system prompt
   minAccuracyScore?: number;         // Accuracy rating threshold (default: 80)
   minPrivacyScore?: number;          // ZK edge boundary compliance threshold (default: 85)
   minReliabilityScore?: number;      // Latency operational verification threshold (default: 80)
+  complianceMetadata?: HealthcareComplianceMetadata; // Vertical-specific HIPAA flags
+}
+
+/**
+ * Enterprise Healthcare compliance metadata strictly mapped to Xibalba Shield.
+ * These are compiled into the generic 'clearance_flags' bitmask for the Integrity Protocol.
+ */
+export interface HealthcareComplianceMetadata {
+  hipaaEligible: boolean;
+  zdrEnabled: boolean;
+  externalWebAccess: boolean;
+  dataResidencyRegion?: string;
+  apiDomainPrefix?: string;
+  ekmProvider?: string;
 }
 
 export interface ShieldVerificationResult {
@@ -23,6 +35,7 @@ export interface ShieldVerificationResult {
   reliability: number;       // Model's live Reliability score
   auditHash: string;         // Cryptographic zero-knowledge blinded hash logged on-chain
   transactionHash?: string;  // ITK transaction hash of L2 block anchoring
+  clearanceFlags?: number;   // The compiled bitmask sent to the Integrity Protocol Oracle
   error?: string;
 }
 
@@ -31,8 +44,22 @@ export interface ShieldVerificationResult {
  * Cryptographically enforcing HIPAA compliance and model alignment at the edge via the Tri-Metric Protocol.
  */
 export class XibalbaShield {
-  private config: ShieldConfig;
-  private provider: ethers.JsonRpcProvider;
+...
+  /**
+   * Compiles healthcare-specific compliance fields into the generic protocol clearance bitmask.
+   */
+  private buildClearanceBitmask(metadata?: HealthcareComplianceMetadata): number {
+    if (!metadata) return 0;
+    let flags = 0;
+    if (metadata.hipaaEligible) flags |= (1 << 0); // Bit 0: HIPAA/PHI Clearance
+    if (metadata.zdrEnabled) flags |= (1 << 1);    // Bit 1: Zero Data Retention (ZDR)
+    if (!metadata.externalWebAccess) flags |= (1 << 2); // Bit 2: Internal Air-Gapped Network Only
+    return flags;
+  }
+
+  /**
+   * Securely gates PHI access by verifying model ReputationSBT and logging ZK hashes.
+   */
   private wallet?: ethers.Wallet;
 
   constructor(config: ShieldConfig) {
@@ -130,6 +157,9 @@ export class XibalbaShield {
       // 2. PHI Data Blinding: Generate the cryptographic proof hash locally (Edge-redacted)
       const auditHash = this.generateZKHash(params.clinicalData, params.prompt);
 
+      // 2b. Compile the Compliance Bitmask for the generic Integrity Oracle Telemetry
+      const clearanceFlags = this.buildClearanceBitmask(params.complianceMetadata);
+
       // 3. Anchor Blind Proof Log: Write the secure ZK hash to AuditShield.sol
       let transactionHash: string | undefined;
       
@@ -146,13 +176,17 @@ export class XibalbaShield {
         transactionHash = "0x" + Math.random().toString(16).substring(2, 10) + "..." + Math.random().toString(16).substring(2, 10);
       }
 
+      // Telemetry would be dispatched to Integrity Protocol Oracle here:
+      // dispatchTelemetry({ agentId: this.config.agentAddress, clearance_flags: clearanceFlags, ... })
+
       return {
         isApproved: true,
         accuracy,
         privacy,
         reliability,
         auditHash,
-        transactionHash
+        transactionHash,
+        clearanceFlags
       };
 
     } catch (error: any) {
