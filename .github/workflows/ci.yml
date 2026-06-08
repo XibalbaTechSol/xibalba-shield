@@ -1,0 +1,16 @@
+name: Xibalba Shield CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - run: npm install
+    - name: Run Smart Contract Tests
+      run: npx hardhat test --if-present
+    - name: Build Frontend
+      run: npm run build --if-present
