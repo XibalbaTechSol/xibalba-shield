@@ -1,6 +1,6 @@
 # Xibalba Shield — Cryptographic HIPAA Compliance-as-a-Service
 
-Xibalba Shield is an enterprise-grade clinical security portal and decentralized verification pipeline built on the **Integrity Token ($ITK)** and the **Integrity Protocol**. It empowers healthcare clinics, hospitals, and telemedicine networks to run high-performance AI inference models on patient data while cryptographically guaranteeing complete **HIPAA Technical Safeguards compliance (45 CFR § 164.312)**.
+Xibalba Shield is an enterprise-grade clinical security portal and decentralized verification pipeline built on top of the **Integrity Protocol** ecosystem. It empowers healthcare clinics, hospitals, and telemedicine networks to run high-performance AI inference models on patient data while cryptographically guaranteeing complete **HIPAA Technical Safeguards compliance (45 CFR § 164.312)**.
 
 Through a dual-layer identity primitive, client-side zero-knowledge edge hashing, and soulbound compliance gating, Xibalba Shield guarantees that private **Protected Health Information (PHI) never touches the blockchain**.
 
@@ -134,3 +134,13 @@ Xibalba Shield maps directly to the **45 CFR § 164.312 HIPAA Technical Safeguar
 
 This codebase is published under the **MIT License**.
 *Form-First Engineering. Mathematical Certainty. Proliferating the Integrity Protocol.*
+
+---
+
+## 🏛️ Relationship to Integrity Protocol
+
+Xibalba Shield is a **Vertical Implementation** of the Integrity Protocol. While the core protocol provides a generic "Trust Layer," Xibalba Shield extends it with healthcare-specific logic:
+
+- **Clearance Bitmask**: Xibalba Shield utilizes the protocol's generic `clearance_bitmask` to represent HIPAA compliance status (Bit 0: PHI Access, Bit 1: Billing Authority).
+- **ZK-Edge Blinding**: Shield utilizes the protocol's ZK-verification engine to prove an agent meets HIPAA-specific AIS thresholds (>= 750) without revealing clinical metadata.
+- **Service Layer**: Shield acts as the "Healthcare Credit Bureau," interpreting the raw reputation scores into clinical trust levels.
