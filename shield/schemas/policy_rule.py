@@ -32,8 +32,11 @@ class RuleScope:
 @dataclass
 class Condition:
     """One `conditions[]` entry. `type` names which normalized event field group this
-    condition inspects ("process", "agent", "file", "flow"); `match` is a dict of
-    field -> list-of-glob-or-exact-values, ANY of which matching satisfies that field."""
+    condition inspects ("process", "agent", "file", "flow", "context", "activity"); `match`
+    is a dict of field -> list-of-glob-or-exact-values, ANY of which matching satisfies that
+    field. A list-valued field (`context.data_sources`, `context.tools_called`) matches if
+    ANY of its elements matches ANY allowed value — see
+    `policy_engine.engine._field_matches`."""
 
     type: str
     match: dict[str, list[Any]]

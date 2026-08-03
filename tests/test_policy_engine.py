@@ -148,3 +148,63 @@ def test_every_evaluation_produces_a_decision_even_when_allowed():
     decision = engine.evaluate(event, _ctx())
     assert decision is not None
     assert decision.event_ref.event_id.startswith("evt-")
+
+
+def test_context_condition_matches_model_endpoint():
+    """The model-routing guardrail hook depends entirely on this: a rule naming
+    context.model_endpoint must be able to actually match."""
+    rule = PolicyRule.from_dict({
+        "rule_id": "block-unapproved-model",
+        "name": "x", "version": "1.0.0",
+        "conditions": [{"type": "context", "match": {"model_endpoint": ["https://unapproved.example/*"]}}],
+        "actions": [{"type": "deny"}],
+    })
+    engine = PolicyEngine(rules=[rule])
+    event = AgentEvent(
+        device_id="dev-1",
+        agent=AgentInfo(agent_id="a1", name="a1"),
+        context=AgentContext(model_endpoint="https://unapproved.example/v1"),
+        activity=AgentActivity(type="model_routing"),
+    )
+    decision = engine.evaluate(event, _ctx())
+    assert decision.decision.action == "deny"
+
+
+def test_context_condition_matches_element_inside_data_sources_list():
+    """context.data_sources is a list -- the rule names one value, the event carries several;
+    the match must be containment, not list equality."""
+    rule = PolicyRule.from_dict({
+        "rule_id": "flag-ehr-access",
+        "name": "x", "version": "1.0.0",
+        "conditions": [{"type": "context", "match": {"data_sources": ["ehr_encounter"]}}],
+        "actions": [{"type": "escalate"}],
+    })
+    engine = PolicyEngine(rules=[rule])
+    event = AgentEvent(
+        device_id="dev-1",
+        agent=AgentInfo(agent_id="a1", name="a1"),
+        context=AgentContext(data_sources=["billing_db", "ehr_encounter"]),
+        activity=AgentActivity(type="retrieval"),
+    )
+    decision = engine.evaluate(event, _ctx())
+    assert decision.decision.action == "escalate"
+
+
+def test_activity_condition_matches_risk_level():
+    """The output guardrail hook depends entirely on this: a rule naming activity.risk_level
+    must be able to actually match."""
+    rule = PolicyRule.from_dict({
+        "rule_id": "block-high-risk-output",
+        "name": "x", "version": "1.0.0",
+        "conditions": [{"type": "activity", "match": {"risk_level": ["high", "critical"]}}],
+        "actions": [{"type": "deny"}],
+    })
+    engine = PolicyEngine(rules=[rule])
+    event = AgentEvent(
+        device_id="dev-1",
+        agent=AgentInfo(agent_id="a1", name="a1"),
+        context=AgentContext(),
+        activity=AgentActivity(type="output:phi", risk_level="high"),
+    )
+    decision = engine.evaluate(event, _ctx())
+    assert decision.decision.action == "deny"

@@ -29,7 +29,14 @@ from ..schemas.policy_rule import Condition, PolicyRule
 
 def _field_matches(actual: object, allowed: list[object]) -> bool:
     """One `match` field: ANY of `allowed` matching `actual` satisfies it. Strings support
-    glob patterns (`*/ai/*.exe`, per spec §7's example); everything else is exact equality."""
+    glob patterns (`*/ai/*.exe`, per spec §7's example); everything else is exact equality.
+
+    When `actual` is itself a list (`AgentContext.data_sources`/`.tools_called` are the only
+    such fields today), ANY element of it matching ANY of `allowed` satisfies the field — a
+    rule naming `data_sources: ["ehr_encounter"]` must match an event whose `data_sources` is
+    `["ehr_encounter", "billing_db"]`, not require the whole list to equal one exact value."""
+    if isinstance(actual, list):
+        return any(_field_matches(item, allowed) for item in actual)
     for candidate in allowed:
         if isinstance(candidate, str) and isinstance(actual, str):
             if fnmatch.fnmatch(actual, candidate):
@@ -51,10 +58,21 @@ def _event_severity(event: NormalizedEvent) -> str:
 
 
 def _event_field_group(event: NormalizedEvent, group: str) -> dict | None:
-    """Pull the named field group (`process`, `agent`, `file`, `flow`) off a normalized
-    event as a plain dict, or None if this event class doesn't carry that group — a
-    condition naming a group the event doesn't have simply doesn't match, it doesn't error."""
-    attr_map = {"process": "process", "agent": "agent", "file": "file", "flow": "flow"}
+    """Pull the named field group (`process`, `agent`, `file`, `flow`, `context`) off a
+    normalized event as a plain dict, or None if this event class doesn't carry that group —
+    a condition naming a group the event doesn't have simply doesn't match, it doesn't error.
+
+    `context` and `activity` were added alongside the four non-tool_execution guardrail hooks
+    (ingress, retrieval/context, model routing, output, post-action verification — spec §4.4):
+    those hooks carry their most policy-relevant data on `AgentEvent.context`
+    (`model_endpoint`, `data_sources`) and `.activity` (`risk_level` — the whole point of the
+    output hook), not `.agent`. Without both, a rule could gate on which agent made a call but
+    never on which model it routed to, which data source it touched, or how risky its output
+    was classified — exactly the fields those hook points exist to police."""
+    attr_map = {
+        "process": "process", "agent": "agent", "file": "file", "flow": "flow",
+        "context": "context", "activity": "activity",
+    }
     attr = attr_map.get(group)
     if attr is None or not hasattr(event, attr):
         return None

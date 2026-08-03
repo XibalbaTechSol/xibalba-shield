@@ -33,25 +33,24 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 |---|---|---|---|---|
 | 1 | Event schemas | §5 | ✅ | `shield/schemas/events.py` — exact §5.1–§5.6 shapes, no field renaming. `tests/test_schemas.py` |
 | 2 | Policy rule schema | §7 | ✅ | `shield/schemas/policy_rule.py` |
-| 3 | Policy Engine | §4.3 | ✅ | `shield/policy_engine/engine.py` — table-driven, first-match, zero network calls. 8 tests in `tests/test_policy_engine.py` |
+| 3 | Policy Engine | §4.3 | ✅ | `shield/policy_engine/engine.py` — table-driven, first-match, zero network calls. Condition groups: `process`, `agent`, `file`, `flow`, `context`, `activity` (last two added alongside the guardrail hooks below — without them a rule could never match `context.model_endpoint`/`.data_sources` or `activity.risk_level`). 11 tests in `tests/test_policy_engine.py` |
 | 4 | Agent Core — registry, router, event log | §4.2 | ✅ | `shield/agent_core/{registry,router,eventlog}.py`. 7 tests in `tests/test_agent_core.py` |
 | 5 | Integrity Exporter | §4.5 | ✅ | `shield/integrity_exporter/exporter.py` — real `integrity-sdk` BCC signing (`bcc.build_bcc_commitment`) + real telemetry (`IntegrityClient.log_telemetry`), no mock. Integration test self-skips if `bcc_middleware` isn't reachable (`tests/test_integrity_exporter.py`) — **not yet run against a live stack in this repo's history; do that before trusting the wire format end-to-end** |
-| 6 | Guardrail hook — tool execution (1 of 5) | §4.4 | ✅ | `shield/guardrail_hooks/tool_execution.py` — real pre-execution gate, raises `ToolCallDenied` |
-| 7 | Guardrail hooks — ingress, retrieval/context, model routing, output, post-action verification (4 of 5) | §4.4 | ⬜ | Not started. Spec's own build order (§14) puts these after tool execution and after a pilot validates the first one |
-| 8 | CLI (`shield status`, `shield events`) | §4.6 | ✅ | `shield/cli.py` |
-| 9 | Configuration & update module | §4.6 | ⬜ | Not started — no policy hot-reload, no tenant cloud API, no auto-update |
-| 10 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
-| 11 | Linux sensor — real eBPF probe | §4.1 | 🟡 **UNVERIFIED** | `shield/sensors/ebpf/{process_exec.bpf.c,loader.py}` — real kprobe-on-`execve` code, written and reviewed. **Nothing about it has been confirmed to actually work.** This machine has `kernel.unprivileged_bpf_disabled=2`, so even checking the C source compiles needs root (BCC's `BPF(text=...)` compiles *and* loads in one call). See "Verifying the eBPF sensor" below — this is the single most important thing to close next |
-| 12 | Windows/macOS sensors | §4.1 | ⬜ | `[PLANNED]`, post-Linux per spec §3 |
-| 13 | Network sensor (v2+) | §9 | ⬜ | Deferred past v1 per spec §9 — host-centric attribution via the kernel sensor is the v1 design |
-| 14 | PHI-tagging / guardrail content classifier | §6 | ⬜ | `[PLANNED]` — behavioral-telemetry-only today; no resource-tagging or content-risk classification exists |
-| 15 | AIS contribution mapping | §8 | N/A (design doc only) | Shield does not and must not compute AIS — §8 documents an evidence-shape convention for a future oracle-side change that belongs to `integrity-oracle`, not this repo |
-| 16 | Compliance reporting surface | §11 | ⬜ | Depends on `integrity-latest`'s own `docs/design/evidence-export.md` (also `[PLANNED]` there as of this writing) — no separate export path belongs in this repo per spec §11 |
-| 17 | Pilot (3–5 SMBs) | §14 step 4 | ⬜ | Blocked on row 11 (Linux sensor verification) |
+| 6 | Guardrail hooks — all 6 hook points | §4.4 | ✅ | `shield/guardrail_hooks/{ingress,retrieval_context,model_routing,output,tool_execution,post_action_verification}.py` — each a real pre- (or, for post-action, post-) decision gate with its own deny exception. 15 tests in `tests/test_guardrail_hooks.py`. **Note:** spec §4.4 itself lists six hook points (ingress, retrieval/context, model routing, output, tool execution, post-action verification) while §14's roadmap prose says "generalizing to all five" — an inconsistency in the spec, not resolved here, just not silently picked one way; six modules exist, matching §4.4's own enumerated list. Built ahead of spec §14's suggested order (which puts hooks 2–6 after a pilot validates hook 1) per explicit direction to build out Phase 3 now |
+| 7 | CLI (`shield status`, `shield events`) | §4.6 | ✅ | `shield/cli.py` |
+| 8 | Configuration & update module | §4.6 | ⬜ | Not started — no policy hot-reload, no tenant cloud API, no auto-update |
+| 9 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
+| 10 | Linux sensor — real eBPF probe | §4.1 | 🟡 **UNVERIFIED** | `shield/sensors/ebpf/{process_exec.bpf.c,loader.py}` — real kprobe-on-`execve` code, written and reviewed. **Nothing about it has been confirmed to actually work.** This machine has `kernel.unprivileged_bpf_disabled=2`, so even checking the C source compiles needs root (BCC's `BPF(text=...)` compiles *and* loads in one call). See "Verifying the eBPF sensor" below — this is the single most important thing to close next |
+| 11 | Windows/macOS sensors | §4.1 | ⬜ | `[PLANNED]`, post-Linux per spec §3 |
+| 12 | Network sensor (v2+) | §9 | ⬜ | Deferred past v1 per spec §9 — host-centric attribution via the kernel sensor is the v1 design |
+| 13 | PHI-tagging / guardrail content classifier | §6 | ⬜ | `[PLANNED]` — behavioral-telemetry-only today; the output hook (row 6) enforces policy on a classification but does not itself produce one. No resource-tagging or content-risk classification exists |
+| 14 | AIS contribution mapping | §8 | N/A (design doc only) | Shield does not and must not compute AIS — §8 documents an evidence-shape convention for a future oracle-side change that belongs to `integrity-oracle`, not this repo |
+| 15 | Compliance reporting surface | §11 | ⬜ | Depends on `integrity-latest`'s own `docs/design/evidence-export.md` (also `[PLANNED]` there as of this writing) — no separate export path belongs in this repo per spec §11 |
+| 16 | Pilot (3–5 SMBs) | §14 step 4 | ⬜ | Blocked on row 10 (Linux sensor verification) |
 
 **One-line summary:** everything that can be built and tested as pure logic (schemas, policy
-engine, agent core, one guardrail hook, the exporter's wire format, the CLI) is real. The one
-piece needing kernel privileges — the actual Linux eBPF sensor — is written but **not yet
+engine, agent core, all six guardrail hooks, the exporter's wire format, the CLI) is real. The
+one piece needing kernel privileges — the actual Linux eBPF sensor — is written but **not yet
 verified to work**, because that verification needs `sudo` on a real machine, not something
 achievable from an unprivileged shell alone.
 
@@ -67,7 +66,8 @@ shield/
 │   ├── dev_generator.py  # DevModeSensor — real, explicitly synthetic
 │   └── ebpf/              # process_exec.bpf.c + loader.py — real code, UNVERIFIED (see below)
 ├── policy_engine/        # Table-driven rule evaluator — §4.3, §7
-├── guardrail_hooks/       # tool_execution.py (1 of 5 hook points) — §4.4
+├── guardrail_hooks/       # all 6 hook points (ingress, retrieval/context, model routing,
+│                           # output, tool_execution, post_action_verification) — §4.4
 ├── integrity_exporter/    # Wraps integrity-sdk: BCC signing + telemetry — §4.5
 ├── schemas/               # Event classes (§5) + policy rule shape (§7)
 └── cli.py                 # `shield status` / `shield events --recent` — §4.6
@@ -131,7 +131,7 @@ cd /home/xibalba/Projects/xibalba-shield
 uv venv --system-site-packages .venv           # --system-site-packages: bcc (python3-bpfcc)
                                                 # is a system package, not pip-installable
 uv pip install -e ".[dev]" --python .venv/bin/python
-.venv/bin/python -m pytest                     # 18 pass, 3 skip (2 need root, 1 needs a live
+.venv/bin/python -m pytest                     # 33 pass, 3 skip (2 need root, 1 needs a live
                                                 # bcc_middleware) — see "Testing" below
 ```
 
@@ -172,6 +172,7 @@ sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the two root-ga
 | `test_schemas.py` | Wire-format field names (`class` not `klass`, etc.) | no | no |
 | `test_policy_engine.py` | Table-driven rule matching, first-match-wins, scope filtering | no | no |
 | `test_agent_core.py` | Registry idempotence, router → policy engine → guardrail → exporter wiring, exception isolation | no | no |
+| `test_guardrail_hooks.py` | All 6 hook points: allow-path invokes the wrapped call, deny-path raises the hook's own exception AND never invokes the call | no | no |
 | `test_ebpf_sensor.py` | Non-root construction raises `PermissionError`; (root-gated) BPF source compiles+loads; (root-gated) a real subprocess's real `execve` is observed | 2 of 3 tests, yes | no |
 | `test_integrity_exporter.py` | A `PolicyDecision` becomes a real signed BCC commitment and reaches a real `bcc_middleware` | no | yes — self-skips if unreachable |
 
@@ -206,12 +207,14 @@ table above (if they disagree, the status table is more detailed and wins).
 - [ ] Confirm a Shield-originated commitment is queryable from the oracle side (`GET` the agent's telemetry/audit log and see the `shield_event` payload)
 
 ### Phase 3 — Guardrail hooks
-- [x] Tool execution hook (`guard_tool_call`) — 1 of 5 hook points, per spec's own sequencing
-- [ ] Ingress hook (prompt, requesting identity)
-- [ ] Retrieval/context hook (data sources touched)
-- [ ] Model routing hook (which model/endpoint)
-- [ ] Output hook (content classification — PHI, secrets, risk level) — this is also where §6's PHI-tagging mechanism would plug in
-- [ ] Post-action verification hook (the "semantic–physical gap" check — did the expected state change actually occur; see `integrity-protocol-v0.4.md` §22.4)
+- [x] Tool execution hook (`guard_tool_call`)
+- [x] Ingress hook (`guard_ingress`) — prompt, requesting identity. No prompt *content* in the event (§6) — only `agent`/`owner_user_id`
+- [x] Retrieval/context hook (`guard_retrieval`) — data sources touched, matched via the new `context` condition group
+- [x] Model routing hook (`guard_model_routing`) — which model/endpoint, matched via `context.model_endpoint`
+- [x] Output hook (`guard_output`) — gates on a caller-supplied `risk_level`/`categories` classification; **does not itself classify content** — that's §6's still-`[PLANNED]` PHI-tagging/classifier, a separate piece of real work
+- [x] Post-action verification hook (`verify_post_action`) — the "semantic–physical gap" check (expected vs. actual state hash equality; see `integrity-protocol-v0.4.md` §22.4). Structurally different from the other five: the action already happened, so this can only detect and flag, never block
+- [x] Policy Engine extended with `context` and `activity` condition groups — without them, rules could never actually gate on the fields these five new hooks carry (model_endpoint, data_sources, risk_level), making them decorative rather than enforcing
+- [x] 15 new tests (`tests/test_guardrail_hooks.py`) + 3 new policy-engine tests for the two new condition groups — every hook tested both directions: allow invokes the call, deny raises AND never invokes it
 
 ### Phase 4 — Pilot
 - [ ] Blocked on Phase 1's eBPF verification and Phase 2's live-stack proof

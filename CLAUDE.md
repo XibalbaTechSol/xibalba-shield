@@ -24,8 +24,9 @@ shield/
 ├── agent_core/        # DeviceContext, AgentRegistry, EventRouter, EventLog — spec §4.2
 ├── sensors/            # Sensor interface (base.py) + dev_generator.py (real, synthetic) +
 │                        # ebpf/ (real code, UNVERIFIED — read ebpf/README.md before touching it)
-├── policy_engine/      # Table-driven rule evaluator — spec §4.3, §7
-├── guardrail_hooks/     # ONE real hook (tool_execution.py) — spec §4.4
+├── policy_engine/      # Table-driven rule evaluator — spec §4.3, §7 — condition groups:
+│                        # process/agent/file/flow/context/activity
+├── guardrail_hooks/     # all 6 hook points, all real — spec §4.4
 ├── integrity_exporter/  # Wraps integrity-sdk: BCC signing + telemetry — spec §4.5
 ├── schemas/             # Event classes (§5) + policy rule shape (§7), canonical, no renaming
 └── cli.py               # `shield status` / `shield events --recent` — spec §4.6
