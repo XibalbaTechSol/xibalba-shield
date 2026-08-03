@@ -1,47 +1,55 @@
 /*
- * [PLANNED] — NEVER COMPILED, NEVER LOADED, NEVER VERIFIED BY THE BPF VERIFIER.
- * See ./README.md before treating anything in this file as working. Written against
- * spec/xibalba-shield-v1.md §4.1's tracepoint shape as a design sketch to build against.
+ * Real eBPF program, compiled and loaded by shield/sensors/ebpf/loader.py via BCC (already
+ * installed system-wide as python3-bpfcc — BCC JIT-compiles this source with its own embedded
+ * LLVM against the running kernel's installed headers, no separate `clang` binary required).
+ * Written against spec/xibalba-shield-v1.md §4.1: capture pid/ppid/comm/filename on process
+ * exec, push a compact record to user space over a perf ring buffer — no policy logic here,
+ * that's the Policy Engine's job (§4.1's own stated reason for the split: a kernel-sensor bug
+ * must never become a false-enforcement bug).
  *
- * Intended: attach to sched_process_exec, capture pid/ppid/comm/filename, push a compact
- * record through a BPF ring buffer to user space (shield/sensors/linux, not yet written
- * either — the ring-buffer consumer that would read this doesn't exist yet).
+ * Attaches as a kprobe on the `execve` syscall entry point (via BCC's `get_syscall_fnname`,
+ * which resolves the real kernel symbol across kernel-version/arch syscall-wrapper naming
+ * differences), the same proven approach as BCC's own `execsnoop` tool
+ * (/usr/sbin/execsnoop-bpfcc, shipped by the `bpfcc-tools` package already installed on this
+ * machine) — chosen over `TRACEPOINT_PROBE(sched, sched_process_exec)` because that macro
+ * additionally requires BCC to read the tracepoint's format file from tracefs to generate the
+ * args struct, one more root-gated step this design avoids.
+ *
+ * **Correction, recorded rather than silently fixed:** an earlier version of this comment
+ * claimed a kprobe-based program could be *compiled* under BCC without root, with only
+ * load/attach needing it. Measured, that's false: BCC's `BPF(text=...)` eagerly creates every
+ * declared map (here, the `BPF_PERF_OUTPUT` table) as part of construction, and map creation
+ * is itself a `bpf()` syscall requiring `CAP_BPF` — so `BPF(text=...)` raises on this machine
+ * (`kernel.unprivileged_bpf_disabled=2`) regardless of whether the C source is valid. There is
+ * no non-root verification path for this file through BCC's high-level API. See
+ * `loader.py`/`README.md` for what is and isn't actually verified as of this writing.
  */
 
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
+#include <uapi/linux/ptrace.h>
+#include <linux/sched.h>
 
 struct process_exec_record {
-	__u32 pid;
-	__u32 ppid;
-	char comm[16];
-	char filename[256];
+    u32 pid;
+    u32 ppid;
+    char comm[TASK_COMM_LEN];
+    char filename[256];
 };
 
-struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 1 << 20); /* 1 MiB — within the 90 MB RSS budget (spec §3) */
-} process_exec_ringbuf SEC(".maps");
+BPF_PERF_OUTPUT(process_exec_events);
 
-SEC("tp_btf/sched_process_exec")
-int handle_process_exec(struct bpf_raw_tracepoint_args *ctx)
+int on_execve(struct pt_regs *ctx, const char __user *filename)
 {
-	struct process_exec_record *rec;
+    struct process_exec_record rec = {};
+    struct task_struct *task;
 
-	rec = bpf_ringbuf_reserve(&process_exec_ringbuf, sizeof(*rec), 0);
-	if (!rec)
-		return 0;
+    rec.pid = bpf_get_current_pid_tgid() >> 32;
 
-	rec->pid = bpf_get_current_pid_tgid() >> 32;
-	bpf_get_current_comm(&rec->comm, sizeof(rec->comm));
-	/* ppid and filename extraction from ctx intentionally left unfinished here — this
-	 * file has never been built against a real kernel/BTF, so completing the argument
-	 * unpacking without being able to verify it against the actual tracepoint signature
-	 * would be guessing, not implementing. See README.md. */
+    task = (struct task_struct *)bpf_get_current_task();
+    rec.ppid = task->real_parent->tgid;
 
-	bpf_ringbuf_submit(rec, 0);
-	return 0;
+    bpf_get_current_comm(&rec.comm, sizeof(rec.comm));
+    bpf_probe_read_user_str(&rec.filename, sizeof(rec.filename), filename);
+
+    process_exec_events.perf_submit(ctx, &rec, sizeof(rec));
+    return 0;
 }
-
-char _license[] SEC("license") = "GPL";
