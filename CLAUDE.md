@@ -23,7 +23,7 @@ here — read it there, this file assumes it).
 shield/
 ├── agent_core/        # DeviceContext, AgentRegistry, EventRouter, EventLog — spec §4.2
 ├── sensors/            # Sensor interface (base.py) + dev_generator.py (real, synthetic) +
-│                        # ebpf/ (PLANNED, unbuilt — read ebpf/README.md before touching it)
+│                        # ebpf/ (real code, UNVERIFIED — read ebpf/README.md before touching it)
 ├── policy_engine/      # Table-driven rule evaluator — spec §4.3, §7
 ├── guardrail_hooks/     # ONE real hook (tool_execution.py) — spec §4.4
 ├── integrity_exporter/  # Wraps integrity-sdk: BCC signing + telemetry — spec §4.5
@@ -42,10 +42,12 @@ is the reference example of how to state that honestly.
 ## Commands
 
 ```bash
-uv venv .venv && uv pip install -e ".[dev]"
-uv run pytest                     # policy_engine + agent_core always run; test_integrity_exporter.py
-                                   # self-skips if bcc_middleware isn't reachable (see its own
-                                   # module docstring) rather than failing the whole suite
+uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
+# --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
+.venv/bin/python -m pytest        # 18 pass, 3 skip: 2 need root (real eBPF load/attach — see
+                                   # shield/sensors/ebpf/README.md), 1 self-skips if
+                                   # bcc_middleware isn't reachable, rather than failing the suite
+sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the 2 root-gated eBPF tests
 shield status                    # local decision-log summary
 shield events --recent 20        # recent policy decisions
 ```
