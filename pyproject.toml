@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xibalba-shield"
+version = "0.0.1"
+description = "Endpoint agent for AI-agent discovery, constraint, and Integrity-backed evidence — device/network security, separate from the HIPAA vertical. [PLANNED], see spec/xibalba-shield-v1.md."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Xibalba Solutions" }]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    # One-way dependency on integrity-sdk (protocol spec §14.1), imported the same way any
+    # third-party agent runtime would use it -- no privileged API, no special-cased access.
+    # Git dependency until integrity-sdk is published to PyPI; pin a commit once integrity-sdk
+    # cuts its first tagged release rather than tracking a moving branch indefinitely.
+    "integrity-sdk @ git+https://github.com/XibalbaTechSol/integrity-latest.git#subdirectory=integrity-sdk",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[project.scripts]
+shield = "shield.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["shield*"]
