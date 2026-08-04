@@ -223,8 +223,32 @@ table above (if they disagree, the status table is more detailed and wins).
 - [x] 15 new tests (`tests/test_guardrail_hooks.py`) + 3 new policy-engine tests for the two new condition groups — every hook tested both directions: allow invokes the call, deny raises AND never invokes it
 
 ### Phase 4 — Pilot
-- [ ] Blocked on Phase 1's eBPF verification and Phase 2's live-stack proof
-- [ ] Resource-budget measurement against spec §3 (≤90MB RAM, ≤3–5% CPU sustained) — **not measured at all yet**, even in dev mode
+- [x] **Resource-budget measurement against spec §3 (≤90MB RAM, ≤3–5% CPU sustained) — done, 2026-08-04.** `scripts/measure_resource_budget.py`, real numbers (`resource.getrusage`, not estimated):
+
+  | Scenario | Events | CPU (at that rate) | Peak RSS |
+  |---|---|---|---|
+  | STRESS, no exporter | 702,302 in 15s | 99.72% (saturated by design — see below) | 16.4 MB |
+  | IDLE (1/sec), no exporter | 16 in 15s | 0.02% | 16.4 MB |
+  | STRESS, real exporter | 38 in 15s | 1.12% (network-bound, not CPU-bound) | 61.0 MB |
+  | IDLE (1/sec), real exporter | 13 in 16s | 0.56% | 61.0 MB |
+
+  **Verdict: within budget, but not by a huge margin on the exporter path.** Projected CPU
+  at a genuinely busy device (10 events/sec, from measured per-event cost, not the
+  meaningless STRESS raw-% number): **4.425%**, against a 5% ceiling. Peak RSS **61.0 MB**,
+  against a 90 MB ceiling (~68% consumed). The no-exporter numbers (16.4 MB, negligible CPU)
+  show the agent-core/policy-engine loop itself is cheap — essentially all of the budget
+  consumption comes from the real exporter's DID/keypair/HTTP-client footprint and
+  BCC-signing cost, which is the same for one event or ten thousand.
+
+  **Caveat, stated plainly:** the exporter scenarios hit the same oracle-registration gap
+  Phase 2 already found — the benchmark's ad-hoc DID isn't registered, so telemetry flush
+  fails with 404 and retries/re-queues, which likely inflates RSS above a clean steady-state
+  number. Re-run against a registered DID for a tighter figure before treating 61.0 MB as
+  final. **Does NOT include real eBPF kernel-sensor overhead** — that runs in kernel space
+  with a cheap perf-buffer handoff, a different (and expected to be much smaller) cost than
+  this script measures; a separate root-run measurement would be needed for the full
+  picture including the two verified sensors.
+- [ ] Blocked on TCP-connect eBPF verification (environment-limited, see Phase 1) for the full pilot picture
 - [ ] 3–5 friendly SMB pilots, per spec §14
 
 ### Phase 5 — Broaden platform/scope
