@@ -38,7 +38,7 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 | 5 | Integrity Exporter | §4.5 | ✅ | `shield/integrity_exporter/exporter.py` — real `integrity-sdk` BCC signing (`bcc.build_bcc_commitment`) + real telemetry (`IntegrityClient.log_telemetry`), no mock. **Verified against a live stack**: `tests/test_integrity_exporter.py` submitted for real and got `authorized: true` + a real `verification_token`/`batch_index` back from `bcc_middleware`. The bootstrapped DID isn't registered with the oracle, so `GET /v1/agent/{did}` 404s — a separate, heavier follow-on step (see Phase 2 below) |
 | 6 | Guardrail hooks — all 6 hook points | §4.4 | ✅ | `shield/guardrail_hooks/{ingress,retrieval_context,model_routing,output,tool_execution,post_action_verification}.py` — each a real pre- (or, for post-action, post-) decision gate with its own deny exception. 15 tests in `tests/test_guardrail_hooks.py`. **Note:** spec §4.4 itself lists six hook points (ingress, retrieval/context, model routing, output, tool execution, post-action verification) while §14's roadmap prose says "generalizing to all five" — an inconsistency in the spec, not resolved here, just not silently picked one way; six modules exist, matching §4.4's own enumerated list. Built ahead of spec §14's suggested order (which puts hooks 2–6 after a pilot validates hook 1) per explicit direction to build out Phase 3 now |
 | 7 | CLI (`shield status`, `shield events`) | §4.6 | ✅ | `shield/cli.py` |
-| 8 | Configuration & update module | §4.6 | 🟡 | `shield/config/loader.py` — **real**: `load_policy_rules`/`load_device_config` parse local JSON files into the real `PolicyRule`/`DeviceConfig` shapes, refuse-the-whole-bundle-loudly on any malformed entry (never silently drops a bad rule), 11 tests. Wired into `shield validate --rules ... --device-config ...` (5 more tests). **Not built, deliberately**: tenant cloud API (no real server anywhere to test a client against) and safe auto-update (a materially harder problem — verified downloads, rollback, signature checking — deserving its own design pass) |
+| 8 | Configuration & update module | §4.6 | 🟡 | `shield/config/{loader,hot_reload}.py` — **real**: `load_policy_rules`/`load_device_config` parse local JSON files into the real `PolicyRule`/`DeviceConfig` shapes, refuse-the-whole-bundle-loudly on any malformed entry (never silently drops a bad rule), 11 tests. `PolicyHotReloader` reloads a changed rules file into a live `PolicyEngine` without a restart — mtime-polled, only swaps in a new rule set after it parses cleanly, so a bad edit keeps the engine on its last-known-good rules instead of zeroing them out or crashing, 6 tests. Wired into `shield validate --rules ... --device-config ...` (5 more tests). **Not built, deliberately**: tenant cloud API (no real server anywhere to test a client against) and safe auto-update for agent *code* (a materially harder problem — verified downloads, rollback, signature checking — deserving its own design pass) |
 | 9 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
 | 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **2 of 3 VERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`. **process-exec ✅ VERIFIED** (kprobe on `execve`, observed a real spawned subprocess's real exec). **file writes ✅ VERIFIED** (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel, observed a real write-open; not yet filtered by "sensitive path" — config-loadable-filter work, §4.6, unbuilt). **TCP-connect 🔴 BLOCKED**, confirmed a BCC/kernel version-skew problem rather than a bug here — `#include <net/sock.h>` hits kernel headers this BCC 0.29.1 can't parse, and BCC's own shipped `tcpconnect-bpfcc` reproduces an equivalent failure on the identical include chain on this same machine. DNS observation is NOT built at all (needs a uprobe/UDP-parsing approach, not a syscall kprobe). See "Verifying the eBPF sensors" below and `shield/sensors/ebpf/README.md` for the full record |
 | 11 | Windows/macOS sensors | §4.1 | ⬜ | `[PLANNED]`, post-Linux per spec §3 |
@@ -72,8 +72,8 @@ shield/
 ├── guardrail_hooks/       # all 6 hook points (ingress, retrieval/context, model routing,
 │                           # output, tool_execution, post_action_verification) — §4.4
 ├── integrity_exporter/    # Wraps integrity-sdk: BCC signing + telemetry — §4.5
-├── config/                # Local-file policy/device config loader — §4.6 (cloud API +
-│                           # auto-update deliberately not built, see status table row 8)
+├── config/                # Local-file policy/device config loader + PolicyHotReloader — §4.6
+│                           # (cloud API + code auto-update deliberately not built, row 8)
 ├── schemas/               # Event classes (§5) + policy rule shape (§7)
 └── cli.py                 # `shield status` / `events` / `validate` — §4.6
 scripts/                   # measure_resource_budget.py — spec §3 budget, real numbers recorded below
@@ -140,7 +140,7 @@ cd /home/xibalba/Projects/xibalba-shield
 uv venv --system-site-packages .venv           # --system-site-packages: bcc (python3-bpfcc)
                                                 # is a system package, not pip-installable
 uv pip install -e ".[dev]" --python .venv/bin/python
-.venv/bin/python -m pytest                     # 36 pass, 6 skip (all 6 need root; the live
+.venv/bin/python -m pytest                     # 58 pass, 6 skip (all 6 need root; the live
                                                 # bcc_middleware test now passes for real, not
                                                 # skipped, if bcc_middleware is up) — see "Testing" below
 ```
@@ -187,6 +187,7 @@ sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the 6 root-gate
 | `test_integrity_exporter.py` | A `PolicyDecision` becomes a real signed BCC commitment and reaches a real `bcc_middleware` | no | yes — self-skips if unreachable |
 | `test_config.py` | Real JSON files loaded through `load_policy_rules`/`load_device_config` — file order preserved, malformed input refuses the whole bundle loudly (missing file, bad JSON, wrong shape, unknown field, one bad rule among good ones) | no | no |
 | `test_cli.py` | `shield validate` end-to-end through real argparse wiring + the real config loader — exit codes and stdout for valid/invalid rules and device-config files | no | no |
+| `test_hot_reload.py` | `PolicyHotReloader` against real files with real mtime changes — picks up a real edit, ignores an unchanged file, and (the core safety property) a malformed edit or a missing file keeps the engine on its last-known-good rules rather than zeroing them out | no | no |
 
 No test in this repo asserts a fake value against a mock and calls it coverage — every real
 test here either exercises pure logic with no external dependency, or self-skips honestly when
@@ -258,14 +259,21 @@ table above (if they disagree, the status table is more detailed and wins).
 - [ ] 3–5 friendly SMB pilots, per spec §14
 
 ### Phase 5 — Broaden platform/scope
-- [ ] Windows sensor (ETW-based, normalized to the same §5 event classes)
-- [ ] macOS sensor
-- [ ] Network sensor (§9, v2+ per spec — explicitly deferred, not started)
-- [ ] Compliance reporting polish (§11) — depends on `integrity-latest`'s own evidence-export work landing first
-- [x] Configuration & update module (§4.6), **local-file half only**: `shield/config/loader.py` — real `load_policy_rules`/`load_device_config`, wired into `shield validate`. 16 new tests (11 loader + 5 CLI)
+
+Three items below are **blocked, not just unstarted** — stated explicitly so "not done" doesn't
+read as "next up": Windows/macOS sensors need a Windows/macOS machine to write AND verify
+against (this has only ever been a Linux box); the network sensor is deferred past v1 by the
+spec's own text (§9), not an oversight; compliance reporting polish depends on
+`integrity-latest`'s own evidence-export work, whose Phase B/C (control mapping, the actual
+export endpoint) are confirmed still `🔨 not built` there as of this check.
+
+- [ ] Windows sensor (ETW-based, normalized to the same §5 event classes) — **blocked**, no Windows machine available to write and verify against
+- [ ] macOS sensor — **blocked**, same reason
+- [ ] Network sensor (§9, v2+ per spec — explicitly deferred, not started) — **not a gap**, the spec itself says defer this
+- [ ] Compliance reporting polish (§11) — **blocked upstream**, `integrity-latest/docs/design/evidence-export.md` Phase B/C not built there yet
+- [x] Configuration & update module (§4.6), **local-file half + hot-reload**: `shield/config/loader.py` — real `load_policy_rules`/`load_device_config`, wired into `shield validate`. `shield/config/hot_reload.py::PolicyHotReloader` — mtime-polled, reloads a changed rules file into a live `PolicyEngine` without restarting; a malformed edit keeps the engine on its last-known-good rules rather than zeroing them out or crashing. 22 new tests total (11 loader + 5 CLI + 6 hot-reload)
 - [ ] Tenant cloud API for policy distribution — deliberately not built; no real server exists anywhere in this monorepo or `integrity-latest` to verify a client against
-- [ ] Safe auto-update for agent code/policy bundles — deliberately not built; a materially harder problem (verified downloads, rollback, update-payload signature checking) than a config loader, deserves its own design pass
-- [ ] Policy hot-reload (re-load a changed rules file without restarting the process) — not built; `load_policy_rules` is a one-shot loader today, no file-watching
+- [ ] Safe auto-update for agent *code* (not policy bundles, which hot-reload now covers) — deliberately not built; a materially harder problem (verified downloads, rollback, update-payload signature checking) than a config loader, deserves its own design pass
 
 ### Not in any phase — explicitly out of scope per spec §13
 - Not a payment rail, custodial key service, or trust-scoring engine (that's Integrity Protocol's job)
