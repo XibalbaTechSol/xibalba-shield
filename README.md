@@ -2,9 +2,11 @@
 
 Endpoint agent for AI-agent discovery, constraint, and Integrity-backed evidence — device and
 network security, **separate from** the HIPAA/healthcare vertical that lives in
-[`integrity-latest`](https://github.com/XibalbaTechSol/integrity-latest) (which is also,
-confusingly, historically called "Xibalba Shield" — see that repo's
-`spec/integrity-protocol-v0.4.md` §14.1 for the split decision).
+[`integrity-latest`](https://github.com/XibalbaTechSol/integrity-latest). That vertical was
+also historically called "Xibalba Shield" before being renamed to **Integrity Health**
+(2026-08-04) specifically to remove this ambiguity — see that repo's
+`spec/integrity-protocol-v0.4.md` §14.1 for the split decision. "Xibalba Shield" now names only
+this product.
 
 **Full technical specification (normative):**
 [`spec/xibalba-shield-v1.md`](https://github.com/XibalbaTechSol/integrity-latest/blob/main/spec/xibalba-shield-v1.md)
@@ -324,7 +326,16 @@ export endpoint) are confirmed still `🔨 not built` there as of this check.
   write from here.
 - **Fail-open/fail-closed postures are stated explicitly per module** — see `router.py`'s own
   docstring on why a guardrail-hook exception or an export failure never rolls back an
-  already-made enforcement decision.
+  already-made enforcement decision, and [`SECURITY.md`](SECURITY.md) for the consolidated,
+  code-grounded threat model this all adds up to.
+
+## Security posture
+
+[`SECURITY.md`](SECURITY.md) states plainly what this repo's code actually enforces today
+versus what `spec/xibalba-shield-v1.md` §6/§13 describe as design intent — default-allow
+posture, what a co-located root attacker can defeat, what's evidenced vs. merely logged
+locally, and what's real vs. still `[PLANNED]`. Read it before representing any capability to
+a customer, auditor, or pilot.
 
 ## License
 

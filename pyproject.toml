@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "xibalba-shield"
 version = "0.0.1"
-description = "Endpoint agent for AI-agent discovery, constraint, and Integrity-backed evidence — device/network security, separate from the HIPAA vertical. [PLANNED], see spec/xibalba-shield-v1.md."
+description = "Endpoint agent for AI-agent discovery, constraint, and Integrity-backed evidence — device/network security, separate from the Integrity Health (HIPAA) vertical. Core (schemas, policy engine, agent core, guardrail hooks, exporter, CLI) is real and tested; 2 of 3 Linux eBPF sensors verified. See README.md for current status against spec/xibalba-shield-v1.md."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

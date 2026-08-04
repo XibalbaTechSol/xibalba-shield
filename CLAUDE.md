@@ -6,8 +6,10 @@ repository.
 ## What this is
 
 Xibalba Shield — a device/network-security endpoint agent, and a **separate product** from
-`integrity-latest`'s HIPAA vertical (also historically called "Xibalba Shield"; the split is
-recorded in that repo's `spec/integrity-protocol-v0.4.md` §14.1). This repo consumes
+`integrity-latest`'s HIPAA vertical, **Integrity Health** (renamed 2026-08-04 from its own
+former "Xibalba Shield" name specifically to remove this ambiguity; the split is recorded in
+that repo's `spec/integrity-protocol-v0.4.md` §14.1). "Xibalba Shield" now names only this
+product. This repo consumes
 `integrity-sdk` as a one-way dependency, the same way any third-party agent runtime would — no
 privileged API, no special-cased access, and `integrity-latest` has zero dependency back onto
 this repo in either direction. That boundary is the entire reason the split exists: a
