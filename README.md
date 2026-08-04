@@ -40,7 +40,7 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 | 7 | CLI (`shield status`, `shield events`) | §4.6 | ✅ | `shield/cli.py` |
 | 8 | Configuration & update module | §4.6 | ⬜ | Not started — no policy hot-reload, no tenant cloud API, no auto-update |
 | 9 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
-| 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **UNVERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`'s `LinuxEbpfSensor`/`LinuxFileWriteSensor`/`LinuxTcpConnectSensor` — process-exec (kprobe on `execve`), file writes (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel; not yet filtered by "sensitive path" — that's config-loadable-filter work, §4.6, unbuilt), outbound TCP connects (kprobe+kretprobe on `tcp_v4_connect`, IPv4 only). DNS observation is NOT built (needs a uprobe/UDP-parsing approach, not a syscall kprobe — separate work). **Nothing about any of the three has been confirmed to actually work.** This machine has `kernel.unprivileged_bpf_disabled=2`, so even checking the C source compiles needs root (BCC's `BPF(text=...)` compiles *and* loads in one call). See "Verifying the eBPF sensor" below — this is the single most important thing to close next |
+| 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **2 of 3 VERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`. **process-exec ✅ VERIFIED** (kprobe on `execve`, observed a real spawned subprocess's real exec). **file writes ✅ VERIFIED** (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel, observed a real write-open; not yet filtered by "sensitive path" — config-loadable-filter work, §4.6, unbuilt). **TCP-connect 🔴 BLOCKED**, confirmed a BCC/kernel version-skew problem rather than a bug here — `#include <net/sock.h>` hits kernel headers this BCC 0.29.1 can't parse, and BCC's own shipped `tcpconnect-bpfcc` reproduces an equivalent failure on the identical include chain on this same machine. DNS observation is NOT built at all (needs a uprobe/UDP-parsing approach, not a syscall kprobe). See "Verifying the eBPF sensors" below and `shield/sensors/ebpf/README.md` for the full record |
 | 11 | Windows/macOS sensors | §4.1 | ⬜ | `[PLANNED]`, post-Linux per spec §3 |
 | 12 | Network sensor (v2+) | §9 | ⬜ | Deferred past v1 per spec §9 — host-centric attribution via the kernel sensor is the v1 design |
 | 13 | PHI-tagging / guardrail content classifier | §6 | ⬜ | `[PLANNED]` — behavioral-telemetry-only today; the output hook (row 6) enforces policy on a classification but does not itself produce one. No resource-tagging or content-risk classification exists |
@@ -49,11 +49,12 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 | 16 | Pilot (3–5 SMBs) | §14 step 4 | ⬜ | Blocked on row 10 (Linux sensor verification) |
 
 **One-line summary:** everything that can be built and tested as pure logic (schemas, policy
-engine, agent core, all six guardrail hooks, the exporter's wire format, the CLI) is real, and
-the exporter's wire path is now proven against a live `bcc_middleware`. The three pieces
-needing kernel privileges — the Linux eBPF sensors (process-exec, file-write, TCP-connect) —
-are written but **not yet verified to work**, because that verification needs `sudo` on a
-real machine, not something achievable from an unprivileged shell alone.
+engine, agent core, all six guardrail hooks, the exporter's wire format, the CLI) is real, the
+exporter's wire path is proven against a live `bcc_middleware`, and 2 of 3 Linux eBPF sensors
+(process-exec, file-write) are now live-verified on real kernel probes. The third
+(TCP-connect) is confirmed BLOCKED by a BCC/kernel version-skew problem — not a bug in this
+repo's code, reproduced with BCC's own shipped `tcpconnect-bpfcc` tool — see "Verifying the
+eBPF sensors" below.
 
 ---
 
@@ -83,30 +84,33 @@ computation or Merkle conventions in the parent protocol.
 
 ---
 
-## Verifying the eBPF sensors (the one open item that matters most)
+## Verifying the eBPF sensors — done, 2026-08-04: 2 of 3 pass, 1 confirmed blocked
 
-This machine has real root access (`sudo`) and real kernel BTF (`/sys/kernel/btf/vmlinux`),
-which is exactly what's needed — but `sudo` requires an interactive password this session
-could not supply non-interactively (confirmed: `sudo -n true` fails with "a password is
-required"). **Run this yourself:**
+Reproduce with:
 
 ```bash
 cd /home/xibalba/Projects/xibalba-shield
 sudo .venv/bin/python -m shield.sensors.ebpf.loader
 ```
 
-This now runs all three sensors in sequence — process-exec, file-write, TCP-connect — each
-triggering a real event only it could produce (a spawned subprocess, a real temp-file write,
-a real local TCP connect) and confirming its own sensor observes it. Expected output on
-success:
+Actual output, this machine:
 
 ```
-[self-test:process_exec] ... PASS — observed pid NNNNN's real execve.
-[self-test:file_write] ... PASS — observed this process's real write open of '/tmp/...'.
-[self-test:tcp_connect] ... PASS — observed this process's real connect to port NNNNN.
-
-[self-test] 3/3 sensors passed: process_exec=PASS, file_write=PASS, tcp_connect=PASS
+[self-test:process_exec] PASS — observed pid 395017's real execve.
+[self-test:file_write] PASS — observed this process's real write open of '/tmp/tmpy55g1m83-shield-self-test'.
+[self-test:tcp_connect] Exception: Failed to compile BPF module <text>
 ```
+
+**process-exec and file-write are real, live-verified sensors.** TCP-connect fails to
+*compile* (not load/attach) because its `#include <net/sock.h>` pulls in kernel headers
+referencing very recent additions (`struct bpf_wq`, `BPF_LOAD_ACQ`, `BPF_F_CPU`, `struct
+ns_common.ns_id`) that BCC 0.29.1's bundled compatibility headers don't know about yet. This
+was confirmed to be a genuine BCC/kernel version-skew problem, not a bug in
+`tcp_connect.bpf.c`: BCC's own shipped, pre-tested `tcpconnect-bpfcc` binary
+(`sudo timeout 3 tcpconnect-bpfcc`) hits an equivalent failure on the identical `net/sock.h`
+chain, on this same machine. See `tcp_connect.bpf.c`'s own comment for the full record,
+including why a hand-rolled `struct sock_common` workaround was deliberately not attempted
+blind (risk of silently-wrong IP/port data from an unverifiable field-offset guess).
 
 Or run the equivalent as pytest cases (also needs root):
 
@@ -114,20 +118,14 @@ Or run the equivalent as pytest cases (also needs root):
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v
 ```
 
-**Once all three pass, update row 10 of the status table above from 🟡 UNVERIFIED to ✅, and
-update `shield/sensors/ebpf/loader.py`'s and the three `.bpf.c` files' own docstrings** — they
-currently say, correctly, that nothing has been confirmed. Don't just flip this README; the
-honesty rule means the code's own comments have to agree with it. If only some of the three
-pass, update the status per-sensor rather than treating it as all-or-nothing.
-
-If it fails, the most likely causes, in order: (1) the `real_parent->tgid` direct struct
-access not matching this kernel's actual layout (unlikely — `linux-headers-7.0.0-28-generic`
-is installed and matches `uname -r` exactly, so BCC compiles against the real running kernel's
-headers), (2) `get_syscall_fnname("execve")` resolving to a symbol that doesn't exist on this
-kernel (check `sudo cat /proc/kallsyms | grep execve`), (3) the perf buffer never receiving
-events because the kprobe silently failed to attach (BCC normally raises loudly on this, so a
-silent success with zero events is the more suspicious failure mode — check with `sudo bpftool
-prog list` that a program is actually loaded).
+Row 10 above, `shield/sensors/ebpf/loader.py`'s module docstring, each of the three `.bpf.c`
+files' own comments, and `shield/sensors/ebpf/README.md` are all updated to match this result
+— process-exec and file-write marked ✅ VERIFIED with the specific evidence, TCP-connect
+marked 🔴 BLOCKED with the specific root cause and the reasoning for not attempting a blind
+workaround. **Unblocking TCP-connect needs either a newer BCC release or someone who can
+verify `struct sock_common`'s real field layout against this kernel's own BTF** (`bpftool btf
+dump file /sys/kernel/btf/vmlinux`) before hand-rolling a minimal mirror struct that avoids
+`net/sock.h`'s header chain.
 
 ---
 
@@ -203,10 +201,9 @@ table above (if they disagree, the status table is more detailed and wins).
 - [x] Policy Engine (§4.3) — table-driven, first-match, zero network calls
 - [x] Agent Core: `DeviceContext`, `AgentRegistry`, `EventRouter`, `EventLog` (§4.2)
 - [x] Dev-mode synthetic sensor, for testing everything above before a real sensor exists
-- [x] Real Linux eBPF sensor written (kprobe on `execve`, perf ring buffer, normalized output)
-- [ ] **All three real Linux eBPF sensors verified** — needs `sudo` run, see "Verifying the eBPF sensors" above. **This is the one blocking item in Phase 1.**
-- [x] File write hooks written (`file_write.bpf.c` — kprobe+kretprobe on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel). **Not yet filtered by "sensitive path"** (spec §4.1's own phrasing) — that's config-loadable-filter work, §4.6, unbuilt. Unverified, same as everything eBPF (see below)
-- [x] TCP-connect hooks written (`tcp_connect.bpf.c` — kprobe+kretprobe on `tcp_v4_connect`, IPv4 only). Unverified, same as everything eBPF
+- [x] Real Linux eBPF sensor written AND **VERIFIED** (kprobe on `execve`, perf ring buffer, normalized output) — observed a real spawned subprocess's real exec, 2026-08-04
+- [x] File write hooks written AND **VERIFIED** (`file_write.bpf.c` — kprobe+kretprobe on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel) — observed the test process's own real write-open, 2026-08-04. **Not yet filtered by "sensitive path"** (spec §4.1's own phrasing) — that's config-loadable-filter work, §4.6, unbuilt
+- [ ] **TCP-connect hooks written, BLOCKED at verification** (`tcp_connect.bpf.c` — kprobe+kretprobe on `tcp_v4_connect`, IPv4 only). Confirmed a BCC/kernel version-skew problem (BCC's own `tcpconnect-bpfcc` fails identically), not a bug in this file — see "Verifying the eBPF sensors" above. **This is the one remaining blocking item in Phase 1.**
 - [ ] DNS hooks — not built at all. Needs a uprobe on libc's `getaddrinfo` or UDP:53 payload parsing, a different mechanism than a syscall kprobe; deferred rather than built un-reviewed alongside the other three this pass
 
 ### Phase 2 — Integrity Exporter wired to a real `integrity-sdk` instance

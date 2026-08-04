@@ -21,8 +21,11 @@
  * declared map (here, the `BPF_PERF_OUTPUT` table) as part of construction, and map creation
  * is itself a `bpf()` syscall requiring `CAP_BPF` — so `BPF(text=...)` raises on this machine
  * (`kernel.unprivileged_bpf_disabled=2`) regardless of whether the C source is valid. There is
- * no non-root verification path for this file through BCC's high-level API. See
- * `loader.py`/`README.md` for what is and isn't actually verified as of this writing.
+ * no non-root verification path for this file through BCC's high-level API.
+ *
+ * **VERIFIED live, 2026-08-04:** `sudo python3 -m shield.sensors.ebpf.loader` observed a real
+ * spawned subprocess's real `execve` (pid 395017). See `loader.py`'s module docstring for the
+ * full verification record across all three sensors.
  */
 
 #include <uapi/linux/ptrace.h>

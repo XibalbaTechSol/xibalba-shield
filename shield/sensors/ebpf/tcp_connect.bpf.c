@@ -16,6 +16,21 @@
  * hooks in parallel with a near-identical second code path -- deferring it here rather
  * than doubling this file's size and review surface for a first cut; spec §3 doesn't
  * require IPv6 for v1.
+ *
+ * **BLOCKED, 2026-08-04 -- confirmed environment limitation, not a bug in this file.**
+ * `#include <net/sock.h>` (needed for `struct sock`) pulls in a kernel header chain that
+ * references very recent kernel/eBPF additions (`struct bpf_wq`, `BPF_LOAD_ACQ`, `BPF_F_CPU`,
+ * `struct ns_common.ns_id`, ...) that BCC 0.29.1's bundled compatibility headers don't know
+ * about -- a BCC/kernel version-skew problem. Confirmed NOT specific to this file: BCC's own
+ * shipped, pre-tested `tcpconnect-bpfcc` binary (same `bpfcc-tools` package) hits an
+ * equivalent failure on the identical `net/sock.h` chain, on this same machine
+ * (`sudo timeout 3 tcpconnect-bpfcc`). A hand-rolled minimal `struct sock_common` mirror --
+ * the usual workaround for exactly this class of problem -- was deliberately NOT attempted:
+ * there is no way to verify the correct field offsets for this specific kernel version from
+ * here, and a wrong offset would silently produce plausible-looking but WRONG IP/port data,
+ * which is worse than this honest compile failure. Needs a newer BCC release, or someone who
+ * can verify the real `struct sock_common` layout against this kernel's own BTF
+ * (`bpftool btf dump file /sys/kernel/btf/vmlinux`) before attempting that workaround.
  */
 
 #include <uapi/linux/ptrace.h>

@@ -1,35 +1,29 @@
-# Linux eBPF sensor — real code written, `[UNVERIFIED]`
+# Linux eBPF sensors — 2 of 3 VERIFIED, 1 BLOCKED
 
 Per `spec/xibalba-shield-v1.md` §4.1 in the parent `integrity-latest` repo: eBPF programs on
 `process_exec`/`process_exit` tracepoints, file open/write hooks on sensitive paths, and
-TCP-connect/DNS hooks, pushing compact records to user space via a ring buffer. Only the
-`process_exec` piece is implemented so far.
+TCP-connect/DNS hooks, pushing compact records to user space via a ring buffer.
 
-**Status as of this update:** `process_exec.bpf.c` (a kprobe on the `execve` syscall entry,
-using BCC's `get_syscall_fnname` — the same proven approach as BCC's own `execsnoop` tool) and
-`loader.py` (the userspace `LinuxEbpfSensor`, implementing the `Sensor` protocol) are both
-written and reviewed. **Neither has been confirmed to actually work**, because this machine's
-`kernel.unprivileged_bpf_disabled=2` means even checking the C source compiles needs root —
-BCC's `BPF(text=...)` compiles *and* loads (creates every declared map) in one call, so there
-is no root-free way to validate any of it, not even syntax. (An earlier draft of these files
-claimed compilation alone was root-free; that was measured and found wrong, and corrected in
-place — see `loader.py`'s own docstring for the record.)
+**Status as of 2026-08-04:**
 
-**Before trusting this module in any deployment:**
-1. Run `sudo python3 -m shield.sensors.ebpf.loader` (or `sudo pytest tests/test_ebpf_sensor.py
-   -v`) from the repo root — see the parent `README.md`'s "Verifying the eBPF sensor" section
-   for exact commands and expected output.
-2. Confirm it reports a real observed `execve` for a real spawned subprocess, not just that it
-   loads without error.
-3. Only then wire its output into `shield/agent_core/router.py` in place of
-   `shield/sensors/dev_generator.py`, and flip this file's own status line and the parent
-   README's status table row 11 from UNVERIFIED to verified — in the same commit, so the
-   code's own docstrings and the tracking doc never disagree.
+| Sensor | File | Status |
+|---|---|---|
+| Process-exec | `process_exec.bpf.c` | ✅ **VERIFIED.** Observed a real spawned subprocess's real `execve`. |
+| File writes | `file_write.bpf.c` | ✅ **VERIFIED.** Observed the test process's own real write-mode `openat`. |
+| TCP-connect | `tcp_connect.bpf.c` | 🔴 **BLOCKED.** `#include <net/sock.h>` drags in kernel headers this BCC version can't parse — confirmed a BCC/kernel version-skew problem, not a bug in this file, by reproducing the identical class of failure with BCC's own shipped `tcpconnect-bpfcc` binary. See that file's own comment for the full record. |
+| DNS | not built | Needs a uprobe on `getaddrinfo` or UDP:53 parsing — a different mechanism than a syscall kprobe, deliberately not built alongside the other three. |
 
-Until all three are true, use `dev_generator.DevModeSensor` for testing the rest of the
-pipeline (`agent_core`, `policy_engine`, `integrity_exporter`) — its output matches the same
-normalized schemas this sensor will eventually produce, so nothing downstream needs to change
-when the real sensor replaces it.
+Reproduce: `sudo python3 -m shield.sensors.ebpf.loader` (or `sudo pytest
+tests/test_ebpf_sensor.py -v`) from the repo root — see the parent `README.md`'s "Verifying
+the eBPF sensors" section for exact commands and expected output.
 
-**Not yet built at all, even as an unverified sketch:** file open/write hooks on sensitive
-paths, TCP-connect/DNS hooks. Only `process_exec` exists in any form today.
+**Before wiring the process-exec or file-write sensor into `shield/agent_core/router.py`** in
+place of `shield/sensors/dev_generator.py`: nothing else needs to happen — both are verified.
+Continue using `DevModeSensor` for anything that needs the TCP-connect sensor's output shape
+until that one is unblocked (a newer BCC release, or a hand-verified `struct sock_common`
+layout for this kernel — see `tcp_connect.bpf.c`'s own comment for why that wasn't attempted
+blind).
+
+If you touch any of these three files, keep this table, `loader.py`'s module docstring, and
+each `.bpf.c` file's own comment in agreement — the honesty rule this whole project runs on
+means the code's own comments and the tracking docs must never say different things.

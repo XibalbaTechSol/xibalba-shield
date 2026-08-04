@@ -18,6 +18,10 @@
  * in the entry probe, before anything is stashed in the hash map, so read-only opens (the
  * overwhelming majority on a real system) cost one branch and nothing else -- matching
  * spec §3's "do the least possible work in kernel space" resource-budget constraint.
+ *
+ * VERIFIED live, 2026-08-04: `sudo python3 -m shield.sensors.ebpf.loader` observed the test
+ * process's own real write-mode open of a real temp file. See loader.py's module docstring
+ * for the full verification record across all three sensors.
  */
 
 #include <uapi/linux/ptrace.h>

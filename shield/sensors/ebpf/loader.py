@@ -19,19 +19,29 @@ policy_engine) needs to know which sensor is live. DNS observation (spec §4.1's
 target) is NOT built — see the module docstring note in `tcp_connect.bpf.c` for why it's a
 separate mechanism (uprobe/UDP-parsing, not a syscall kprobe) rather than an oversight here.
 
-**Verified as of this writing: nothing about this module has been confirmed working.** BCC's
-`BPF(text=...)` compiles AND loads (creates every declared map) in one call, and map creation
-is itself a `bpf()` syscall gated on `CAP_BPF` — so on this machine
-(`kernel.unprivileged_bpf_disabled=2`) there is no way to even confirm any of the three C
-sources are syntactically valid without root, let alone that they attach and observe real
-events. (An earlier version of this docstring claimed compilation alone was root-free for
-`process_exec.bpf.c`; that was wrong — corrected in that file's own comment rather than
-silently fixed here too.)
+**Verified live on 2026-08-04, 2 of 3 sensors — the other is BLOCKED, not broken:**
+
+- `LinuxEbpfSensor` (process-exec): **PASS.** Observed a real spawned subprocess's real
+  `execve` (`sudo python3 -m shield.sensors.ebpf.loader`, pid 395017).
+- `LinuxFileWriteSensor` (file writes): **PASS.** Observed the test process's own real
+  write-mode open of a real temp file.
+- `LinuxTcpConnectSensor` (TCP connects): **BLOCKED.** `tcp_connect.bpf.c`'s `#include
+  <net/sock.h>` drags in a kernel header chain that references very recent kernel/eBPF
+  additions (`struct bpf_wq`, `BPF_LOAD_ACQ`, `BPF_F_CPU`, `struct ns_common.ns_id`, ...)
+  that BCC 0.29.1's bundled compatibility headers don't know about. **Confirmed this is a
+  BCC/kernel version-skew problem, not a bug in this file**: BCC's own shipped, pre-tested
+  `tcpconnect-bpfcc` binary (`bpfcc-tools` package) hits an equivalent failure on the same
+  `net/sock.h` chain on this exact machine. A hand-rolled minimal `struct sock_common`
+  mirror (the usual workaround for this class of problem) was deliberately NOT attempted
+  here — this file's own author has no way to verify the correct field offsets for this
+  specific kernel version, and a wrong offset would silently produce plausible-looking but
+  wrong IP/port data, which is worse than an honest compile failure. Needs either a newer
+  BCC release or someone who can verify the real struct layout against this kernel's BTF.
 
 Run `sudo python3 -m shield.sensors.ebpf.loader` (or `sudo pytest tests/test_ebpf_sensor.py`)
-to actually verify this module. Until that has been run successfully at least once, treat
-every claim in this file as unverified design, not working code — no silent mock, same rule
-the rest of this repo follows.
+to reproduce. Treat `LinuxTcpConnectSensor` specifically as unverified design, not working
+code, until the BCC/kernel skew above is resolved — no silent mock, same rule the rest of
+this repo follows.
 """
 
 from __future__ import annotations
