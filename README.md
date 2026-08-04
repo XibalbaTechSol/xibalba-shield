@@ -40,7 +40,7 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 | 7 | CLI (`shield status`, `shield events`) | §4.6 | ✅ | `shield/cli.py` |
 | 8 | Configuration & update module | §4.6 | ⬜ | Not started — no policy hot-reload, no tenant cloud API, no auto-update |
 | 9 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
-| 10 | Linux sensor — real eBPF probe | §4.1 | 🟡 **UNVERIFIED** | `shield/sensors/ebpf/{process_exec.bpf.c,loader.py}` — real kprobe-on-`execve` code, written and reviewed. **Nothing about it has been confirmed to actually work.** This machine has `kernel.unprivileged_bpf_disabled=2`, so even checking the C source compiles needs root (BCC's `BPF(text=...)` compiles *and* loads in one call). See "Verifying the eBPF sensor" below — this is the single most important thing to close next |
+| 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **UNVERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`'s `LinuxEbpfSensor`/`LinuxFileWriteSensor`/`LinuxTcpConnectSensor` — process-exec (kprobe on `execve`), file writes (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel; not yet filtered by "sensitive path" — that's config-loadable-filter work, §4.6, unbuilt), outbound TCP connects (kprobe+kretprobe on `tcp_v4_connect`, IPv4 only). DNS observation is NOT built (needs a uprobe/UDP-parsing approach, not a syscall kprobe — separate work). **Nothing about any of the three has been confirmed to actually work.** This machine has `kernel.unprivileged_bpf_disabled=2`, so even checking the C source compiles needs root (BCC's `BPF(text=...)` compiles *and* loads in one call). See "Verifying the eBPF sensor" below — this is the single most important thing to close next |
 | 11 | Windows/macOS sensors | §4.1 | ⬜ | `[PLANNED]`, post-Linux per spec §3 |
 | 12 | Network sensor (v2+) | §9 | ⬜ | Deferred past v1 per spec §9 — host-centric attribution via the kernel sensor is the v1 design |
 | 13 | PHI-tagging / guardrail content classifier | §6 | ⬜ | `[PLANNED]` — behavioral-telemetry-only today; the output hook (row 6) enforces policy on a classification but does not itself produce one. No resource-tagging or content-risk classification exists |
@@ -49,10 +49,11 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 | 16 | Pilot (3–5 SMBs) | §14 step 4 | ⬜ | Blocked on row 10 (Linux sensor verification) |
 
 **One-line summary:** everything that can be built and tested as pure logic (schemas, policy
-engine, agent core, all six guardrail hooks, the exporter's wire format, the CLI) is real. The
-one piece needing kernel privileges — the actual Linux eBPF sensor — is written but **not yet
-verified to work**, because that verification needs `sudo` on a real machine, not something
-achievable from an unprivileged shell alone.
+engine, agent core, all six guardrail hooks, the exporter's wire format, the CLI) is real, and
+the exporter's wire path is now proven against a live `bcc_middleware`. The three pieces
+needing kernel privileges — the Linux eBPF sensors (process-exec, file-write, TCP-connect) —
+are written but **not yet verified to work**, because that verification needs `sudo` on a
+real machine, not something achievable from an unprivileged shell alone.
 
 ---
 
@@ -82,36 +83,42 @@ computation or Merkle conventions in the parent protocol.
 
 ---
 
-## Verifying the eBPF sensor (the one open item that matters most)
+## Verifying the eBPF sensors (the one open item that matters most)
 
 This machine has real root access (`sudo`) and real kernel BTF (`/sys/kernel/btf/vmlinux`),
 which is exactly what's needed — but `sudo` requires an interactive password this session
-could not supply non-interactively. **Run this yourself:**
+could not supply non-interactively (confirmed: `sudo -n true` fails with "a password is
+required"). **Run this yourself:**
 
 ```bash
 cd /home/xibalba/Projects/xibalba-shield
 sudo .venv/bin/python -m shield.sensors.ebpf.loader
 ```
 
-Expected output on success:
+This now runs all three sensors in sequence — process-exec, file-write, TCP-connect — each
+triggering a real event only it could produce (a spawned subprocess, a real temp-file write,
+a real local TCP connect) and confirming its own sensor observes it. Expected output on
+success:
 
 ```
-[self-test] loading LinuxEbpfSensor (requires root)...
-[self-test] loaded and attached. Spawning /usr/bin/true as the probe subprocess...
-[self-test] observed real exec: pid=NNNNN ppid=NNNNN comm='true' exe='/usr/bin/true'
-[self-test] PASS — observed the probe subprocess's own real execve (pid NNNNN).
+[self-test:process_exec] ... PASS — observed pid NNNNN's real execve.
+[self-test:file_write] ... PASS — observed this process's real write open of '/tmp/...'.
+[self-test:tcp_connect] ... PASS — observed this process's real connect to port NNNNN.
+
+[self-test] 3/3 sensors passed: process_exec=PASS, file_write=PASS, tcp_connect=PASS
 ```
 
-Or run the equivalent as a pytest case (also needs root):
+Or run the equivalent as pytest cases (also needs root):
 
 ```bash
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v
 ```
 
-**Once this passes, update row 11 of the status table above from 🟡 UNVERIFIED to ✅, and
-update `shield/sensors/ebpf/loader.py`'s and `process_exec.bpf.c`'s own docstrings** — they
+**Once all three pass, update row 10 of the status table above from 🟡 UNVERIFIED to ✅, and
+update `shield/sensors/ebpf/loader.py`'s and the three `.bpf.c` files' own docstrings** — they
 currently say, correctly, that nothing has been confirmed. Don't just flip this README; the
-honesty rule means the code's own comments have to agree with it.
+honesty rule means the code's own comments have to agree with it. If only some of the three
+pass, update the status per-sensor rather than treating it as all-or-nothing.
 
 If it fails, the most likely causes, in order: (1) the `real_parent->tgid` direct struct
 access not matching this kernel's actual layout (unlikely — `linux-headers-7.0.0-28-generic`
@@ -131,8 +138,9 @@ cd /home/xibalba/Projects/xibalba-shield
 uv venv --system-site-packages .venv           # --system-site-packages: bcc (python3-bpfcc)
                                                 # is a system package, not pip-installable
 uv pip install -e ".[dev]" --python .venv/bin/python
-.venv/bin/python -m pytest                     # 33 pass, 3 skip (2 need root, 1 needs a live
-                                                # bcc_middleware) — see "Testing" below
+.venv/bin/python -m pytest                     # 36 pass, 6 skip (all 6 need root; the live
+                                                # bcc_middleware test now passes for real, not
+                                                # skipped, if bcc_middleware is up) — see "Testing" below
 ```
 
 ```python
@@ -164,7 +172,7 @@ Once the eBPF sensor is verified (above), swap `DevModeSensor` for
 
 ```bash
 .venv/bin/python -m pytest                       # everything that's root-free and doesn't need a live stack
-sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the two root-gated eBPF tests
+sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the 6 root-gated eBPF tests
 ```
 
 | Test file | What it actually checks | Needs root? | Needs a live stack? |
@@ -173,7 +181,7 @@ sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the two root-ga
 | `test_policy_engine.py` | Table-driven rule matching, first-match-wins, scope filtering | no | no |
 | `test_agent_core.py` | Registry idempotence, router → policy engine → guardrail → exporter wiring, exception isolation | no | no |
 | `test_guardrail_hooks.py` | All 6 hook points: allow-path invokes the wrapped call, deny-path raises the hook's own exception AND never invokes the call | no | no |
-| `test_ebpf_sensor.py` | Non-root construction raises `PermissionError`; (root-gated) BPF source compiles+loads; (root-gated) a real subprocess's real `execve` is observed | 2 of 3 tests, yes | no |
+| `test_ebpf_sensor.py` | All 3 sensors: non-root construction raises `PermissionError` (root-free); (root-gated) BPF source compiles+loads; (root-gated) a real triggered event (exec/write/connect) is observed | 6 of 9 tests, yes | no |
 | `test_integrity_exporter.py` | A `PolicyDecision` becomes a real signed BCC commitment and reaches a real `bcc_middleware` | no | yes — self-skips if unreachable |
 
 No test in this repo asserts a fake value against a mock and calls it coverage — every real
@@ -196,9 +204,10 @@ table above (if they disagree, the status table is more detailed and wins).
 - [x] Agent Core: `DeviceContext`, `AgentRegistry`, `EventRouter`, `EventLog` (§4.2)
 - [x] Dev-mode synthetic sensor, for testing everything above before a real sensor exists
 - [x] Real Linux eBPF sensor written (kprobe on `execve`, perf ring buffer, normalized output)
-- [ ] **Real Linux eBPF sensor verified** — needs `sudo` run, see "Verifying the eBPF sensor" above. **This is the one blocking item in Phase 1.**
-- [ ] File open/write hooks on sensitive paths (§4.1 — only process-exec is built so far)
-- [ ] TCP-connect/DNS hooks (§4.1 — only process-exec is built so far)
+- [ ] **All three real Linux eBPF sensors verified** — needs `sudo` run, see "Verifying the eBPF sensors" above. **This is the one blocking item in Phase 1.**
+- [x] File write hooks written (`file_write.bpf.c` — kprobe+kretprobe on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel). **Not yet filtered by "sensitive path"** (spec §4.1's own phrasing) — that's config-loadable-filter work, §4.6, unbuilt. Unverified, same as everything eBPF (see below)
+- [x] TCP-connect hooks written (`tcp_connect.bpf.c` — kprobe+kretprobe on `tcp_v4_connect`, IPv4 only). Unverified, same as everything eBPF
+- [ ] DNS hooks — not built at all. Needs a uprobe on libc's `getaddrinfo` or UDP:53 payload parsing, a different mechanism than a syscall kprobe; deferred rather than built un-reviewed alongside the other three this pass
 
 ### Phase 2 — Integrity Exporter wired to a real `integrity-sdk` instance
 - [x] `IntegrityExporter` built: real DID bootstrap (`integrity_sdk.did.load_or_create_did`), real BCC commitment signing (`integrity_sdk.bcc.build_bcc_commitment`), real telemetry (`IntegrityClient.log_telemetry`)
