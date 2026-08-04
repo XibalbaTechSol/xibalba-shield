@@ -37,7 +37,7 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 | 4 | Agent Core — registry, router, event log | §4.2 | ✅ | `shield/agent_core/{registry,router,eventlog}.py`. 7 tests in `tests/test_agent_core.py` |
 | 5 | Integrity Exporter | §4.5 | ✅ | `shield/integrity_exporter/exporter.py` — real `integrity-sdk` BCC signing (`bcc.build_bcc_commitment`) + real telemetry (`IntegrityClient.log_telemetry`), no mock. **Verified against a live stack**: `tests/test_integrity_exporter.py` submitted for real and got `authorized: true` + a real `verification_token`/`batch_index` back from `bcc_middleware`. The bootstrapped DID isn't registered with the oracle, so `GET /v1/agent/{did}` 404s — a separate, heavier follow-on step (see Phase 2 below) |
 | 6 | Guardrail hooks — all 6 hook points | §4.4 | ✅ | `shield/guardrail_hooks/{ingress,retrieval_context,model_routing,output,tool_execution,post_action_verification}.py` — each a real pre- (or, for post-action, post-) decision gate with its own deny exception. 15 tests in `tests/test_guardrail_hooks.py`. **Note:** spec §4.4 itself lists six hook points (ingress, retrieval/context, model routing, output, tool execution, post-action verification) while §14's roadmap prose says "generalizing to all five" — an inconsistency in the spec, not resolved here, just not silently picked one way; six modules exist, matching §4.4's own enumerated list. Built ahead of spec §14's suggested order (which puts hooks 2–6 after a pilot validates hook 1) per explicit direction to build out Phase 3 now |
-| 7 | CLI (`shield status`, `shield events`) | §4.6 | ✅ | `shield/cli.py` |
+| 7 | CLI (`shield status`, `shield events`, `shield validate`, `shield run`) | §4.6 | ✅ | `shield/cli.py`. `shield run` is the real entry point — wires a real `Sensor` (`process-exec`/`file-write`/`dev`) into a real `EventRouter`/`PolicyEngine`/`EventLog`, with hot-reload if `--rules` is given and a real `IntegrityExporter` unless `--no-exporter`. Verified end-to-end live: `dev` sensor with a real deny rule correctly denied every `network_flow` event and nothing else; `process-exec`/`file-write` correctly raise a clean `PermissionError` (exit 1, no traceback) when not run as root, matching their own documented requirement. 5 new tests |
 | 8 | Configuration & update module | §4.6 | 🟡 | `shield/config/{loader,hot_reload}.py` — **real**: `load_policy_rules`/`load_device_config` parse local JSON files into the real `PolicyRule`/`DeviceConfig` shapes, refuse-the-whole-bundle-loudly on any malformed entry (never silently drops a bad rule), 11 tests. `PolicyHotReloader` reloads a changed rules file into a live `PolicyEngine` without a restart — mtime-polled, only swaps in a new rule set after it parses cleanly, so a bad edit keeps the engine on its last-known-good rules instead of zeroing them out or crashing, 6 tests. Wired into `shield validate --rules ... --device-config ...` (5 more tests). **Not built, deliberately**: tenant cloud API (no real server anywhere to test a client against) and safe auto-update for agent *code* (a materially harder problem — verified downloads, rollback, signature checking — deserving its own design pass) |
 | 9 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
 | 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **2 of 3 VERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`. **process-exec ✅ VERIFIED** (kprobe on `execve`, observed a real spawned subprocess's real exec). **file writes ✅ VERIFIED** (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel, observed a real write-open; not yet filtered by "sensitive path" — config-loadable-filter work, §4.6, unbuilt). **TCP-connect 🔴 BLOCKED**, confirmed a BCC/kernel version-skew problem rather than a bug here — `#include <net/sock.h>` hits kernel headers this BCC 0.29.1 can't parse, and BCC's own shipped `tcpconnect-bpfcc` reproduces an equivalent failure on the identical include chain on this same machine. DNS observation is NOT built at all (needs a uprobe/UDP-parsing approach, not a syscall kprobe). See "Verifying the eBPF sensors" below and `shield/sensors/ebpf/README.md` for the full record |
@@ -75,7 +75,8 @@ shield/
 ├── config/                # Local-file policy/device config loader + PolicyHotReloader — §4.6
 │                           # (cloud API + code auto-update deliberately not built, row 8)
 ├── schemas/               # Event classes (§5) + policy rule shape (§7)
-└── cli.py                 # `shield status` / `events` / `validate` — §4.6
+└── cli.py                 # `shield status` / `events` / `validate` / `run` — §4.6. `run`
+                            # is the real entry point: sensor -> router -> policy -> exporter
 scripts/                   # measure_resource_budget.py — spec §3 budget, real numbers recorded below
 tests/                     # pytest — see "Testing" below for what's real vs. skip-gated
 ```
@@ -140,10 +141,38 @@ cd /home/xibalba/Projects/xibalba-shield
 uv venv --system-site-packages .venv           # --system-site-packages: bcc (python3-bpfcc)
                                                 # is a system package, not pip-installable
 uv pip install -e ".[dev]" --python .venv/bin/python
-.venv/bin/python -m pytest                     # 58 pass, 6 skip (all 6 need root; the live
+.venv/bin/python -m pytest                     # 63 pass, 6 skip (all 6 need root; the live
                                                 # bcc_middleware test now passes for real, not
                                                 # skipped, if bcc_middleware is up) — see "Testing" below
 ```
+
+`shield run` is the real entry point — it wires a real `Sensor` into a real `EventRouter`,
+end to end, with `shield status`/`events` reading back what it produced:
+
+```bash
+# Synthetic events, no root, no exporter -- fastest way to see the whole loop work:
+.venv/bin/shield run --sensor dev --device-id dev-1 --no-exporter --max-events 10
+
+# The two VERIFIED real eBPF sensors -- need root (see "Verifying the eBPF sensors" above):
+sudo .venv/bin/shield run --sensor process-exec --device-id dev-1 --no-exporter
+sudo .venv/bin/shield run --sensor file-write --device-id dev-1 --no-exporter
+
+# Real policy enforcement + real exporter (needs bcc_middleware up, see its own repo):
+.venv/bin/shield run --sensor dev --device-id dev-1 --rules rules.json \
+    --bcc-middleware-url http://localhost:8000 --max-events 20
+# --rules is hot-reloaded: edit rules.json while `run` is going and the next check picks
+# it up, or falls back to the last-known-good rule set if the edit doesn't parse.
+
+.venv/bin/shield --log-path ~/.xibalba-shield/decisions.jsonl status
+.venv/bin/shield --log-path ~/.xibalba-shield/decisions.jsonl events --recent 20
+```
+
+`--max-events N` stops after N events (useful for demos/scripts); omit it to run forever
+until Ctrl+C. `shield run --help` lists every flag (`--device-config`/`--tenant-id`/
+`--device-role`/`--oracle-url`/`--agent-label`/`--dev-interval`, ...).
+
+For programmatic use instead of the CLI, the same pieces compose directly — `EventRouter`
+just needs a `Sensor`, a `PolicyEngine`, an exporter, and an `EventLog`:
 
 ```python
 from shield.agent_core import AgentRegistry, DeviceContext, EventLog, EventRouter
@@ -163,10 +192,10 @@ for event in DevModeSensor(device_id="dev-1").events():
     router.handle(event)
 ```
 
-Once the eBPF sensor is verified (above), swap `DevModeSensor` for
-`shield.sensors.ebpf.loader.LinuxEbpfSensor` — same `events()` interface, same downstream
-`ProcessActivity` shape, nothing else changes. That substitutability is the entire reason
-`sensors/base.py`'s `Sensor` protocol exists.
+Swap `DevModeSensor` for `shield.sensors.ebpf.loader.LinuxEbpfSensor`/`LinuxFileWriteSensor`
+(both VERIFIED, see above) for the same `events()` interface over real kernel events, nothing
+else changes — that substitutability is the entire reason `sensors/base.py`'s `Sensor`
+protocol exists, and it's exactly what `shield run --sensor process-exec` does under the hood.
 
 ---
 
@@ -186,7 +215,7 @@ sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the 6 root-gate
 | `test_ebpf_sensor.py` | All 3 sensors: non-root construction raises `PermissionError` (root-free); (root-gated) BPF source compiles+loads; (root-gated) a real triggered event (exec/write/connect) is observed | 6 of 9 tests, yes | no |
 | `test_integrity_exporter.py` | A `PolicyDecision` becomes a real signed BCC commitment and reaches a real `bcc_middleware` | no | yes — self-skips if unreachable |
 | `test_config.py` | Real JSON files loaded through `load_policy_rules`/`load_device_config` — file order preserved, malformed input refuses the whole bundle loudly (missing file, bad JSON, wrong shape, unknown field, one bad rule among good ones) | no | no |
-| `test_cli.py` | `shield validate` end-to-end through real argparse wiring + the real config loader — exit codes and stdout for valid/invalid rules and device-config files | no | no |
+| `test_cli.py` | `shield validate` and `shield run` end-to-end through real argparse wiring — `run` exercises the real `EventRouter`/`PolicyEngine`/`EventLog` with the `dev` sensor (real policy decisions logged, hot-reload wired), plus `process-exec`'s `PermissionError` surfacing cleanly when not root | no | no |
 | `test_hot_reload.py` | `PolicyHotReloader` against real files with real mtime changes — picks up a real edit, ignores an unchanged file, and (the core safety property) a malformed edit or a missing file keeps the engine on its last-known-good rules rather than zeroing them out | no | no |
 
 No test in this repo asserts a fake value against a mock and calls it coverage — every real

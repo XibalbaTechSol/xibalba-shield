@@ -89,12 +89,14 @@ Claude Code sessions hit the same wall).
    wallet) so Phase 2's `GET /v1/agent/{did}` 404 closes, and re-run the resource-budget
    exporter scenarios against a registered DID for a cleaner RSS figure (see the caveat in
    §1's Phase 4 paragraph).
-3. **Wire a real sensor into `agent_core.router`.** Nothing currently swaps `DevModeSensor` for
-   `LinuxEbpfSensor`/`LinuxFileWriteSensor` in any real entry point — both are verified and
-   ready, but the CLI/a daemon loop that would actually run them in production doesn't exist
-   yet. This is arguably the single most valuable next real-integration step: it's the first
-   point where "the sensor works" and "the sensor is actually running" stop being different
-   claims.
+3. ~~**Wire a real sensor into `agent_core.router`.**~~ **DONE (2026-08-04).** `shield run
+   --sensor {process-exec,file-write,dev}` is the real entry point now (`shield/cli.py`) —
+   wires a real `Sensor` into a real `EventRouter`/`PolicyEngine`/`EventLog`, with hot-reload
+   if `--rules` is given and a real `IntegrityExporter` unless `--no-exporter`. Verified live:
+   the `dev` sensor with a real deny rule correctly denied every `network_flow` event and
+   nothing else; `process-exec`/`file-write` raise a clean `PermissionError` (exit 1, no
+   traceback) when not root. 5 new tests. "The sensor works" and "the sensor is actually
+   running" are no longer different claims for `process-exec`/`file-write`.
 4. **Pilot (Phase 4's other half).** Genuinely blocked until #1 closes — 3–5 SMB pilots need
    the full sensor picture, not 2 of 3.
 5. Everything in Phase 5's blocked list (§1 above) once its respective blocker clears.
