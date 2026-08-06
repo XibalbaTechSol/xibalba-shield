@@ -44,6 +44,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [x] Default SMB, professional-services, and regulated policy packs exist.
 - [x] Root-free GitHub Actions CI exists.
 - [x] `integrity-sdk` git dependency is pinned to a reviewed commit.
+- [x] Signed policy bundle format is documented; local trusted-policy-hash enforcement exists.
 
 ## Planned And Todo
 
@@ -63,7 +64,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 
 ### Policy Distribution And Updates
 
-- [ ] Design signed policy bundle format.
+- [x] Design signed policy bundle format.
 - [ ] Add tenant cloud policy client only after a real server contract exists.
 - [ ] Specify safe code auto-update: signed downloads, staged rollout, rollback, and recovery.
 - [x] Add operator-visible policy version/hash in local decisions and exported evidence.

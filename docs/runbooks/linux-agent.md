@@ -24,7 +24,8 @@ This runbook turns the existing `shield run` loop into a supervised Linux proces
      "tenant_id": "tenant-001",
      "device_role": "workstation",
      "bcc_middleware_url": "http://localhost:8000",
-     "sensitive_paths": ["/home/*/.ssh/*", "/etc/*", "/var/secrets/*"]
+     "sensitive_paths": ["/home/*/.ssh/*", "/etc/*", "/var/secrets/*"],
+     "trusted_policy_hashes": []
    }
    ```
 
@@ -33,6 +34,10 @@ This runbook turns the existing `shield run` loop into a supervised Linux proces
    ```bash
    shield validate --device-config /etc/xibalba-shield/device.json --rules /etc/xibalba-shield/policies/current.json
    ```
+
+   For stricter pilots, copy the `policy_hash` printed by `shield validate --rules ...` into
+   `trusted_policy_hashes`. `shield run` and hot reload will then reject any bundle whose
+   exact-file hash is not pinned.
 
 5. Install and start the systemd unit:
 

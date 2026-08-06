@@ -238,7 +238,7 @@ Export failures must be logged. Local enforcement must not roll back. Retries mu
 
 ## 10. Configuration And Update Specification
 
-Current v1 implementation supports local JSON files for policy rules and device config. It must parse the whole file before replacing live policy, reject malformed bundles as a whole, keep last-known-good policy on reload failure, surface failures through logs/CLI, and attach operator-visible policy version/hash to decisions when rules come from a bundle.
+Current v1 implementation supports local JSON files for policy rules and device config. It must parse the whole file before replacing live policy, reject malformed bundles as a whole, keep last-known-good policy on reload failure, surface failures through logs/CLI, enforce trusted policy hashes when configured, and attach operator-visible policy version/hash to decisions when rules come from a bundle. The signed policy bundle design is [`docs/design/signed-policy-bundles.md`](docs/design/signed-policy-bundles.md).
 
 Policy hot reload is mtime-polled and intentionally simple. Future file watchers may replace polling only if they preserve last-known-good semantics.
 
@@ -322,7 +322,7 @@ Current test families are listed in [README.md](README.md). New modules must add
 
 ### Phase 3: Policy Distribution And Update Safety
 
-- Design signed policy bundle format.
+- Keep signed policy bundle format and local trusted-hash enforcement aligned.
 - Add tenant policy distribution client when a real server exists.
 - Specify safe code update mechanism with signature verification and rollback.
 
