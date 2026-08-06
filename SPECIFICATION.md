@@ -9,6 +9,10 @@ Xibalba Shield is an endpoint security agent for discovering AI agents and tools
 
 This specification defines what Shield must do, how the current repository is organized, which interfaces are stable, and which gaps remain. The implementation status ledger remains [README.md](README.md); this document defines the target behavior and module contracts.
 
+## Current audit and implementation boundary
+
+The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 66 tests passed and 7 skipped. Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
+
 ## 1. Source Of Truth And Scope
 
 ### 1.1 Normative Documents
@@ -135,7 +139,7 @@ The dev sensor generates synthetic events for local testing, demos, and CLI work
 | Probe | Target | Required output | Status |
 |---|---|---|---|
 | Process execution | execve | PID, process name, executable path, UID/GID when available. | Verified. |
-| File write-open | openat write mode | PID, process name, path, operation class. | Verified; sensitive-path filtering remains planned. |
+| File write-open | openat write mode | PID, process name, path, operation class. | Verified; userspace sensitive-path glob filtering is config-loadable. |
 | TCP connect | tcp_v4_connect | PID/process, destination IP/port, protocol, direction. | Code exists; blocked at compile on current BCC/kernel stack. |
 | DNS observation | uprobe or packet parsing design TBD | Query name and resolved IPs without payload capture. | Planned. |
 
@@ -161,7 +165,7 @@ The router receives events, attaches context, evaluates policy, invokes applicab
 
 ### 6.4 EventLog
 
-The local event log is append-only JSONL used by shield status and shield events. It is useful operational evidence but is not tamper-evident until exported and anchored through Integrity Protocol.
+The local event log is append-only JSONL used by shield status and shield events. It records policy version/hash when a policy bundle is loaded. It is useful operational evidence but is not tamper-evident until exported and anchored through Integrity Protocol.
 
 ## 7. Policy Engine Specification
 
@@ -234,7 +238,7 @@ Export failures must be logged. Local enforcement must not roll back. Retries mu
 
 ## 10. Configuration And Update Specification
 
-Current v1 implementation supports local JSON files for policy rules and device config. It must parse the whole file before replacing live policy, reject malformed bundles as a whole, keep last-known-good policy on reload failure, and surface failures through logs/CLI.
+Current v1 implementation supports local JSON files for policy rules and device config. It must parse the whole file before replacing live policy, reject malformed bundles as a whole, keep last-known-good policy on reload failure, surface failures through logs/CLI, and attach operator-visible policy version/hash to decisions when rules come from a bundle.
 
 Policy hot reload is mtime-polled and intentionally simple. Future file watchers may replace polling only if they preserve last-known-good semantics.
 
@@ -307,7 +311,7 @@ Current test families are listed in [README.md](README.md). New modules must add
 - Complete file write sensor.
 - Unblock TCP-connect sensor through BCC/kernel compatibility or verified BTF-based struct handling.
 - Design DNS observation separately.
-- Add sensitive-path policy filters for file events.
+- Keep sensitive-path file-event filtering config-loadable and covered by root-free tests.
 
 ### Phase 2: Integrity Registration And Evidence Closure
 

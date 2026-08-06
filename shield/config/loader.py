@@ -25,6 +25,7 @@ rules because of a typo would fail-open in the worst possible way without saying
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,29 @@ class ConfigError(Exception):
     problem, never a bare 'invalid config'."""
 
 
-def load_policy_rules(path: Path | str) -> list[PolicyRule]:
+@dataclass(frozen=True)
+class PolicyBundle:
+    rules: list[PolicyRule]
+    version: str
+    hash: str
+
+
+def _load_json_file(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
+    if not path.exists():
+        raise ConfigError(f"{label} file not found: {path}")
+
+    raw = path.read_bytes()
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"{label} file {path} is not valid JSON: {exc}") from exc
+
+    if not isinstance(doc, dict):
+        raise ConfigError(f"{label} file {path} must be a JSON object")
+    return doc, raw
+
+
+def load_policy_bundle(path: Path | str) -> PolicyBundle:
     """Load a policy bundle from a local JSON file, shaped `{"rules": [...]}` where each
     entry is the same dict shape `PolicyRule.from_dict` already accepts (spec §7). Returns
     rules in file order — the Policy Engine's first-match-wins semantics make that order
@@ -49,15 +72,9 @@ def load_policy_rules(path: Path | str) -> list[PolicyRule]:
     parse — better to refuse the whole bundle loudly than silently drop one bad rule and
     run with fewer policies than the operator intended."""
     p = Path(path)
-    if not p.exists():
-        raise ConfigError(f"policy rules file not found: {p}")
+    doc, raw_bytes = _load_json_file(p, "policy rules")
 
-    try:
-        doc = json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"policy rules file {p} is not valid JSON: {exc}") from exc
-
-    if not isinstance(doc, dict) or "rules" not in doc:
+    if "rules" not in doc:
         raise ConfigError(f"policy rules file {p} must be a JSON object with a top-level \"rules\" array")
 
     raw_rules = doc["rules"]
@@ -65,17 +82,22 @@ def load_policy_rules(path: Path | str) -> list[PolicyRule]:
         raise ConfigError(f"policy rules file {p}: \"rules\" must be an array, got {type(raw_rules).__name__}")
 
     rules: list[PolicyRule] = []
-    for i, raw in enumerate(raw_rules):
-        if not isinstance(raw, dict):
-            raise ConfigError(f"policy rules file {p}: rules[{i}] must be an object, got {type(raw).__name__}")
+    for i, raw_rule in enumerate(raw_rules):
+        if not isinstance(raw_rule, dict):
+            raise ConfigError(f"policy rules file {p}: rules[{i}] must be an object, got {type(raw_rule).__name__}")
         try:
-            rules.append(PolicyRule.from_dict(raw))
+            rules.append(PolicyRule.from_dict(raw_rule))
         except KeyError as exc:
             raise ConfigError(f"policy rules file {p}: rules[{i}] is missing required field {exc}") from exc
         except TypeError as exc:
             raise ConfigError(f"policy rules file {p}: rules[{i}] has an invalid shape: {exc}") from exc
 
-    return rules
+    version = str(doc.get("policy_version", doc.get("version", "")))
+    return PolicyBundle(rules=rules, version=version, hash=f"sha256:{hashlib.sha256(raw_bytes).hexdigest()}")
+
+
+def load_policy_rules(path: Path | str) -> list[PolicyRule]:
+    return load_policy_bundle(path).rules
 
 
 @dataclass
@@ -91,6 +113,7 @@ class DeviceConfig:
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
     feature_flags: dict[str, bool] = field(default_factory=dict)
+    sensitive_paths: list[str] = field(default_factory=list)
 
     def flag(self, name: str, default: bool = False) -> bool:
         return self.feature_flags.get(name, default)
@@ -101,24 +124,27 @@ def load_device_config(path: Path | str) -> DeviceConfig:
     field — everything else has the same defaults `DeviceConfig` itself would use if
     constructed directly, so a minimal config file (`{"device_id": "..."}`) is valid."""
     p = Path(path)
-    if not p.exists():
-        raise ConfigError(f"device config file not found: {p}")
-
-    try:
-        doc = json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"device config file {p} is not valid JSON: {exc}") from exc
-
-    if not isinstance(doc, dict):
-        raise ConfigError(f"device config file {p} must be a JSON object")
+    doc, _raw = _load_json_file(p, "device config")
     if "device_id" not in doc:
         raise ConfigError(f"device config file {p} is missing required field \"device_id\"")
 
-    known_fields = {"device_id", "tenant_id", "device_role", "bcc_middleware_url", "oracle_url", "feature_flags"}
+    known_fields = {
+        "device_id",
+        "tenant_id",
+        "device_role",
+        "bcc_middleware_url",
+        "oracle_url",
+        "feature_flags",
+        "sensitive_paths",
+    }
     unknown = set(doc.keys()) - known_fields
     if unknown:
         raise ConfigError(f"device config file {p} has unknown field(s): {sorted(unknown)}")
 
     kwargs: dict[str, Any] = {k: v for k, v in doc.items() if k != "feature_flags"}
     kwargs["feature_flags"] = doc.get("feature_flags", {})
+    if "sensitive_paths" in kwargs and not isinstance(kwargs["sensitive_paths"], list):
+        raise ConfigError(f"device config file {p}: \"sensitive_paths\" must be an array")
+    if any(not isinstance(pattern, str) for pattern in kwargs.get("sensitive_paths", [])):
+        raise ConfigError(f"device config file {p}: every \"sensitive_paths\" entry must be a string")
     return DeviceConfig(**kwargs)

@@ -1,0 +1,32 @@
+{
+  "policy_version": "professional-services-2026.08",
+  "rules": [
+    {
+      "rule_id": "ps-deny-unregistered-agents",
+      "name": "Deny unregistered agent activity",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "agent", "match": {"registered": [false]}}
+      ],
+      "actions": [{"type": "deny", "message": "Unregistered agent activity denied."}]
+    },
+    {
+      "rule_id": "ps-deny-unapproved-model-routing",
+      "name": "Deny unapproved model endpoints",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "context", "match": {"model_endpoint": ["https://unapproved.example/*", "http://*"]}}
+      ],
+      "actions": [{"type": "deny", "message": "Model endpoint is not approved for this tenant."}]
+    },
+    {
+      "rule_id": "ps-escalate-client-data-context",
+      "name": "Escalate client-data context attachment",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "context", "match": {"data_sources": ["client_contracts", "customer_records", "financial_docs"]}}
+      ],
+      "actions": [{"type": "escalate", "message": "Client data source attached to agent context."}]
+    }
+  ]
+}

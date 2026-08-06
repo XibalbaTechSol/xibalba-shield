@@ -1,0 +1,25 @@
+[Unit]
+Description=Xibalba Shield endpoint agent
+Documentation=README.md docs/runbooks/linux-agent.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/xibalba-shield/shield.env
+ExecStart=/usr/local/bin/shield --log-path /var/log/xibalba-shield/decisions.jsonl run --sensor ${SHIELD_SENSOR} --device-config /etc/xibalba-shield/device.json --rules /etc/xibalba-shield/policies/current.json ${SHIELD_EXPORTER_ARGS}
+Restart=on-failure
+RestartSec=5s
+RuntimeDirectory=xibalba-shield
+StateDirectory=xibalba-shield
+LogsDirectory=xibalba-shield
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/log/xibalba-shield /var/lib/xibalba-shield /etc/xibalba-shield
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
+
+[Install]
+WantedBy=multi-user.target

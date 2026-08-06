@@ -1,0 +1,32 @@
+{
+  "policy_version": "smb-2026.08",
+  "rules": [
+    {
+      "rule_id": "smb-contain-shadow-ai-processes",
+      "name": "Contain known shadow AI process paths",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "process", "match": {"exe_path": ["*/ai/*", "*/llm-tools/*", "*/shadow-agent/*"]}}
+      ],
+      "actions": [{"type": "contain", "message": "Unregistered AI workload path contained."}]
+    },
+    {
+      "rule_id": "smb-deny-unregistered-agent-tools",
+      "name": "Deny unregistered agent tool activity",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "agent", "match": {"registered": [false]}}
+      ],
+      "actions": [{"type": "deny", "message": "Agent is not registered on this endpoint."}]
+    },
+    {
+      "rule_id": "smb-escalate-sensitive-file-write",
+      "name": "Escalate sensitive file write metadata",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "file", "match": {"path": ["/home/*/.ssh/*", "/etc/*", "/var/secrets/*"]}}
+      ],
+      "actions": [{"type": "escalate", "message": "Sensitive path write observed."}]
+    }
+  ]
+}

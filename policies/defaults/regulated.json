@@ -1,0 +1,41 @@
+{
+  "policy_version": "regulated-2026.08",
+  "rules": [
+    {
+      "rule_id": "regulated-deny-unregistered-agents",
+      "name": "Deny unregistered agent activity",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "agent", "match": {"registered": [false]}}
+      ],
+      "actions": [{"type": "deny", "message": "Unregistered agent activity denied in regulated mode."}]
+    },
+    {
+      "rule_id": "regulated-deny-phi-context",
+      "name": "Deny PHI-bearing data-source context",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "context", "match": {"data_sources": ["ehr_encounter", "patient_record", "claims_phi"]}}
+      ],
+      "actions": [{"type": "deny", "message": "PHI-bearing data source cannot be attached to this agent context."}]
+    },
+    {
+      "rule_id": "regulated-deny-high-risk-output",
+      "name": "Deny high-risk output release",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "activity", "match": {"risk_level": ["high", "critical"]}}
+      ],
+      "actions": [{"type": "deny", "message": "High-risk output release denied."}]
+    },
+    {
+      "rule_id": "regulated-escalate-sensitive-write",
+      "name": "Escalate regulated sensitive-path writes",
+      "version": "1.0.0",
+      "conditions": [
+        {"type": "file", "match": {"path": ["/home/*/.ssh/*", "/etc/*", "/var/lib/*/secrets/*", "/var/secrets/*"]}}
+      ],
+      "actions": [{"type": "escalate", "message": "Sensitive regulated path write observed."}]
+    }
+  ]
+}

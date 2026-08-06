@@ -25,7 +25,7 @@ import logging
 from pathlib import Path
 
 from ..policy_engine import PolicyEngine
-from .loader import ConfigError, load_policy_rules
+from .loader import ConfigError, load_policy_bundle
 
 logger = logging.getLogger("shield.config.hot_reload")
 
@@ -56,7 +56,7 @@ class PolicyHotReloader:
             return False
 
         try:
-            new_rules = load_policy_rules(self._rules_path)
+            bundle = load_policy_bundle(self._rules_path)
         except ConfigError as exc:
             logger.error(
                 "policy hot-reload: %s failed to parse (%s) -- keeping current rules, NOT "
@@ -64,7 +64,14 @@ class PolicyHotReloader:
             )
             return False
 
-        self._policy_engine.rules = new_rules
+        self._policy_engine.rules = bundle.rules
+        self._policy_engine.policy_version = bundle.version
+        self._policy_engine.policy_hash = bundle.hash
         self._last_mtime = mtime
-        logger.info("policy hot-reload: %s reloaded, %d rule(s)", self._rules_path, len(new_rules))
+        logger.info(
+            "policy hot-reload: %s reloaded, %d rule(s), policy_hash=%s",
+            self._rules_path,
+            len(bundle.rules),
+            bundle.hash,
+        )
         return True

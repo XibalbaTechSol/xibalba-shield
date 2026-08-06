@@ -18,6 +18,7 @@ from shield.policy_engine import PolicyEngine
 
 def _write_rules(path, rule_ids: list[str]):
     path.write_text(json.dumps({
+        "policy_version": f"v-{len(rule_ids)}",
         "rules": [
             {"rule_id": rid, "name": rid, "version": "1.0.0", "conditions": [], "actions": [{"type": "allow"}]}
             for rid in rule_ids
@@ -41,6 +42,8 @@ def test_first_check_loads_initial_rules(tmp_path):
 
     assert reloaded is True
     assert [r.rule_id for r in engine.rules] == ["a"]
+    assert engine.policy_version == "v-1"
+    assert engine.policy_hash.startswith("sha256:")
 
 
 def test_unchanged_file_does_not_reload(tmp_path):
@@ -72,6 +75,7 @@ def test_real_edit_is_picked_up(tmp_path):
 
     assert reloaded is True
     assert [r.rule_id for r in engine.rules] == ["a", "b", "c"]
+    assert engine.policy_version == "v-3"
 
 
 def test_malformed_edit_keeps_last_known_good_rules(tmp_path):

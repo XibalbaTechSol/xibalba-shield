@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  root-free-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Run root-free tests
+        run: pytest -q
+      - name: Validate default policy packs
+        run: |
+          shield validate --rules policies/defaults/smb.json
+          shield validate --rules policies/defaults/professional-services.json
+          shield validate --rules policies/defaults/regulated.json

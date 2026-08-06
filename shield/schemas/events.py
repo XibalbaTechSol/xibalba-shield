@@ -190,6 +190,12 @@ class RuleRef:
 
 
 @dataclass
+class PolicyRef:
+    version: str = ""
+    hash: str = ""
+
+
+@dataclass
 class Decision:
     action: Literal["allow", "deny", "contain", "log_only", "escalate"]
     reason: str = ""
@@ -206,11 +212,12 @@ class PolicyDecision:
     event_ref: EventRef
     rule: RuleRef
     decision: Decision
+    policy: PolicyRef = field(default_factory=PolicyRef)
     time: str = field(default_factory=_now_iso)
     klass: str = field(default="policy_decision", init=False)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "class": self.klass,
             "time": self.time,
             "device_id": self.device_id,
@@ -222,6 +229,9 @@ class PolicyDecision:
             "rule": vars(self.rule),
             "decision": vars(self.decision),
         }
+        if self.policy.version or self.policy.hash:
+            out["policy"] = vars(self.policy)
+        return out
 
 
 # §5.6 — security-event intent_type namespace. Extends BCC Commitment.intent_type the same

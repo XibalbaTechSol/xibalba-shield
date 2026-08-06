@@ -1,5 +1,7 @@
 # Handoff — 2026-08-04
 
+> **Current audit pointer — 2026-08-06:** Use [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md) for current repository status. This handoff remains a historical execution record.
+
 Read this first if picking up `xibalba-shield`. `README.md` is the living, per-module status
 dashboard and phase checklist — this file is the narrative: what happened this session, what's
 actually verified vs. blocked, and what to do next, in order. Nothing below is inferred; every
@@ -73,7 +75,7 @@ Claude Code sessions hit the same wall).
 
 | Check | Result |
 |---|---|
-| `pytest` (no root, no live stack needed) | **58 passed**, 6 honest skips (root-gated eBPF ×5, live-bcc_middleware ×1) |
+| `pytest` (no root, no live stack needed) | Historical value: **58 passed**, 6 honest skips. Current 2026-08-06 root-free suite after follow-up implementation: **66 passed**, 7 skipped |
 | `pytest` with `bcc-middleware` up | same 58, minus the exporter test's skip — it passes for real |
 | `sudo python3 -m shield.sensors.ebpf.loader` | 2/3 sensors PASS, 1 BLOCKED (see Phase 1 above) |
 | `scripts/measure_resource_budget.py` | within spec §3 budget, real numbers recorded in README |

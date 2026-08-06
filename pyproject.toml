@@ -20,9 +20,9 @@ classifiers = [
 dependencies = [
     # One-way dependency on integrity-sdk (protocol spec §14.1), imported the same way any
     # third-party agent runtime would use it -- no privileged API, no special-cased access.
-    # Git dependency until integrity-sdk is published to PyPI; pin a commit once integrity-sdk
-    # cuts its first tagged release rather than tracking a moving branch indefinitely.
-    "integrity-sdk @ git+https://github.com/XibalbaTechSol/integrity-latest.git#subdirectory=integrity-sdk",
+    # Git dependency until integrity-sdk is published to PyPI. Pinned to a reviewed commit
+    # instead of tracking a moving branch so installs are reproducible.
+    "integrity-sdk @ git+https://github.com/XibalbaTechSol/integrity-latest.git@bed263a8001ad6c975260d29f1876d8f800f7d2a#subdirectory=integrity-sdk",
 ]
 
 [project.optional-dependencies]

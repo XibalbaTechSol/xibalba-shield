@@ -29,6 +29,21 @@ def test_no_rules_allows_by_default():
     assert decision.rule.rule_id == "_no_match"
 
 
+def test_decision_includes_policy_identity_when_configured():
+    engine = PolicyEngine(rules=[], policy_version="pilot-1", policy_hash="sha256:abc")
+    event = ProcessActivity(
+        device_id="dev-1",
+        process=ProcessInfo(pid=1, name="python"),
+        activity=Activity(type="launch"),
+    )
+
+    decision = engine.evaluate(event, _ctx())
+
+    assert decision.policy.version == "pilot-1"
+    assert decision.policy.hash == "sha256:abc"
+    assert decision.to_dict()["policy"] == {"version": "pilot-1", "hash": "sha256:abc"}
+
+
 def test_glob_match_on_exe_path_denies():
     rule = PolicyRule.from_dict({
         "rule_id": "proc-restrict-shadow-ai",

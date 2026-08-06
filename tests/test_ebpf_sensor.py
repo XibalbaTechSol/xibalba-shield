@@ -39,9 +39,15 @@ def _bcc_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
+def test_sensitive_path_filter_matches_globs_without_root():
+    from shield.sensors.ebpf.loader import _matches_sensitive_path
+
+    assert _matches_sensitive_path("/home/alice/.ssh/id_rsa", ["/home/*/.ssh/*"]) is True
+    assert _matches_sensitive_path("/tmp/notes.txt", ["/home/*/.ssh/*"]) is False
+    assert _matches_sensitive_path("/tmp/notes.txt", []) is True
 
 
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="BCC's BPF(text=...) creates BPF maps at construction time, which needs CAP_BPF")
 def test_bpf_source_compiles_and_loads():
     """BCC's `BPF(text=...)` compiles AND loads (creates every declared map) in one call --
@@ -52,6 +58,7 @@ def test_bpf_source_compiles_and_loads():
     assert b is not None
 
 
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="BCC's BPF(text=...) creates BPF maps at construction time, which needs CAP_BPF")
 def test_file_write_bpf_source_compiles_and_loads():
     from bcc import BPF
@@ -60,6 +67,7 @@ def test_file_write_bpf_source_compiles_and_loads():
     assert b is not None
 
 
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="BCC's BPF(text=...) creates BPF maps at construction time, which needs CAP_BPF")
 def test_tcp_connect_bpf_source_compiles_and_loads():
     from bcc import BPF
@@ -80,6 +88,7 @@ def test_construction_without_root_raises_permission_error(sensor_name):
         sensor_cls(device_id="test-device")
 
 
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="requires root (CAP_BPF) to load/attach the real BPF program")
 def test_sensor_observes_a_real_execve():
     """The concrete, no-silent-mock proof: spawn a real subprocess and confirm the sensor's
@@ -106,6 +115,7 @@ def test_sensor_observes_a_real_execve():
     assert found, f"never observed real execve for pid {target_pid} within 5s"
 
 
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="requires root (CAP_BPF) to load/attach the real BPF program")
 def test_file_write_sensor_observes_a_real_write_open():
     """Writes a real temp file from THIS test process and confirms the sensor's kprobe+
@@ -133,6 +143,7 @@ def test_file_write_sensor_observes_a_real_write_open():
     assert found, f"never observed real write-open of {target_path!r} within 5s"
 
 
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="requires root (CAP_BPF) to load/attach the real BPF program")
 def test_tcp_connect_sensor_observes_a_real_connect():
     """Connects to a real local TCP listener started by this test (no external service

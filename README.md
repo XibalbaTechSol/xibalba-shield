@@ -36,6 +36,10 @@ so in its own docstring — don't let this README be the only place that admits 
 
 This README is the repo-level source of truth for Shield implementation status, evidence, testing, and plan. [`SPECIFICATION.md`](SPECIFICATION.md) is the repo-level normative product and implementation specification. INTEGRITY-LATEST owns the protocol primitives Shield consumes; this repository owns Shield endpoint behavior, status, tests, and implementation plan.
 
+## 2026-08-06 audit status
+
+The current audit ledger is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The clean default-branch audit verified 62 tests with 7 skips; the README's 2-of-3 verified Linux eBPF status remains current, with TCP-connect blocked by the documented BCC/kernel incompatibility. Shield is a real Linux-first prototype, not production-ready.
+
 If code, tests, comments, and this README disagree, update them in the same change. Shield must never claim to compute AIS, anchor Merkle roots independently, or bypass the public INTEGRITY-LATEST SDK/BCC/Oracle interfaces.
 
 ## Status dashboard
@@ -47,14 +51,14 @@ Legend: ✅ real & tested · 🟡 real but partially verified (says exactly what
 |---|---|---|---|---|
 | 1 | Event schemas | §5 | ✅ | `shield/schemas/events.py` — exact §5.1–§5.6 shapes, no field renaming. `tests/test_schemas.py` |
 | 2 | Policy rule schema | §7 | ✅ | `shield/schemas/policy_rule.py` |
-| 3 | Policy Engine | §4.3 | ✅ | `shield/policy_engine/engine.py` — table-driven, first-match, zero network calls. Condition groups: `process`, `agent`, `file`, `flow`, `context`, `activity` (last two added alongside the guardrail hooks below — without them a rule could never match `context.model_endpoint`/`.data_sources` or `activity.risk_level`). 11 tests in `tests/test_policy_engine.py` |
+| 3 | Policy Engine | §4.3 | ✅ | `shield/policy_engine/engine.py` — table-driven, first-match, zero network calls. Condition groups: `process`, `agent`, `file`, `flow`, `context`, `activity` (last two added alongside the guardrail hooks below — without them a rule could never match `context.model_endpoint`/`.data_sources` or `activity.risk_level`). Policy decisions include operator-visible policy version/hash when rules are loaded from a bundle. 12 tests in `tests/test_policy_engine.py` |
 | 4 | Agent Core — registry, router, event log | §4.2 | ✅ | `shield/agent_core/{registry,router,eventlog}.py`. 7 tests in `tests/test_agent_core.py` |
 | 5 | Integrity Exporter | §4.5 | ✅ | `shield/integrity_exporter/exporter.py` — real `integrity-sdk` BCC signing (`bcc.build_bcc_commitment`) + real telemetry (`IntegrityClient.log_telemetry`), no mock. **Verified against a live stack**: `tests/test_integrity_exporter.py` submitted for real and got `authorized: true` + a real `verification_token`/`batch_index` back from `bcc_middleware`. The bootstrapped DID isn't registered with the oracle, so `GET /v1/agent/{did}` 404s — a separate, heavier follow-on step (see Phase 2 below) |
-| 6 | Guardrail hooks — all 6 hook points | §4.4 | ✅ | `shield/guardrail_hooks/{ingress,retrieval_context,model_routing,output,tool_execution,post_action_verification}.py` — each a real pre- (or, for post-action, post-) decision gate with its own deny exception. 15 tests in `tests/test_guardrail_hooks.py`. **Note:** spec §4.4 itself lists six hook points (ingress, retrieval/context, model routing, output, tool execution, post-action verification) while §14's roadmap prose says "generalizing to all five" — an inconsistency in the spec, not resolved here, just not silently picked one way; six modules exist, matching §4.4's own enumerated list. Built ahead of spec §14's suggested order (which puts hooks 2–6 after a pilot validates hook 1) per explicit direction to build out Phase 3 now |
-| 7 | CLI (`shield status`, `shield events`, `shield validate`, `shield run`) | §4.6 | ✅ | `shield/cli.py`. `shield run` is the real entry point — wires a real `Sensor` (`process-exec`/`file-write`/`dev`) into a real `EventRouter`/`PolicyEngine`/`EventLog`, with hot-reload if `--rules` is given and a real `IntegrityExporter` unless `--no-exporter`. Verified end-to-end live: `dev` sensor with a real deny rule correctly denied every `network_flow` event and nothing else; `process-exec`/`file-write` correctly raise a clean `PermissionError` (exit 1, no traceback) when not run as root, matching their own documented requirement. 5 new tests |
-| 8 | Configuration & update module | §4.6 | 🟡 | `shield/config/{loader,hot_reload}.py` — **real**: `load_policy_rules`/`load_device_config` parse local JSON files into the real `PolicyRule`/`DeviceConfig` shapes, refuse-the-whole-bundle-loudly on any malformed entry (never silently drops a bad rule), 11 tests. `PolicyHotReloader` reloads a changed rules file into a live `PolicyEngine` without a restart — mtime-polled, only swaps in a new rule set after it parses cleanly, so a bad edit keeps the engine on its last-known-good rules instead of zeroing them out or crashing, 6 tests. Wired into `shield validate --rules ... --device-config ...` (5 more tests). **Not built, deliberately**: tenant cloud API (no real server anywhere to test a client against) and safe auto-update for agent *code* (a materially harder problem — verified downloads, rollback, signature checking — deserving its own design pass) |
+| 6 | Guardrail hooks — all 6 hook points | §4.4 | ✅ | `shield/guardrail_hooks/{ingress,retrieval_context,model_routing,output,tool_execution,post_action_verification}.py` — each a real pre- (or, for post-action, post-) decision gate with its own deny exception. 15 tests in `tests/test_guardrail_hooks.py`. Repo-local `SPECIFICATION.md` resolves the prior wording drift by treating §4.4's enumerated six hooks as authoritative. |
+| 7 | CLI (`shield status`, `shield events`, `shield validate`, `shield run`) | §4.6 | ✅ | `shield/cli.py`. `shield run` is the real entry point — wires a real `Sensor` (`process-exec`/`file-write`/`dev`) into a real `EventRouter`/`PolicyEngine`/`EventLog`, with hot-reload if `--rules` is given and a real `IntegrityExporter` unless `--no-exporter`. Verified end-to-end live: `dev` sensor with a real deny rule correctly denied every `network_flow` event and nothing else; `process-exec`/`file-write` correctly raise a clean `PermissionError` (exit 1, no traceback) when not run as root, matching their own documented requirement. 5 tests |
+| 8 | Configuration & update module | §4.6 | 🟡 | `shield/config/{loader,hot_reload}.py` — **real**: `load_policy_bundle` computes `policy_version` and `sha256` over the exact bundle bytes; `load_policy_rules`/`load_device_config` parse local JSON files into the real `PolicyRule`/`DeviceConfig` shapes; `DeviceConfig.sensitive_paths` configures file-write filtering; malformed input refuses the whole bundle loudly. `PolicyHotReloader` reloads a changed rules file into a live `PolicyEngine` without a restart and carries forward policy version/hash only after a clean parse. Tenant cloud API and safe code auto-update remain planned. |
 | 9 | Linux sensor — dev/test generator | §4.1 | ✅ | `shield/sensors/dev_generator.py` — explicitly synthetic, never claims real telemetry |
-| 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **2 of 3 VERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`. **process-exec ✅ VERIFIED** (kprobe on `execve`, observed a real spawned subprocess's real exec). **file writes ✅ VERIFIED** (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel, observed a real write-open; not yet filtered by "sensitive path" — config-loadable-filter work, §4.6, unbuilt). **TCP-connect 🔴 BLOCKED**, confirmed a BCC/kernel version-skew problem rather than a bug here — `#include <net/sock.h>` hits kernel headers this BCC 0.29.1 can't parse, and BCC's own shipped `tcpconnect-bpfcc` reproduces an equivalent failure on the identical include chain on this same machine. DNS observation is NOT built at all (needs a uprobe/UDP-parsing approach, not a syscall kprobe). See "Verifying the eBPF sensors" below and `shield/sensors/ebpf/README.md` for the full record |
+| 10 | Linux sensors — real eBPF probes (3) | §4.1 | 🟡 **2 of 3 VERIFIED** | `shield/sensors/ebpf/{process_exec,file_write,tcp_connect}.bpf.c` + `loader.py`. **process-exec ✅ VERIFIED** (kprobe on `execve`, observed a real spawned subprocess's real exec). **file writes ✅ VERIFIED** (kprobe+kretprobe on `openat`, filtered to write-mode in-kernel, observed a real write-open; userspace sensitive-path glob filtering is now wired from `DeviceConfig.sensitive_paths`). **TCP-connect 🔴 BLOCKED**, confirmed a BCC/kernel version-skew problem rather than a bug here. DNS observation is NOT built at all. See "Verifying the eBPF sensors" below and `shield/sensors/ebpf/README.md` for the full record |
 | 11 | Windows/macOS sensors | §4.1 | ⬜ | `[PLANNED]`, post-Linux per spec §3 |
 | 12 | Network sensor (v2+) | §9 | ⬜ | Deferred past v1 per spec §9 — host-centric attribution via the kernel sensor is the v1 design |
 | 13 | PHI-tagging / guardrail content classifier | §6 | ⬜ | `[PLANNED]` — behavioral-telemetry-only today; the output hook (row 6) enforces policy on a classification but does not itself produce one. No resource-tagging or content-risk classification exists |
@@ -91,6 +95,8 @@ shield/
 ├── schemas/               # Event classes (§5) + policy rule shape (§7)
 └── cli.py                 # `shield status` / `events` / `validate` / `run` — §4.6. `run`
                             # is the real entry point: sensor -> router -> policy -> exporter
+packaging/systemd/          # Managed Linux service unit and environment example
+policies/defaults/          # SMB, professional-services, and regulated default policy packs
 scripts/                   # measure_resource_budget.py — spec §3 budget, real numbers recorded below
 tests/                     # pytest — see "Testing" below for what's real vs. skip-gated
 ```
@@ -228,7 +234,7 @@ sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the 6 root-gate
 | `test_guardrail_hooks.py` | All 6 hook points: allow-path invokes the wrapped call, deny-path raises the hook's own exception AND never invokes the call | no | no |
 | `test_ebpf_sensor.py` | All 3 sensors: non-root construction raises `PermissionError` (root-free); (root-gated) BPF source compiles+loads; (root-gated) a real triggered event (exec/write/connect) is observed | 6 of 9 tests, yes | no |
 | `test_integrity_exporter.py` | A `PolicyDecision` becomes a real signed BCC commitment and reaches a real `bcc_middleware` | no | yes — self-skips if unreachable |
-| `test_config.py` | Real JSON files loaded through `load_policy_rules`/`load_device_config` — file order preserved, malformed input refuses the whole bundle loudly (missing file, bad JSON, wrong shape, unknown field, one bad rule among good ones) | no | no |
+| `test_config.py` | Real JSON files loaded through `load_policy_bundle`/`load_policy_rules`/`load_device_config` — file order preserved, policy hash/version computed, malformed input refuses the whole bundle loudly (missing file, bad JSON, wrong shape, unknown field, one bad rule among good ones) | no | no |
 | `test_cli.py` | `shield validate` and `shield run` end-to-end through real argparse wiring — `run` exercises the real `EventRouter`/`PolicyEngine`/`EventLog` with the `dev` sensor (real policy decisions logged, hot-reload wired), plus `process-exec`'s `PermissionError` surfacing cleanly when not root | no | no |
 | `test_hot_reload.py` | `PolicyHotReloader` against real files with real mtime changes — picks up a real edit, ignores an unchanged file, and (the core safety property) a malformed edit or a missing file keeps the engine on its last-known-good rules rather than zeroing them out | no | no |
 
@@ -246,7 +252,7 @@ its real dependency (root, a live `bcc_middleware`) isn't available, per the con
 | [README.md](README.md) | Current implementation status, evidence, test commands, and plan |
 | [SPECIFICATION.md](SPECIFICATION.md) | Normative Shield product and implementation specification |
 | [SECURITY.md](SECURITY.md) | Security handling and disclosure expectations |
-| [HANDOFF.md](HANDOFF.md) | Operational handoff notes for continuing development |
+| [docs/archive/2026-08-06/HANDOFF.md](docs/archive/2026-08-06/HANDOFF.md) | Historical operational handoff notes |
 | [CLAUDE.md](CLAUDE.md) | Local agent instructions for this repository |
 | [shield/sensors/ebpf/README.md](shield/sensors/ebpf/README.md) | eBPF sensor verification record and blocked TCP-connect analysis |
 | [INTEGRITY-LATEST spec/xibalba-shield-v1.md](https://github.com/XibalbaTechSol/integrity-latest/blob/main/spec/xibalba-shield-v1.md) | Protocol-facing Shield integration boundary |
@@ -265,13 +271,14 @@ table above (if they disagree, the status table is more detailed and wins).
 - [x] Agent Core: `DeviceContext`, `AgentRegistry`, `EventRouter`, `EventLog` (§4.2)
 - [x] Dev-mode synthetic sensor, for testing everything above before a real sensor exists
 - [x] Real Linux eBPF sensor written AND **VERIFIED** (kprobe on `execve`, perf ring buffer, normalized output) — observed a real spawned subprocess's real exec, 2026-08-04
-- [x] File write hooks written AND **VERIFIED** (`file_write.bpf.c` — kprobe+kretprobe on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel) — observed the test process's own real write-open, 2026-08-04. **Not yet filtered by "sensitive path"** (spec §4.1's own phrasing) — that's config-loadable-filter work, §4.6, unbuilt
+- [x] File write hooks written AND **VERIFIED** (`file_write.bpf.c` — kprobe+kretprobe on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel) — observed the test process's own real write-open, 2026-08-04. Userspace sensitive-path glob filtering is wired through `DeviceConfig.sensitive_paths`.
 - [ ] **TCP-connect hooks written, BLOCKED at verification** (`tcp_connect.bpf.c` — kprobe+kretprobe on `tcp_v4_connect`, IPv4 only). Confirmed a BCC/kernel version-skew problem (BCC's own `tcpconnect-bpfcc` fails identically), not a bug in this file — see "Verifying the eBPF sensors" above. **This is the one remaining blocking item in Phase 1.**
 - [ ] DNS hooks — not built at all. Needs a uprobe on libc's `getaddrinfo` or UDP:53 payload parsing, a different mechanism than a syscall kprobe; deferred rather than built un-reviewed alongside the other three this pass
 
 ### Phase 2 — Integrity Exporter wired to a real `integrity-sdk` instance
 - [x] `IntegrityExporter` built: real DID bootstrap (`integrity_sdk.did.load_or_create_did`), real BCC commitment signing (`integrity_sdk.bcc.build_bcc_commitment`), real telemetry (`IntegrityClient.log_telemetry`)
 - [x] `PolicyDecision` → §5.6 `intent_type` mapping table
+- [x] Local decisions and exported decision payloads include policy version/hash when rules are loaded from a policy bundle
 - [x] **First real end-to-end signed event, verified against a live `bcc_middleware`** — brought up `postgres`/`redis`/`opa`/`oracle-backend`/`bcc-middleware` from `integrity-latest` and ran `tests/test_integrity_exporter.py`: it submitted for real (not skipped), got back a real structured response with `authorized: true`, a `verification_token`, and `batch_index: 3` — concrete proof of admission into `bcc_middleware`'s real Merkle batch (`app/merkle.py`'s pipeline step 7), not just an echoed `authorized` flag
 - [ ] **Not yet done: full oracle registration + audit-log query.** `GET /v1/agent/{did}` 404s for the exporter's bootstrapped DID (`did:integrity:e39591ab…`) — it was never registered with the oracle (`POST /v1/agent/register`, which needs a funded wallet and an on-chain tx). That's a separate, heavier step than proving the wire path works; the commitment reaching a real Merkle batch is the Phase 2 milestone this checklist item originally asked for, registration/audit-log visibility is follow-on work
 
@@ -311,7 +318,9 @@ table above (if they disagree, the status table is more detailed and wins).
   with a cheap perf-buffer handoff, a different (and expected to be much smaller) cost than
   this script measures; a separate root-run measurement would be needed for the full
   picture including the two verified sensors.
-- [ ] Blocked on TCP-connect eBPF verification (environment-limited, see Phase 1) for the full pilot picture
+- [x] Managed Linux service packaging exists: `packaging/systemd/xibalba-shield.service`, `packaging/systemd/shield.env.example`, and `docs/runbooks/linux-agent.md`
+- [x] Default policy packs exist for SMB, professional services, and regulated environments under `policies/defaults/`
+- [ ] Blocked on TCP-connect eBPF verification (environment-limited, see Phase 1) and registered exporter DID verification for the full pilot picture
 - [ ] 3–5 friendly SMB pilots, per spec §14
 
 ### Phase 5 — Broaden platform/scope

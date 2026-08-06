@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from shield.config import ConfigError, DeviceConfig, load_device_config, load_policy_rules
+from shield.config import ConfigError, DeviceConfig, load_device_config, load_policy_bundle, load_policy_rules
 
 
 # ---- load_policy_rules ----
@@ -35,6 +35,26 @@ def test_loads_real_rules_in_file_order(tmp_path):
     assert [r.rule_id for r in rules] == ["a", "b"]  # order preserved -- first-match-wins depends on it
     assert rules[0].actions[0].type == "allow"
     assert rules[1].actions[0].type == "deny"
+
+
+def test_loads_policy_bundle_metadata_and_hash(tmp_path):
+    path = tmp_path / "rules.json"
+    raw = {
+        "policy_version": "pilot-2026.08",
+        "rules": [
+            {"rule_id": "a", "name": "A", "version": "1.0.0",
+             "conditions": [{"type": "process", "match": {"name": ["python"]}}],
+             "actions": [{"type": "allow"}]},
+        ],
+    }
+    path.write_text(json.dumps(raw))
+
+    bundle = load_policy_bundle(path)
+
+    assert bundle.version == "pilot-2026.08"
+    assert bundle.hash.startswith("sha256:")
+    assert len(bundle.hash) == len("sha256:") + 64
+    assert [r.rule_id for r in bundle.rules] == ["a"]
 
 
 def test_missing_file_raises_config_error(tmp_path):
@@ -112,6 +132,7 @@ def test_loads_full_device_config_with_feature_flags(tmp_path):
         "bcc_middleware_url": "https://bcc.example.com",
         "oracle_url": "https://oracle.example.com",
         "feature_flags": {"strict_mode": True},
+        "sensitive_paths": ["/home/*/.ssh/*", "/var/secrets/*"],
     }))
 
     config = load_device_config(path)
@@ -119,6 +140,15 @@ def test_loads_full_device_config_with_feature_flags(tmp_path):
     assert config.tenant_id == "tenant-xyz"
     assert config.flag("strict_mode") is True
     assert config.flag("unknown_flag") is False  # unknown flags default safely, don't raise
+    assert config.sensitive_paths == ["/home/*/.ssh/*", "/var/secrets/*"]
+
+
+def test_device_config_sensitive_paths_must_be_a_list(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({"device_id": "dev-1", "sensitive_paths": "/tmp/*"}))
+
+    with pytest.raises(ConfigError, match="sensitive_paths"):
+        load_device_config(path)
 
 
 def test_device_config_missing_device_id_raises_config_error(tmp_path):

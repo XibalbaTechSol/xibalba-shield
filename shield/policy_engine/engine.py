@@ -21,6 +21,7 @@ from ..schemas.events import (
     Decision,
     EventRef,
     NormalizedEvent,
+    PolicyRef,
     PolicyDecision,
     RuleRef,
 )
@@ -122,8 +123,10 @@ class PolicyEngine:
     config/update module is what re-instantiates this with a new rule list, not this class
     itself watching a file)."""
 
-    def __init__(self, rules: list[PolicyRule]):
+    def __init__(self, rules: list[PolicyRule], *, policy_version: str = "", policy_hash: str = ""):
         self.rules = rules
+        self.policy_version = policy_version
+        self.policy_hash = policy_hash
 
     def evaluate(self, event: NormalizedEvent, ctx: EvaluationContext) -> PolicyDecision:
         event_id = f"evt-{uuid.uuid4().hex[:12]}"
@@ -138,6 +141,7 @@ class PolicyEngine:
                     device_id=ctx.device_id,
                     event_ref=EventRef(klass=event.klass, event_id=event_id),
                     rule=RuleRef(rule_id=rule.rule_id, name=rule.name, version=rule.version),
+                    policy=PolicyRef(version=self.policy_version, hash=self.policy_hash),
                     decision=Decision(
                         action=action.type if action else "log_only",
                         reason=action.message if action else "matched with no action defined",
@@ -151,5 +155,6 @@ class PolicyEngine:
             device_id=ctx.device_id,
             event_ref=EventRef(klass=event.klass, event_id=event_id),
             rule=RuleRef(rule_id="_no_match", name="No rule matched", version="0"),
+            policy=PolicyRef(version=self.policy_version, hash=self.policy_hash),
             decision=Decision(action="allow", reason="no policy rule matched", severity="low"),
         )

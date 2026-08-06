@@ -17,7 +17,7 @@ from pathlib import Path
 from .agent_core.eventlog import EventLog
 from .agent_core.registry import AgentRegistry, DeviceContext
 from .agent_core.router import EventRouter
-from .config import ConfigError, DeviceConfig, load_device_config, load_policy_rules
+from .config import ConfigError, DeviceConfig, load_device_config, load_policy_bundle
 from .config.hot_reload import PolicyHotReloader
 from .policy_engine import PolicyEngine
 
@@ -43,7 +43,13 @@ class _NullExporter:
         pass
 
 
-def _make_sensor(name: str, device_id: str, tenant_id: str, dev_interval: float):
+def _make_sensor(
+    name: str,
+    device_id: str,
+    tenant_id: str,
+    dev_interval: float,
+    sensitive_paths: list[str],
+):
     if name == "process-exec":
         from .sensors.ebpf.loader import LinuxEbpfSensor
 
@@ -51,7 +57,11 @@ def _make_sensor(name: str, device_id: str, tenant_id: str, dev_interval: float)
     if name == "file-write":
         from .sensors.ebpf.loader import LinuxFileWriteSensor
 
-        return LinuxFileWriteSensor(device_id=device_id, tenant_id=tenant_id)
+        return LinuxFileWriteSensor(
+            device_id=device_id,
+            tenant_id=tenant_id,
+            sensitive_path_globs=sensitive_paths,
+        )
     if name == "dev":
         from .sensors.dev_generator import DevModeSensor
 
@@ -94,9 +104,11 @@ def _validate(args: argparse.Namespace) -> int:
     ok = True
     if args.rules is not None:
         try:
-            rules = load_policy_rules(args.rules)
+            bundle = load_policy_bundle(args.rules)
+            rules = bundle.rules
             print(f"OK   {args.rules}: {len(rules)} rule(s), in order: "
-                  f"{', '.join(r.rule_id for r in rules) or '(none)'}")
+                  f"{', '.join(r.rule_id for r in rules) or '(none)'} "
+                  f"policy_version={bundle.version or '(none)'} policy_hash={bundle.hash}")
         except ConfigError as exc:
             print(f"FAIL {args.rules}: {exc}")
             ok = False
@@ -141,14 +153,19 @@ def _run(args: argparse.Namespace) -> int:
                                      bcc_middleware_url=args.bcc_middleware_url)
 
     rules = []
+    policy_version = ""
+    policy_hash = ""
     reloader = None
     if args.rules is not None:
         try:
-            rules = load_policy_rules(args.rules)
+            bundle = load_policy_bundle(args.rules)
+            rules = bundle.rules
+            policy_version = bundle.version
+            policy_hash = bundle.hash
         except ConfigError as exc:
             print(f"shield run: {exc}", file=sys.stderr)
             return 1
-    policy_engine = PolicyEngine(rules=rules)
+    policy_engine = PolicyEngine(rules=rules, policy_version=policy_version, policy_hash=policy_hash)
     if args.rules is not None:
         # PolicyHotReloader has no public "seed with an already-loaded rule set" API, so
         # its own first check_and_reload() will re-parse args.rules once more and find it
@@ -165,7 +182,7 @@ def _run(args: argparse.Namespace) -> int:
 
         exporter = IntegrityExporter(
             bcc_middleware_url=device_config.bcc_middleware_url,
-            oracle_url=args.oracle_url,
+            oracle_url=args.oracle_url or device_config.oracle_url,
             agent_label=args.agent_label,
         )
 
@@ -177,13 +194,20 @@ def _run(args: argparse.Namespace) -> int:
                          exporter=exporter, event_log=event_log)
 
     try:
-        sensor = _make_sensor(args.sensor, device_config.device_id, device_config.tenant_id, args.dev_interval)
+        sensor = _make_sensor(
+            args.sensor,
+            device_config.device_id,
+            device_config.tenant_id,
+            args.dev_interval,
+            device_config.sensitive_paths,
+        )
     except PermissionError as exc:
         print(f"shield run: {exc}", file=sys.stderr)
         return 1
 
     print(f"shield run: sensor={args.sensor} device_id={device_config.device_id!r} "
-          f"rules={len(rules)} exporter={'none' if args.no_exporter else 'real'}")
+          f"rules={len(rules)} policy_hash={policy_hash or '(none)'} "
+          f"exporter={'none' if args.no_exporter else 'real'}")
 
     count = 0
     try:

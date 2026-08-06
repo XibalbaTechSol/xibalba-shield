@@ -94,6 +94,7 @@ def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys):
     log_path = tmp_path / "decisions.jsonl"
     rules_path = tmp_path / "rules.json"
     rules_path.write_text(json.dumps({
+        "policy_version": "pilot-test",
         "rules": [{
             "rule_id": "deny-network", "name": "x", "version": "1.0.0",
             "conditions": [{"type": "flow", "match": {"dst_port": [443]}}],
@@ -114,6 +115,8 @@ def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys):
     assert network_rows, "DevModeSensor should have produced at least one network_flow in 20 events"
     assert all(r["decision"]["action"] == "deny" for r in network_rows)
     assert all(r["rule"]["rule_id"] == "deny-network" for r in network_rows)
+    assert all(r["policy"]["version"] == "pilot-test" for r in network_rows)
+    assert all(r["policy"]["hash"].startswith("sha256:") for r in network_rows)
 
 
 def test_run_requires_device_id_without_device_config(tmp_path, capsys):

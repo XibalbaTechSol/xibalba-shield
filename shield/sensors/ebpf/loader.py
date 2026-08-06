@@ -7,8 +7,8 @@ running kernel's installed headers; no separate `clang` binary is needed):
 
   - `LinuxEbpfSensor` (`process_exec.bpf.c`) — process-exec, via a kprobe on `execve`.
   - `LinuxFileWriteSensor` (`file_write.bpf.c`) — file writes, via a kprobe+kretprobe pair
-    on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel. Not yet filtered by "sensitive
-    path" (spec §4.1's own phrasing) — that's config-loadable-filter work (§4.6), unbuilt.
+    on `openat`, filtered to `O_WRONLY`/`O_RDWR` in-kernel. Optional userspace glob filtering
+    is wired from `DeviceConfig.sensitive_paths` through the CLI.
   - `LinuxTcpConnectSensor` (`tcp_connect.bpf.c`) — outbound TCP connects, via a
     kprobe+kretprobe pair on `tcp_v4_connect`. IPv4 only; `tcp_v6_connect` is real,
     separate kernel-side work deferred to keep this file's review surface bounded.
@@ -50,6 +50,7 @@ import os
 import socket
 import struct
 import time
+import fnmatch
 from pathlib import Path
 from typing import Iterator
 
@@ -76,6 +77,12 @@ def _require_root(class_name: str) -> None:
             "this machine has kernel.unprivileged_bpf_disabled=2, so there is no "
             "non-root path. Run under sudo."
         )
+
+
+def _matches_sensitive_path(path: str, patterns: list[str]) -> bool:
+    if not patterns:
+        return True
+    return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
 
 
 class LinuxEbpfSensor:
@@ -140,13 +147,14 @@ class LinuxFileWriteSensor:
     pair on `openat`, filtered in-kernel to write-mode opens. Requires root to construct,
     same reasoning as `LinuxEbpfSensor`."""
 
-    def __init__(self, device_id: str, tenant_id: str = ""):
+    def __init__(self, device_id: str, tenant_id: str = "", sensitive_path_globs: list[str] | None = None):
         _require_root("LinuxFileWriteSensor")
 
         from bcc import BPF
 
         self._device_id = device_id
         self._tenant_id = tenant_id
+        self._sensitive_path_globs = sensitive_path_globs or []
         self._pending: list[FileActivity] = []
 
         self._bpf = BPF(text=_FILE_WRITE_SOURCE.read_text())
@@ -158,6 +166,8 @@ class LinuxFileWriteSensor:
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002
         rec = self._bpf["file_write_events"].event(data)
         path = rec.filename.decode("utf-8", errors="replace")
+        if not _matches_sensitive_path(path, self._sensitive_path_globs):
+            return
         name = path.rsplit("/", 1)[-1] if path else ""
         self._pending.append(
             FileActivity(

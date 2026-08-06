@@ -25,13 +25,13 @@ here — read it there, this file assumes it).
 shield/
 ├── agent_core/        # DeviceContext, AgentRegistry, EventRouter, EventLog — spec §4.2
 ├── sensors/            # Sensor interface (base.py) + dev_generator.py (real, synthetic) +
-│                        # ebpf/ (real code, UNVERIFIED — read ebpf/README.md before touching it)
+│                        # ebpf/ (process/file verified historically; TCP blocked — read ebpf/README.md)
 ├── policy_engine/      # Table-driven rule evaluator — spec §4.3, §7 — condition groups:
 │                        # process/agent/file/flow/context/activity
 ├── guardrail_hooks/     # all 6 hook points, all real — spec §4.4
 ├── integrity_exporter/  # Wraps integrity-sdk: BCC signing + telemetry — spec §4.5
 ├── schemas/             # Event classes (§5) + policy rule shape (§7), canonical, no renaming
-└── cli.py               # `shield status` / `shield events --recent` — spec §4.6
+└── cli.py               # `shield status` / `shield events` / `shield validate` / `shield run` — spec §4.6
 ```
 
 ## What's real vs. `[PLANNED]`
@@ -47,10 +47,8 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest        # 18 pass, 3 skip: 2 need root (real eBPF load/attach — see
-                                   # shield/sensors/ebpf/README.md), 1 self-skips if
-                                   # bcc_middleware isn't reachable, rather than failing the suite
-sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # the 2 root-gated eBPF tests
+.venv/bin/python -m pytest        # 66 passed, 7 skipped in the current root-free suite
+sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
 shield status                    # local decision-log summary
 shield events --recent 20        # recent policy decisions
 ```
