@@ -17,26 +17,46 @@
  * than doubling this file's size and review surface for a first cut; spec §3 doesn't
  * require IPv6 for v1.
  *
- * **BLOCKED, 2026-08-04 -- confirmed environment limitation, not a bug in this file.**
- * `#include <net/sock.h>` (needed for `struct sock`) pulls in a kernel header chain that
- * references very recent kernel/eBPF additions (`struct bpf_wq`, `BPF_LOAD_ACQ`, `BPF_F_CPU`,
- * `struct ns_common.ns_id`, ...) that BCC 0.29.1's bundled compatibility headers don't know
- * about -- a BCC/kernel version-skew problem. Confirmed NOT specific to this file: BCC's own
- * shipped, pre-tested `tcpconnect-bpfcc` binary (same `bpfcc-tools` package) hits an
- * equivalent failure on the identical `net/sock.h` chain, on this same machine
- * (`sudo timeout 3 tcpconnect-bpfcc`). A hand-rolled minimal `struct sock_common` mirror --
- * the usual workaround for exactly this class of problem -- was deliberately NOT attempted:
- * there is no way to verify the correct field offsets for this specific kernel version from
- * here, and a wrong offset would silently produce plausible-looking but WRONG IP/port data,
- * which is worse than this honest compile failure. Needs a newer BCC release, or someone who
- * can verify the real `struct sock_common` layout against this kernel's own BTF
- * (`bpftool btf dump file /sys/kernel/btf/vmlinux`) before attempting that workaround.
+ * **Updated, 2026-08-06:** `#include <net/sock.h>` previously pulled in a kernel header chain
+ * that BCC 0.29.1 could not parse on this host. The needed leading `struct sock_common`
+ * layout was verified against this kernel's BTF:
+ *
+ *   bpftool btf dump file /sys/kernel/btf/vmlinux format c
+ *
+ * BTF shows `struct sock` starts with `struct sock_common __sk_common`, and the fields used
+ * below (`skc_daddr`, `skc_rcv_saddr`, `skc_dport`, `skc_num`) are in the first three unions
+ * of `struct sock_common`. The minimal mirror below intentionally models only that prefix.
+ * This removes the known compile blocker, but the sensor still requires root-run live
+ * verification before README/SPEC should claim TCP-connect VERIFIED.
  */
 
 #include <uapi/linux/ptrace.h>
-#include <net/sock.h>
 #include <bcc/proto.h>
 #include <linux/sched.h>
+#include <linux/types.h>
+
+struct shield_sock_common {
+    union {
+        struct {
+            __be32 skc_daddr;
+            __be32 skc_rcv_saddr;
+        };
+    };
+    union {
+        unsigned int skc_hash;
+        __u16 skc_u16hashes[2];
+    };
+    union {
+        struct {
+            __be16 skc_dport;
+            __u16 skc_num;
+        };
+    };
+};
+
+struct sock {
+    struct shield_sock_common __sk_common;
+};
 
 struct tcp_connect_record {
     u32 pid;

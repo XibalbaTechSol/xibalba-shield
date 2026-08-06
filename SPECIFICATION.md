@@ -11,7 +11,7 @@ This specification defines what Shield must do, how the current repository is or
 
 ## Current audit and implementation boundary
 
-The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 66 tests passed and 7 skipped. Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
+The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 74 tests passed and 7 skipped. Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
 
 ## 1. Source Of Truth And Scope
 
@@ -344,6 +344,8 @@ Current test families are listed in [README.md](README.md). New modules must add
 ## 17. Acceptance Criteria For v1 Pilot
 
 A Shield v1 pilot is ready when Linux process and file sensors are verified on target pilot kernels; TCP-connect is either verified or explicitly removed from pilot claims; shield run works as a managed service or supervised process; policy rules can be validated and hot-reloaded; local decision logs are inspectable by CLI; exporter reaches live BCC middleware with a registered DID; README status, SECURITY posture, and this specification agree; and a rollback/uninstall procedure exists.
+
+Pilot measurement gates are defined in [`docs/pilot-acceptance-metrics.md`](docs/pilot-acceptance-metrics.md).
 
 ## 18. Revision Policy
 

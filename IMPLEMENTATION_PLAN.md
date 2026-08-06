@@ -20,7 +20,7 @@ This plan merges README.md, SPECIFICATION.md, SECURITY.md, archived HANDOFF.md, 
 
 ## Audit checkpoint — 2026-08-06
 
-Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 66 tests passed and 7 skipped. The audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect remains blocked. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
+Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 74 tests passed and 7 skipped. The audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect remains blocked. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
 
 ## Closed
 
@@ -37,7 +37,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [x] Linux process-exec eBPF sensor is live-verified.
 - [x] Linux file-write eBPF sensor is live-verified.
 - [x] Comprehensive SPECIFICATION.md exists in this repo.
-- [x] Root-free test suite passes: 66 passed, 7 skipped.
+- [x] Root-free test suite passes: 75 passed, 7 skipped.
 - [x] Local policy bundles produce operator-visible policy version/hash in decisions.
 - [x] File-write sensitive-path glob filtering is wired from device config.
 - [x] Linux systemd service packaging and operator runbook exist.
@@ -46,6 +46,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [x] `integrity-sdk` git dependency is pinned to a reviewed commit.
 - [x] Signed policy bundle format is documented; local trusted-policy-hash enforcement exists.
 - [x] Local decision logs include export status and CLI events output surfaces export failures.
+- [x] Pilot acceptance metrics are defined.
 
 ## Planned And Todo
 
@@ -74,7 +75,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 
 - [ ] Reconcile the INTEGRITY-LATEST protocol-facing Shield spec status so normative design and observed implementation are not conflated.
 - [x] Resolve the specification wording inconsistency between five and six guardrail hooks in repo-local SPECIFICATION/README; six hook points are authoritative.
-- [ ] Update stale README, archived HANDOFF, sensor-base, CLAUDE, and generated package metadata counts/status text.
+- [x] Update stale README, archived HANDOFF, sensor-base, CLAUDE, and generated package metadata counts/status text; no tracked egg-info metadata remains.
 - [x] Pin the `integrity-sdk` dependency to a reviewed release or commit.
 - [x] Add free GitHub Actions CI for root-free tests and explicit root-gated skip reporting.
 
@@ -83,7 +84,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [x] Package Linux agent as a managed service or supervised process.
 - [x] Add install, uninstall, rollback, and diagnostic runbooks.
 - [x] Create default policy packs for SMB, professional services, and regulated environments.
-- [ ] Define pilot acceptance metrics: resource use, false positives, export success, operator usability.
+- [x] Define pilot acceptance metrics: resource use, false positives, export success, operator usability.
 
 ### Platform Expansion
 

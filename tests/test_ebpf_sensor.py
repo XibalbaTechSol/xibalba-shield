@@ -47,6 +47,18 @@ def test_sensitive_path_filter_matches_globs_without_root():
     assert _matches_sensitive_path("/tmp/notes.txt", []) is True
 
 
+def test_tcp_connect_source_avoids_net_sock_header_chain():
+    source = _TCP_CONNECT_SOURCE.read_text()
+    include_lines = [line.strip() for line in source.splitlines() if line.strip().startswith("#include")]
+
+    assert "#include <net/sock.h>" not in include_lines
+    assert "struct shield_sock_common" in source
+    assert "skc_daddr" in source
+    assert "skc_rcv_saddr" in source
+    assert "skc_dport" in source
+    assert "skc_num" in source
+
+
 @pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
 @pytest.mark.skipif(os.geteuid() != 0, reason="BCC's BPF(text=...) creates BPF maps at construction time, which needs CAP_BPF")
 def test_bpf_source_compiles_and_loads():

@@ -38,7 +38,7 @@ This README is the repo-level source of truth for Shield implementation status, 
 
 ## 2026-08-06 audit status
 
-The current audit ledger is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The current root-free suite verifies 66 tests with 7 skips; the README's 2-of-3 verified Linux eBPF status remains current, with TCP-connect blocked by the documented BCC/kernel incompatibility. Shield is a real Linux-first prototype, not production-ready.
+The current audit ledger is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The current root-free suite verifies 74 tests with 7 skips; the README's 2-of-3 verified Linux eBPF status remains current, with TCP-connect blocked by the documented BCC/kernel incompatibility. Shield is a real Linux-first prototype, not production-ready.
 
 If code, tests, comments, and this README disagree, update them in the same change. Shield must never claim to compute AIS, anchor Merkle roots independently, or bypass the public INTEGRITY-LATEST SDK/BCC/Oracle interfaces.
 
@@ -161,7 +161,7 @@ cd /home/xibalba/Projects/xibalba-shield
 uv venv --system-site-packages .venv           # --system-site-packages: bcc (python3-bpfcc)
                                                 # is a system package, not pip-installable
 uv pip install -e ".[dev]" --python .venv/bin/python
-.venv/bin/python -m pytest                     # 66 passed, 7 skipped in the current
+.venv/bin/python -m pytest                     # 75 passed, 7 skipped in the current
                                                 # root-free suite — see "Testing" below
 ```
 
@@ -255,6 +255,7 @@ its real dependency (root, a live `bcc_middleware`) isn't available, per the con
 | [CLAUDE.md](CLAUDE.md) | Local agent instructions for this repository |
 | [shield/sensors/ebpf/README.md](shield/sensors/ebpf/README.md) | eBPF sensor verification record and blocked TCP-connect analysis |
 | [docs/design/signed-policy-bundles.md](docs/design/signed-policy-bundles.md) | Signed policy bundle format and current trusted-hash enforcement |
+| [docs/pilot-acceptance-metrics.md](docs/pilot-acceptance-metrics.md) | Pilot gates for resource use, sensor coverage, policy behavior, export success, and operator usability |
 | [INTEGRITY-LATEST spec/xibalba-shield-v1.md](https://github.com/XibalbaTechSol/integrity-latest/blob/main/spec/xibalba-shield-v1.md) | Protocol-facing Shield integration boundary |
 | [INTEGRITY-LATEST docs/wiki/architecture/ecosystem-dependencies.md](https://github.com/XibalbaTechSol/integrity-latest/blob/main/docs/wiki/architecture/ecosystem-dependencies.md) | Cross-repo dependency boundary |
 
