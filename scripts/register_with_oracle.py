@@ -31,16 +31,43 @@ instead of deploying a second SovereignAgent/StateAnchor pair for the same DID.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
-from integrity_sdk.registration import RegistrationError, register_agent
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+SDK_HINTS = [
+    Path(os.getenv("INTEGRITY_SDK_PATH", "")) if os.getenv("INTEGRITY_SDK_PATH") else None,
+    Path("/home/xibalba/Projects/INTEGRITY-LATEST/integrity-sdk"),
+]
+for sdk_path in SDK_HINTS:
+    if sdk_path and (sdk_path / "integrity_sdk" / "registration.py").exists():
+        sys.path.insert(0, str(sdk_path))
+        break
 
 AGENT_ID = "xibalba-shield"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="scripts/register_with_oracle.py")
+    parser.add_argument("--agent-id", default=AGENT_ID)
+    parser.add_argument("--rpc-url", default=os.getenv("RPC_URL", "http://localhost:8545"))
+    parser.add_argument(
+        "--deployments-file",
+        default=os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/INTEGRITY-LATEST/deployments.local.json"),
+    )
+    parser.add_argument("--oracle-url", default=os.getenv("ORACLE_URL", "http://oracle-backend:8080"))
+    parser.add_argument(
+        "--skip-oracle-registration",
+        action="store_true",
+        default=os.getenv("SHIELD_SKIP_ORACLE_REGISTRATION", "").lower() in {"1", "true", "yes"},
+        help="perform on-chain registration only; use for local Anvil when oracle-backend is not running",
+    )
+    args = parser.parse_args(argv)
+
     missing = [
         var for var in ("FUNDER_PRIVATE_KEY", "INTEGRITY_WALLET_PASSWORD")
         if not os.getenv(var)
@@ -50,11 +77,21 @@ def main() -> int:
         return 1
 
     try:
+        from integrity_sdk.registration import RegistrationError, register_agent
+    except ModuleNotFoundError as exc:
+        print(
+            f"registration dependency missing: {exc.name}; install the full integrity-sdk runtime before live registration",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
         registration = register_agent(
-            agent_id=AGENT_ID,
-            rpc_url=os.getenv("RPC_URL", "http://host.docker.internal:8545"),
-            deployments_file=os.getenv("DEPLOYMENTS_FILE", "/deployments.local.json"),
-            oracle_url=os.getenv("ORACLE_URL", "http://oracle-backend:8080"),
+            agent_id=args.agent_id,
+            rpc_url=args.rpc_url,
+            deployments_file=args.deployments_file,
+            oracle_url=args.oracle_url,
+            skip_oracle_registration=args.skip_oracle_registration,
         )
     except RegistrationError as exc:
         print(f"registration failed: {exc}", file=sys.stderr)

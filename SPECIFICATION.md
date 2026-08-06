@@ -11,7 +11,7 @@ This specification defines what Shield must do, how the current repository is or
 
 ## Current audit and implementation boundary
 
-The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 74 tests passed and 7 skipped. Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
+The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 103 tests passed and 7 skipped. Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
 
 ## 1. Source Of Truth And Scope
 
@@ -165,7 +165,7 @@ The router receives events, attaches context, evaluates policy, invokes applicab
 
 ### 6.4 EventLog
 
-The local event log is append-only JSONL used by shield status and shield events. It records policy version/hash when a policy bundle is loaded and export status after export attempts. It is useful operational evidence but is not tamper-evident until exported and anchored through Integrity Protocol.
+The local event log is JSONL used by shield status and shield events. It records policy version/hash when a policy bundle is loaded and export status after export attempts. When configured with an HMAC key, entries must include a verifiable hash chain for local tamper evidence. Local tamper evidence is still host-bound and does not replace Integrity-exported, off-device evidence.
 
 ## 7. Policy Engine Specification
 
@@ -242,7 +242,7 @@ Current v1 implementation supports local JSON files for policy rules and device 
 
 Policy hot reload is mtime-polled and intentionally simple. Future file watchers may replace polling only if they preserve last-known-good semantics.
 
-Tenant cloud policy distribution and safe code auto-update are planned. Code auto-update requires verified downloads, signature checking, staged rollout, rollback, and explicit operator recovery design before implementation.
+Tenant policy distribution is implemented as a client-side HTTP(S) fetch, validate, trusted-hash check, and atomic local replace. The hosted policy service contract is outside this repository. Code auto-update requires verified downloads, signature checking, staged rollout, rollback, and explicit operator recovery design before implementation.
 
 ## 11. CLI And Operator Surface
 
@@ -252,8 +252,17 @@ Tenant cloud policy distribution and safe code auto-update are planned. Code aut
 | shield events --recent N | Show recent local policy decisions. |
 | shield validate | Validate policy and device config files. |
 | shield run | Run sensor -> router -> policy -> log/exporter loop. |
+| shield fetch-policy | Fetch, validate, and atomically install a tenant policy bundle. |
+| shield verify-log | Verify the optional local HMAC decision-log hash chain. |
+| shield siem-export | Export local decision logs to JSONL or a generic webhook. |
 
-The CLI must fail with clean errors and no Python traceback for expected operational failures such as non-root eBPF startup.
+The CLI must fail with clean errors and no Python traceback for expected operational failures such as non-root eBPF startup. Repository validation scripts must report unavailable root, live RPC/oracle, native OS, signing, hardening, and burn-in evidence as blocked rather than substituting local mocks.
+
+## 11.1 Backend MVP API
+
+The backend MVP is a tenant control plane for demos and pilots. It must not become the local enforcement authority; endpoint allow/deny decisions remain local. Its minimum API surface is enrollment, device inventory, policy distribution, decision ingestion, burn-in metrics ingestion, exporter status, integration configuration, dashboard summary, and synthetic demo seeding with explicit synthetic labels.
+
+The backend stores tenant/device state, policy bundles, decision summaries, metrics, exporter status, and SIEM/SOAR integration config in SQLite for the MVP. Production hosting may replace SQLite only if tenant isolation, device-token authentication, and policy-fetch compatibility are preserved.
 
 ## 12. Privacy, Data Minimization, And Regulated Environments
 
@@ -263,7 +272,7 @@ Allowed telemetry includes process metadata, file path/classification metadata, 
 
 Forbidden telemetry unless a later spec explicitly changes the boundary: raw prompt text, raw model output, file contents, credentials, secrets, patient identifiers, payment credentials, and private documents.
 
-In regulated environments, Shield must tag PHI-bearing resources by class and access event, not inspect records. Any deployment involving ePHI requires separate contractual and operational controls; this repository does not itself create HIPAA compliance.
+In regulated environments, Shield must tag PHI-bearing resources by class and access event, not inspect records. The built metadata classifier may derive labels from supplied categories, paths, data-source names, and model endpoints only. Any deployment involving ePHI requires separate contractual and operational controls; this repository does not itself create HIPAA compliance.
 
 ## 13. Security Model
 
@@ -271,8 +280,8 @@ In regulated environments, Shield must tag PHI-bearing resources by class and ac
 
 - Endpoint administrator/root can disable or tamper with local Shield state.
 - Integrity-exported evidence becomes tamper-evident only after accepted by Integrity services and anchored according to protocol rules.
-- Local JSONL logs are operational records, not cryptographic proof.
-- Policy files are trusted local configuration once loaded; future cloud policy requires signed bundles.
+- Local JSONL logs are operational records; optional HMAC hash chaining is host-bound tamper evidence, not off-device proof.
+- Policy files are trusted local configuration once loaded; tenant distribution must preserve trusted-hash enforcement.
 
 ### 13.2 Threats Addressed
 
@@ -316,14 +325,15 @@ Current test families are listed in [README.md](README.md). New modules must add
 ### Phase 2: Integrity Registration And Evidence Closure
 
 - Register Shield exporter DID with Oracle.
-- Verify agent lookup/audit-log query for exported Shield events.
+- Verify agent lookup/readback for Shield exporter identity.
+- Verify audit-log query for exported Shield events.
 - Re-run resource budget with registered DID and clean exporter queue.
 - Add evidence-export examples once INTEGRITY-LATEST reporting surface is ready.
 
 ### Phase 3: Policy Distribution And Update Safety
 
 - Keep signed policy bundle format and local trusted-hash enforcement aligned.
-- Add tenant policy distribution client when a real server exists.
+- Keep tenant policy distribution client covered against a real HTTP server contract.
 - Specify safe code update mechanism with signature verification and rollback.
 
 ### Phase 4: Pilot Readiness
@@ -339,7 +349,7 @@ Current test families are listed in [README.md](README.md). New modules must add
 - Windows ETW sensor.
 - macOS endpoint sensor.
 - Optional network appliance/container sensor.
-- SIEM/SOAR integrations.
+- SIEM/SOAR integrations beyond JSONL/webhook baselines.
 
 ## 17. Acceptance Criteria For v1 Pilot
 

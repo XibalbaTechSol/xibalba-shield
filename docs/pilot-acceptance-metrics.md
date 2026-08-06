@@ -47,6 +47,19 @@ Measure with `scripts/measure_resource_budget.py` for synthetic/dev paths and a 
 - `shield events --recent 20` shows action, rule, and export state without requiring raw log parsing.
 - Any expected operational failure, including non-root eBPF startup, exits cleanly without a traceback.
 
+## Evidence Artifacts
+
+Archive real target evidence before moving a gate from blocked to passed:
+
+- TCP-connect eBPF: JSON output from `sudo python3 scripts/verify_tcp_connect_root.py` on each target kernel.
+- Live DID path: JSON readback from `scripts/verify_oracle_registration.py` against reachable RPC and Oracle deployment credentials.
+- Windows/macOS native sensors: platform-native validation JSON from the target OS, not Linux placeholders.
+- Burn-in: `scripts/burn_in.py` JSON plus operator false-positive review labels over at least 48 hours unless a pilot plan specifies a longer window.
+- Installer/updater: attestation with `artifact_sha256`, `signature`, `service_manager`, and `rollback`.
+- Root/admin resistance: attestation with `secure_boot`, `tpm_or_mdm`, `service_protection`, and `log_key_protection`.
+
+`scripts/pilot_gate_report.py` summarizes these artifacts. Missing artifacts remain `BLOCKED`; invalid artifacts fail the report.
+
 ## Exit Criteria
 
 A pilot cohort passes only if every non-blocked metric above is met and every blocked metric is explicitly listed in the final pilot report with owner, reason, and next verification step.

@@ -107,6 +107,52 @@ def test_events_prints_export_status(tmp_path, capsys):
     assert "export=ok" in capsys.readouterr().out
 
 
+def test_verify_log_command_detects_tamper_evident_log(tmp_path, capsys):
+    log_path = tmp_path / "decisions.jsonl"
+    key_path = tmp_path / "log.key"
+    key_path.write_bytes(b"test-secret")
+
+    code = main([
+        "--log-path", str(log_path),
+        "run", "--sensor", "dev", "--device-id", "test-dev",
+        "--no-exporter", "--max-events", "1", "--dev-interval", "0",
+        "--log-integrity-key", str(key_path),
+    ])
+    assert code == 0
+    capsys.readouterr()
+
+    code = main(["--log-path", str(log_path), "verify-log", "--integrity-key", str(key_path)])
+
+    assert code == 0
+    assert "verified 1 decision log entries" in capsys.readouterr().out
+
+
+def test_siem_export_command_requires_one_destination(tmp_path, capsys):
+    code = main(["--log-path", str(tmp_path / "decisions.jsonl"), "siem-export"])
+
+    assert code == 2
+    assert "exactly one" in capsys.readouterr().err
+
+
+def test_siem_export_command_writes_jsonl(tmp_path, capsys):
+    log_path = tmp_path / "decisions.jsonl"
+    output_path = tmp_path / "siem.jsonl"
+
+    code = main([
+        "--log-path", str(log_path),
+        "run", "--sensor", "dev", "--device-id", "test-dev",
+        "--no-exporter", "--max-events", "1", "--dev-interval", "0",
+    ])
+    assert code == 0
+    capsys.readouterr()
+
+    code = main(["--log-path", str(log_path), "siem-export", "--output", str(output_path)])
+
+    assert code == 0
+    assert "exported=1" in capsys.readouterr().out
+    assert json.loads(output_path.read_text())["event.module"] == "xibalba-shield"
+
+
 def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys):
     log_path = tmp_path / "decisions.jsonl"
     rules_path = tmp_path / "rules.json"
@@ -213,6 +259,23 @@ def test_run_process_exec_sensor_without_root_fails_cleanly(tmp_path, capsys):
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),
         "run", "--sensor", "process-exec", "--device-id", "test-dev", "--no-exporter",
+    ])
+
+    assert code == 1
+    assert "requires root" in capsys.readouterr().err
+
+
+def test_run_tcp_connect_sensor_without_root_fails_cleanly(tmp_path, capsys):
+    import os
+
+    if os.geteuid() == 0:
+        import pytest
+
+        pytest.skip("running as root -- this test asserts the non-root failure path specifically")
+
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "tcp-connect", "--device-id", "test-dev", "--no-exporter",
     ])
 
     assert code == 1

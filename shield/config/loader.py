@@ -1,18 +1,9 @@
 """
-Configuration & update module — spec/xibalba-shield-v1.md §4.6, the local-file half only.
+Configuration & update module — spec/xibalba-shield-v1.md §4.6.
 
-§4.6 asks for three things: "Policies loadable from local files or a tenant cloud API; safe
-auto-update for agent code and policy bundles; per-tenant feature flags." Only the first half
-of the first item is built here — local-file loading of policy rules (§7's real, already-
-tested shape) and device/tenant config, including feature flags.
-
-**Deliberately NOT built, and why:** a tenant cloud API client would have no real server to
-verify itself against — nothing in this monorepo or `integrity-latest` runs one — so building
-it now would mean shipping an unverified network client, exactly the kind of untested code
-this project's no-silent-mocks rule exists to prevent. "Safe auto-update for agent code" is a
-materially different, higher-stakes problem (verified downloads, rollback, signature checking
-on the update payload itself) that deserves its own real design pass, not a few functions
-bolted onto a config loader. Both stay `[PLANNED]`.
+§4.6 asks for policies loadable from local files or a tenant cloud API, safe update paths, and
+per-tenant feature flags. Local-file loading lives here; the network fetch/update client lives
+in `shield.config.distribution` so JSON parsing and HTTP/update mechanics stay separate.
 
 This module owns no policy *logic* — it only turns JSON on disk into the same `PolicyRule`/
 `DeviceConfig` objects the rest of the stack already uses (`PolicyRule.from_dict` does the
@@ -112,6 +103,8 @@ class DeviceConfig:
     device_role: str = ""
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
+    tenant_policy_url: str = ""
+    device_token: str = ""
     feature_flags: dict[str, bool] = field(default_factory=dict)
     sensitive_paths: list[str] = field(default_factory=list)
     trusted_policy_hashes: list[str] = field(default_factory=list)
@@ -135,6 +128,8 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "device_role",
         "bcc_middleware_url",
         "oracle_url",
+        "tenant_policy_url",
+        "device_token",
         "feature_flags",
         "sensitive_paths",
         "trusted_policy_hashes",

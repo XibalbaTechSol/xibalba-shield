@@ -20,7 +20,7 @@ This plan merges README.md, SPECIFICATION.md, SECURITY.md, archived HANDOFF.md, 
 
 ## Audit checkpoint — 2026-08-06
 
-Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 74 tests passed and 7 skipped. The audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect remains blocked. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
+Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 103 tests passed and 7 skipped. The audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect still needs root live verification. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
 
 ## Closed
 
@@ -37,7 +37,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [x] Linux process-exec eBPF sensor is live-verified.
 - [x] Linux file-write eBPF sensor is live-verified.
 - [x] Comprehensive SPECIFICATION.md exists in this repo.
-- [x] Root-free test suite passes: 75 passed, 7 skipped.
+- [x] Root-free test suite passes: 103 passed, 7 skipped.
 - [x] Local policy bundles produce operator-visible policy version/hash in decisions.
 - [x] File-write sensitive-path glob filtering is wired from device config.
 - [x] Linux systemd service packaging and operator runbook exist.
@@ -50,9 +50,35 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 
 ## Planned And Todo
 
+### Shield Platform MVP
+
+Goal: demonstrate Xibalba Shield as a real tenant security platform under the Xibalba Shield page, backed by the endpoint agent in this repository and Integrity evidence.
+
+- [x] Create a Shield backend service with tenant/device APIs.
+- [x] Add device enrollment API: issue device config, tenant ID, policy URL, and expected agent label.
+- [x] Add policy distribution API compatible with the existing `tenant_policy_url` client.
+- [x] Add decision ingestion API for dashboard/demo visibility without weakening local enforcement.
+- [x] Add burn-in metrics ingestion API for CPU/RAM/event-rate/export-health snapshots.
+- [x] Add exporter registration status API backed by `scripts/verify_oracle_registration.py` output or equivalent backend readback.
+- [x] Add SIEM/SOAR destination configuration API for JSONL/webhook/vendor-specific adapters.
+- [x] Add tenant isolation tests for backend device-token ingestion paths.
+- [x] Add backend persistence schema for tenants, devices, policies, decisions, metrics, integrations, and enrollment tokens.
+- [x] Add demo seed data and scripted event generator for repeatable MVP demos.
+- [x] Build the Xibalba Shield page as an operational console, not a marketing page.
+- [x] Dashboard view: device inventory, online/offline state, active policy hash/version, export health.
+- [x] Decision stream view: allow/deny/contain/escalate events with device/event/rule/severity/export fields.
+- [x] Policy view baseline: policy hash/version is surfaced in device inventory; full editor/rollout workflow remains planned.
+- [x] Evidence view baseline: DID/exporter status is stored and shown in dashboard summary; Integrity audit links remain blocked on evidence reporting surface.
+- [x] Burn-in view: event rate, CPU/RAM, deny/escalate volume, export reliability, false-positive review placeholders.
+- [x] Demo controls: seed synthetic shadow-agent, sensitive-write, PHI-context, network, exporter-status, metrics, and SIEM config scenarios with clear demo labeling.
+- [ ] Add full policy editor, staged rollout controls, and richer dashboard filters.
+
+MVP rule: the backend and page may display synthetic demo events only when they are labeled synthetic. Customer-facing claims must be based on real agent runs, real policy evaluation, and real export/readback status.
+
 ### Linux Sensor Completion
 
-- [ ] Unblock TCP-connect eBPF verification by upgrading BCC or using verified BTF-based struct handling.
+- [x] Reduce TCP-connect BCC header blocker with BTF-checked struct-prefix source.
+- [ ] Run root live verification for TCP-connect on target kernel.
 - [ ] Design DNS observation separately via uprobe or packet parsing.
 - [x] Add config-loadable sensitive-path filtering for file events.
 - [ ] Measure resource budget with verified real sensors running, not only dev/exporter paths.
@@ -60,14 +86,15 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 ### Integrity Evidence Closure
 
 - [ ] Register the Shield exporter DID with Integrity Oracle.
-- [ ] Verify GET /v1/agent/{did} or equivalent readback for Shield exporter identity.
+- [x] Add explicit DID registration readback script.
+- [ ] Execute DID readback against live funded RPC/oracle environment.
 - [ ] Verify exported Shield decisions are visible through the intended evidence/audit surface.
 - [ ] Re-run resource measurement with a registered DID and clean exporter queue.
 
 ### Policy Distribution And Updates
 
 - [x] Design signed policy bundle format.
-- [ ] Add tenant cloud policy client only after a real server contract exists.
+- [x] Add tenant policy distribution client: HTTP fetch, validation, trusted-hash enforcement, atomic replace.
 - [ ] Specify safe code auto-update: signed downloads, staged rollout, rollback, and recovery.
 - [x] Add operator-visible policy version/hash in local decisions and exported evidence.
 
@@ -83,24 +110,28 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 
 - [x] Package Linux agent as a managed service or supervised process.
 - [x] Add install, uninstall, rollback, and diagnostic runbooks.
+- [x] Add Linux install and policy update helper scripts.
 - [x] Create default policy packs for SMB, professional services, and regulated environments.
 - [x] Define pilot acceptance metrics: resource use, false positives, export success, operator usability.
+- [x] Add root-free burn-in harness for throughput/RSS/decision mix snapshots.
+- [x] Add aggregate pilot gate report for external verification artifacts.
 
 ### Platform Expansion
 
 - [ ] Windows ETW sensor.
 - [ ] macOS endpoint sensor.
 - [ ] Optional network appliance/container sensor for v2+.
-- [ ] SIEM/SOAR export integrations through Integrity evidence paths.
+- [x] Add baseline SIEM/SOAR JSONL and webhook exports.
+- [ ] Add vendor-specific SIEM/SOAR field mappings and Integrity evidence links.
 
 ## Blocked
 
-- [ ] TCP-connect sensor is blocked by current BCC/kernel version skew.
+- [ ] TCP-connect sensor root verification is blocked by missing sudo/root in this environment.
 - [ ] Windows/macOS sensors are blocked on access to target platforms for implementation and verification.
 - [ ] Compliance reporting polish is blocked on INTEGRITY-LATEST evidence export maturity.
-- [ ] Tenant cloud policy API is blocked until server contract exists.
+- [ ] Hosted tenant policy API service is outside this repo; client is implemented and tested with a real HTTP server.
 
-- [ ] Current live eBPF/exporter re-verification is blocked until the audit environment has root capability and a live Integrity stack.
+- [ ] Current live eBPF/exporter re-verification is blocked until the audit environment has root capability and a live Integrity stack; `scripts/pilot_gate_report.py` records this as blocked until real artifacts are supplied.
 
 ## Acceptance Criteria
 
@@ -110,7 +141,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [ ] Policy validation and hot reload work under pilot conditions.
 - [x] Local logs are inspectable and export failures are visible.
 - [ ] Exporter uses a registered DID and produces queryable Integrity-backed evidence.
-- [ ] README, SPECIFICATION, SECURITY, and implementation docstrings agree.
+- [x] README, SPECIFICATION, SECURITY, and implementation docstrings agree on local tamper evidence versus OS-level hardening boundaries.
 
 ## Update Rule
 

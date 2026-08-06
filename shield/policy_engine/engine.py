@@ -89,6 +89,8 @@ def _condition_matches(condition: Condition, event: NormalizedEvent, registered_
         registered_wanted = condition.match.get("registered")
         if registered_wanted is not None:
             agent = getattr(event, "agent", None)
+            if agent is None:
+                return False
             is_registered = bool(agent) and agent.agent_id in registered_agent_ids
             if bool(registered_wanted[0]) != is_registered:
                 return False

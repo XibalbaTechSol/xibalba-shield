@@ -17,13 +17,13 @@ from pathlib import Path
 from .agent_core.eventlog import EventLog
 from .agent_core.registry import AgentRegistry, DeviceContext
 from .agent_core.router import EventRouter
-from .config import ConfigError, DeviceConfig, load_device_config, load_policy_bundle
+from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_config, load_policy_bundle
 from .config.hot_reload import PolicyHotReloader
 from .policy_engine import PolicyEngine
 
 DEFAULT_LOG_PATH = Path.home() / ".xibalba-shield" / "decisions.jsonl"
 
-_SENSOR_CHOICES = ("process-exec", "file-write", "dev")
+_SENSOR_CHOICES = ("process-exec", "file-write", "tcp-connect", "dev")
 
 
 class _NullExporter:
@@ -62,6 +62,10 @@ def _make_sensor(
             tenant_id=tenant_id,
             sensitive_path_globs=sensitive_paths,
         )
+    if name == "tcp-connect":
+        from .sensors.ebpf.loader import LinuxTcpConnectSensor
+
+        return LinuxTcpConnectSensor(device_id=device_id, tenant_id=tenant_id)
     if name == "dev":
         from .sensors.dev_generator import DevModeSensor
 
@@ -204,7 +208,7 @@ def _run(args: argparse.Namespace) -> int:
     device = DeviceContext(device_id=device_config.device_id, tenant_id=device_config.tenant_id,
                            device_role=device_config.device_role)
     registry = AgentRegistry()
-    event_log = EventLog(args.log_path)
+    event_log = EventLog(args.log_path, integrity_key_path=args.log_integrity_key)
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, event_log=event_log)
 
@@ -242,6 +246,54 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fetch_policy(args: argparse.Namespace) -> int:
+    try:
+        device_config = load_device_config(args.device_config)
+        result = fetch_tenant_policy(
+            device_config=device_config,
+            destination=args.output,
+            timeout_sec=args.timeout,
+        )
+    except ConfigError as exc:
+        print(f"shield fetch-policy: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"OK   fetched {len(result.bundle.rules)} rule(s) from {result.source_url} "
+        f"to {result.path} policy_version={result.bundle.version or '(none)'} "
+        f"policy_hash={result.bundle.hash}"
+    )
+    return 0
+
+
+def _verify_log(args: argparse.Namespace) -> int:
+    result = EventLog(args.log_path, integrity_key_path=args.integrity_key).verify()
+    if result.get("ok"):
+        print(f"OK   verified {result.get('checked', 0)} decision log entries")
+        if result.get("last_hash"):
+            print(f"     last_hash={result['last_hash']}")
+        return 0
+    print(
+        f"FAIL decision log integrity: line={result.get('line', '?')} "
+        f"checked={result.get('checked', 0)} reason={result.get('reason', 'unknown')}",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def _siem_export(args: argparse.Namespace) -> int:
+    from .integrations.siem import export_decision_log_to_jsonl, post_decision_log_to_webhook
+
+    if bool(args.output) == bool(args.webhook_url):
+        print("shield siem-export: pass exactly one of --output or --webhook-url", file=sys.stderr)
+        return 2
+    if args.webhook_url:
+        result = post_decision_log_to_webhook(args.log_path, args.webhook_url, timeout_sec=args.timeout)
+    else:
+        result = export_decision_log_to_jsonl(args.log_path, args.output, profile=args.profile)
+    print(f"OK   siem export: exported={result.exported} failed={result.failed}")
+    return 0 if result.failed == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shield")
     parser.add_argument(
@@ -262,9 +314,26 @@ def main(argv: list[str] | None = None) -> int:
     p_validate.add_argument("--device-config", type=Path, default=None, help="device/tenant config file")
     p_validate.set_defaults(func=_validate)
 
+    p_fetch = sub.add_parser("fetch-policy", help="fetch and validate a tenant policy bundle")
+    p_fetch.add_argument("--device-config", type=Path, required=True, help="device config with tenant_policy_url")
+    p_fetch.add_argument("--output", type=Path, required=True, help="destination policy bundle path")
+    p_fetch.add_argument("--timeout", type=float, default=10.0, help="HTTP timeout in seconds")
+    p_fetch.set_defaults(func=_fetch_policy)
+
+    p_verify_log = sub.add_parser("verify-log", help="verify a tamper-evident decision log hash chain")
+    p_verify_log.add_argument("--integrity-key", type=Path, required=True, help="HMAC key file used when writing the log")
+    p_verify_log.set_defaults(func=_verify_log)
+
+    p_siem = sub.add_parser("siem-export", help="export decision logs to SIEM/SOAR receivers")
+    p_siem.add_argument("--output", type=Path, default=None, help="write normalized JSONL to this path")
+    p_siem.add_argument("--webhook-url", default=None, help="POST each decision to this webhook")
+    p_siem.add_argument("--profile", choices=("generic", "elastic", "splunk"), default="generic")
+    p_siem.add_argument("--timeout", type=float, default=10.0, help="webhook timeout in seconds")
+    p_siem.set_defaults(func=_siem_export)
+
     p_run = sub.add_parser("run", help="run the real enforcement loop: sensor -> policy engine -> exporter")
     p_run.add_argument("--sensor", choices=_SENSOR_CHOICES, required=True,
-                       help="process-exec/file-write need root (real eBPF); dev needs neither (synthetic)")
+                       help="process-exec/file-write/tcp-connect need root (real eBPF); dev needs neither (synthetic)")
     p_run.add_argument("--dev-interval", type=float, default=1.0,
                        help="seconds between synthetic events, --sensor dev only (default: 1.0)")
     p_run.add_argument("--device-config", type=Path, default=None, help="device/tenant config file")
@@ -277,6 +346,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--oracle-url", default=None)
     p_run.add_argument("--agent-label", default="xibalba-shield")
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
+    p_run.add_argument("--log-integrity-key", type=Path, default=None,
+                       help="HMAC key file for tamper-evident decision log entries")
     p_run.add_argument("--max-events", type=int, default=None,
                        help="stop after this many events (default: run forever, until Ctrl+C)")
     p_run.set_defaults(func=_run)

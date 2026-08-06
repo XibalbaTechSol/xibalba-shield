@@ -71,22 +71,19 @@ even if no cryptographic evidence of it ever gets produced.** Don't assume "it's
 tamper-evident log" for any decision made while the exporter was down — see §5 below for what
 that actually means for auditability.
 
-## 4. The local decision log is a diagnostics convenience, not evidence
+## 4. The local decision log can be tamper-evident, but not self-protecting
 
-`shield/agent_core/eventlog.py`'s `EventLog` is a plain, append-only, **unsigned** JSONL file on
-local disk — exactly what backs `shield status`/`shield events --recent`. It has no tamper
-protection, no integrity hash chain, and no access control beyond the filesystem's own. Its
-entire design goal, stated in its own docstring, is that "a security product an admin cannot
-explain in one command is a security product they will disable during an incident" — it exists
-so a human can `tail`/`grep` it during an incident, not so it can stand up as forensic evidence
-on its own.
+`shield/agent_core/eventlog.py`'s `EventLog` is local JSONL on disk — exactly what backs
+`shield status`/`shield events --recent`. When `shield run --log-integrity-key PATH` is set,
+each row carries an HMAC-backed hash-chain entry and `shield verify-log --integrity-key PATH`
+detects edited rows, continuity breaks, and wrong-key verification. Without that key option,
+the log remains plain diagnostic JSONL for backward compatibility.
 
 **Cryptographic tamper-evidence exists only for decisions that successfully reach
-`bcc_middleware`** via the exporter (BCC-signed commitment, Merkle-anchored — see README row 5
-and `integrity-latest`'s own `docs/INTERFACE_CONTRACT.md`). A decision that only ever made it
-into the local `EventLog` — because `--no-exporter` was passed, or export failed (§3) — carries
-no cryptographic guarantee against tampering or deletion. An attacker with write access to the
-log file can edit or truncate it with no detection mechanism in this repo.
+`bcc_middleware`** via the exporter (BCC-signed commitment, Merkle-anchored — see README and
+`integrity-latest`'s own `docs/INTERFACE_CONTRACT.md`). A locally HMAC-chained decision is
+tamper-evident only as long as the key and log are protected by the host. It is useful for
+pilot operations, not a replacement for off-device evidence.
 
 ## 5. What a root-level attacker on the same device can do
 
@@ -94,7 +91,8 @@ Shield's eBPF sensors and its own process run as root (or with equivalent capabi
 BPF programs and observe kernel events — see `shield/sensors/ebpf/loader.py` and the
 `PermissionError` both real sensors raise when not run as root (README row 7, `test_cli.py`).
 **Anything that runs as root on the same machine can defeat Shield entirely**: kill the agent
-process, unload its BPF programs, corrupt or delete the local `EventLog` (§4), edit the local
+process, unload its BPF programs, steal the log HMAC key, corrupt or delete the local
+`EventLog` (§4), edit the local
 policy rules file the hot-reloader watches (`shield/config/hot_reload.py` — it protects against
 a *malformed* edit by keeping the last-known-good rule set, not against a *malicious* one that
 parses cleanly and simply removes the deny rules), or block outbound network traffic to prevent
@@ -104,18 +102,16 @@ codebase.** This is a real, unmitigated gap relative to what an EDR/XDR product 
 claims — consistent with `spec/xibalba-shield-v1.md` §13's own statement that Shield is "not a
 full replacement for existing EDR/XDR in a v1 scope."
 
-## 6. Behavioral telemetry only — content is never inspected
+## 6. Behavioral telemetry and metadata DLP only
 
 Matching spec §6's governing principle: the two verified eBPF sensors (process-exec, file-write)
 observe *that* a process executed or *that* a file was opened for writing — never the content of
 the file, the arguments beyond what the kernel exposes at the syscall boundary, or any
-higher-level semantic meaning. The `output` guardrail hook (`shield/guardrail_hooks/output.py`)
-gates on a caller-supplied `risk_level`/`categories` classification but **does not itself
-classify anything** — no content-inspection or DLP capability exists in this repo. §6's
-PHI-tagging/guardrail-content-classifier mechanism is `[PLANNED]` (README row 13); until it's
-built, Shield **cannot detect what a message or file *says*, only that an agent touched it.**
-Don't represent Shield as a DLP or content-classification control to anyone until that row moves
-off `[PLANNED]`.
+higher-level semantic meaning. `shield/content_classifier.py` classifies metadata only:
+caller-supplied category labels, file paths, data-source names, and model endpoint names. It
+does not read prompt text, output text, files, documents, PHI, secrets, or credentials. Don't
+represent Shield as deep DLP/content inspection; represent it as metadata DLP plus enforcement
+on labels and context.
 
 ## 7. What's actually enforced today vs. observed vs. not built at all
 
@@ -130,8 +126,8 @@ framing:
 | Detect a semantic/physical gap after an action (expected vs. actual state) | **Real, detection only** — `verify_post_action` can only flag, never block, since the action already happened by the time it runs (§4.4, row 6) |
 | Produce cryptographically verifiable evidence of a decision | **Real, but conditional** — only for decisions whose export succeeds (§3, §4) against a live, reachable `bcc_middleware` |
 | Resist a co-located root-level attacker | **Not built** — see §5 |
-| Classify or inspect content (PHI, DLP, prompt content) | **Not built** — see §6 |
-| Windows/macOS coverage | **Not built** — Linux-only (README row 11) |
+| Classify metadata for DLP labels | **Real** — no raw-content inspection; see §6 |
+| Windows/macOS coverage | **Native sensors not built** — Linux-only telemetry; platform boundaries documented |
 
 ---
 

@@ -100,6 +100,27 @@ def test_unregistered_agent_condition_matches_when_not_in_registry():
     assert decision.decision.action == "deny"
 
 
+def test_unregistered_agent_condition_does_not_match_non_agent_event():
+    rule = PolicyRule.from_dict({
+        "rule_id": "agent-restrict-unregistered",
+        "name": "x",
+        "version": "1.0.0",
+        "conditions": [{"type": "agent", "match": {"registered": [False]}}],
+        "actions": [{"type": "deny"}],
+    })
+    engine = PolicyEngine(rules=[rule])
+    event = ProcessActivity(
+        device_id="dev-1",
+        process=ProcessInfo(pid=1, name="bash"),
+        activity=Activity(type="launch"),
+    )
+
+    decision = engine.evaluate(event, _ctx(registered_agent_ids=frozenset()))
+
+    assert decision.decision.action == "allow"
+    assert decision.rule.rule_id == "_no_match"
+
+
 def test_registered_agent_does_not_match_unregistered_condition():
     rule = PolicyRule.from_dict({
         "rule_id": "agent-restrict-unregistered",

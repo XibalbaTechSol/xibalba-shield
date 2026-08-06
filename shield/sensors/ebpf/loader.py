@@ -330,6 +330,16 @@ def _self_test_tcp_connect(seconds: int) -> bool:
     return ok
 
 
+def self_test_tcp_connect(seconds: int = 5) -> int:
+    """Run only the TCP-connect live sensor proof on the current kernel.
+
+    This is the target-kernel gate for the previously blocked TCP sensor path. It requires
+    root/CAP_BPF and returns nonzero unless the eBPF program loads, attaches, and observes a
+    real localhost connect from this process.
+    """
+    return 0 if _self_test_tcp_connect(seconds) else 1
+
+
 def self_test(seconds: int = 5) -> int:
     """Load each real sensor, trigger a real event only it could produce, and confirm it's
     observed — the concrete proof this module's own docstring asks for before anyone should
