@@ -8,16 +8,22 @@ also historically called "Xibalba Shield" before being renamed to **Integrity He
 `spec/integrity-protocol-v0.4.md` §14.1 for the split decision. "Xibalba Shield" now names only
 this product.
 
-**Full technical specification (normative):**
-[`spec/xibalba-shield-v1.md`](https://github.com/XibalbaTechSol/integrity-latest/blob/main/spec/xibalba-shield-v1.md)
-in the parent repo. This README does not duplicate that spec — it tracks *implementation
-status against it*. Read the spec first if you're unsure what a module is supposed to do; read
-this file to find out whether it actually does it yet.
+**Full technical specification (normative for this repo):**
+[`SPECIFICATION.md`](SPECIFICATION.md). The INTEGRITY-LATEST document
+[`spec/xibalba-shield-v1.md`](https://github.com/XibalbaTechSol/integrity-latest/blob/main/spec/xibalba-shield-v1.md) records the protocol-facing relationship and integration boundary. Read the spec first if you are unsure what a module is supposed to do; read this README to find out whether it actually does it yet.
 
 Xibalba Shield discovers AI agents and tools running on a device, constrains what they can do,
 and produces cryptographic evidence of every consequential decision by feeding signed telemetry
 into Integrity Protocol. Shield is the sensor and enforcer; Integrity Protocol is the scorer
 and archive — neither subsumes the other (spec §1).
+
+In product-stack terms, **Xibalba Shield is built on top of INTEGRITY-LATEST**. Its endpoint
+agent is an upstream evidence producer: it uses INTEGRITY-LATEST's `integrity-sdk`, BCC
+middleware, Oracle, and on-chain trust primitives instead of implementing a parallel trust
+backend. `integrity-mvp` is the web presentation layer that surfaces Shield alongside the
+underlying protocol. The complete direction is
+`integrity-mvp -> xibalba-shield -> INTEGRITY-LATEST`, with `integrity-mvp` also consuming
+INTEGRITY-LATEST APIs directly.
 
 **Ground rule, inherited from `integrity-latest` and enforced the same way here: no silent
 mocks.** Every row in the table below is either real and tested, or explicitly marked
@@ -25,6 +31,12 @@ mocks.** Every row in the table below is either real and tested, or explicitly m
 so in its own docstring — don't let this README be the only place that admits it.
 
 ---
+
+## Source-of-truth contract
+
+This README is the repo-level source of truth for Shield implementation status, evidence, testing, and plan. [`SPECIFICATION.md`](SPECIFICATION.md) is the repo-level normative product and implementation specification. INTEGRITY-LATEST owns the protocol primitives Shield consumes; this repository owns Shield endpoint behavior, status, tests, and implementation plan.
+
+If code, tests, comments, and this README disagree, update them in the same change. Shield must never claim to compute AIS, anchor Merkle roots independently, or bypass the public INTEGRITY-LATEST SDK/BCC/Oracle interfaces.
 
 ## Status dashboard
 
@@ -226,6 +238,19 @@ its real dependency (root, a live `bcc_middleware`) isn't available, per the con
 `test_integrity_exporter.py` established first.
 
 ---
+
+## Documentation map
+
+| Document | Purpose |
+|---|---|
+| [README.md](README.md) | Current implementation status, evidence, test commands, and plan |
+| [SPECIFICATION.md](SPECIFICATION.md) | Normative Shield product and implementation specification |
+| [SECURITY.md](SECURITY.md) | Security handling and disclosure expectations |
+| [HANDOFF.md](HANDOFF.md) | Operational handoff notes for continuing development |
+| [CLAUDE.md](CLAUDE.md) | Local agent instructions for this repository |
+| [shield/sensors/ebpf/README.md](shield/sensors/ebpf/README.md) | eBPF sensor verification record and blocked TCP-connect analysis |
+| [INTEGRITY-LATEST spec/xibalba-shield-v1.md](https://github.com/XibalbaTechSol/integrity-latest/blob/main/spec/xibalba-shield-v1.md) | Protocol-facing Shield integration boundary |
+| [INTEGRITY-LATEST docs/wiki/architecture/ecosystem-dependencies.md](https://github.com/XibalbaTechSol/integrity-latest/blob/main/docs/wiki/architecture/ecosystem-dependencies.md) | Cross-repo dependency boundary |
 
 ## Implementation plan (spec §14's build order, expanded)
 
