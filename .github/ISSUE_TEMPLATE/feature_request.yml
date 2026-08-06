@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a bounded improvement with a clear user or maintainer outcome.
+title: "feat: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and users
+      description: What problem exists, and who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior and acceptance criteria.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and trade-offs
+      description: What alternatives were considered, including doing nothing?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Security, compatibility, and operational impact
+      description: Note identity, cryptography, deployment, database, data, and rollback implications.
+    validations:
+      required: true
