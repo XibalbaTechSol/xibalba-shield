@@ -45,6 +45,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [x] Root-free GitHub Actions CI exists.
 - [x] `integrity-sdk` git dependency is pinned to a reviewed commit.
 - [x] Signed policy bundle format is documented; local trusted-policy-hash enforcement exists.
+- [x] Local decision logs include export status and CLI events output surfaces export failures.
 
 ## Planned And Todo
 
@@ -106,7 +107,7 @@ Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026
 - [ ] TCP-connect is either verified or explicitly removed from pilot claims.
 - [x] shield run operates as a managed/supervised process.
 - [ ] Policy validation and hot reload work under pilot conditions.
-- [ ] Local logs are inspectable and export failures are visible.
+- [x] Local logs are inspectable and export failures are visible.
 - [ ] Exporter uses a registered DID and produces queryable Integrity-backed evidence.
 - [ ] README, SPECIFICATION, SECURITY, and implementation docstrings agree.
 

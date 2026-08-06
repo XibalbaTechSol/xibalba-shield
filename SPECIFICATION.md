@@ -165,7 +165,7 @@ The router receives events, attaches context, evaluates policy, invokes applicab
 
 ### 6.4 EventLog
 
-The local event log is append-only JSONL used by shield status and shield events. It records policy version/hash when a policy bundle is loaded. It is useful operational evidence but is not tamper-evident until exported and anchored through Integrity Protocol.
+The local event log is append-only JSONL used by shield status and shield events. It records policy version/hash when a policy bundle is loaded and export status after export attempts. It is useful operational evidence but is not tamper-evident until exported and anchored through Integrity Protocol.
 
 ## 7. Policy Engine Specification
 
@@ -234,7 +234,7 @@ The exporter must load or create DID/key identity through integrity-sdk, convert
 
 ### 9.3 Export Failure Semantics
 
-Export failures must be logged. Local enforcement must not roll back. Retries must be bounded by queue/backpressure controls and must not consume unbounded memory. A local JSONL record without Integrity export is not cryptographic evidence.
+Export failures must be logged and visible in local decision records. Local enforcement must not roll back. Retries must be bounded by queue/backpressure controls and must not consume unbounded memory. A local JSONL record without Integrity export is not cryptographic evidence.
 
 ## 10. Configuration And Update Specification
 
