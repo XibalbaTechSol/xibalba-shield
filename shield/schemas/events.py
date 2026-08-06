@@ -203,6 +203,15 @@ class Decision:
 
 
 @dataclass
+class ExportStatus:
+    attempted: bool = False
+    event_exported: bool = False
+    decision_exported: bool = False
+    authorized: bool | None = None
+    reason: str = ""
+
+
+@dataclass
 class PolicyDecision:
     """§5.5 — what the Policy Engine (shield/policy_engine) produces for EVERY evaluation,
     not just denials. This is what shield/integrity_exporter turns into a signed BCC
@@ -213,6 +222,7 @@ class PolicyDecision:
     rule: RuleRef
     decision: Decision
     policy: PolicyRef = field(default_factory=PolicyRef)
+    export: ExportStatus = field(default_factory=ExportStatus)
     time: str = field(default_factory=_now_iso)
     klass: str = field(default="policy_decision", init=False)
 
@@ -231,6 +241,8 @@ class PolicyDecision:
         }
         if self.policy.version or self.policy.hash:
             out["policy"] = vars(self.policy)
+        if self.export.attempted or self.export.reason:
+            out["export"] = vars(self.export)
         return out
 
 

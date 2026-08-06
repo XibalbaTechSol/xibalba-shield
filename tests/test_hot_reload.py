@@ -132,3 +132,16 @@ def test_recovers_after_a_malformed_edit_is_fixed(tmp_path):
 
     assert reloaded is True
     assert [r.rule_id for r in engine.rules] == ["a", "b"]
+
+
+def test_rejects_untrusted_policy_hash_on_reload(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"])
+
+    engine = PolicyEngine(rules=[])
+    reloader = PolicyHotReloader(engine, path, trusted_policy_hashes=["sha256:not-this-file"])
+
+    reloaded = reloader.check_and_reload()
+
+    assert reloaded is False
+    assert engine.rules == []

@@ -36,9 +36,16 @@ class PolicyHotReloader:
     expensive between changes (one `stat()`) and only touches `policy_engine.rules` when a
     real, successfully-parsed change is available."""
 
-    def __init__(self, policy_engine: PolicyEngine, rules_path: Path | str):
+    def __init__(
+        self,
+        policy_engine: PolicyEngine,
+        rules_path: Path | str,
+        *,
+        trusted_policy_hashes: list[str] | None = None,
+    ):
         self._policy_engine = policy_engine
         self._rules_path = Path(rules_path)
+        self._trusted_policy_hashes = set(trusted_policy_hashes or [])
         self._last_mtime: float | None = None
 
     def check_and_reload(self) -> bool:
@@ -61,6 +68,13 @@ class PolicyHotReloader:
             logger.error(
                 "policy hot-reload: %s failed to parse (%s) -- keeping current rules, NOT "
                 "zeroing them out", self._rules_path, exc,
+            )
+            return False
+        if self._trusted_policy_hashes and bundle.hash not in self._trusted_policy_hashes:
+            logger.error(
+                "policy hot-reload: %s hash %s is not trusted -- keeping current rules",
+                self._rules_path,
+                bundle.hash,
             )
             return False
 

@@ -10,6 +10,7 @@ from shield.schemas.events import (
     Activity,
     Decision,
     EventRef,
+    ExportStatus,
     PolicyDecision,
     ProcessActivity,
     ProcessInfo,
@@ -34,3 +35,22 @@ def test_policy_decision_event_ref_serializes_class_field_not_klass():
     d = decision.to_dict()
     assert d["event_ref"] == {"class": "network_flow", "event_id": "evt-123"}
     assert "klass" not in d["event_ref"]
+
+
+def test_policy_decision_serializes_export_status_when_attempted():
+    decision = PolicyDecision(
+        device_id="dev-1",
+        event_ref=EventRef(klass="network_flow", event_id="evt-123"),
+        rule=RuleRef(rule_id="r1", name="x", version="1.0.0"),
+        decision=Decision(action="deny"),
+        export=ExportStatus(attempted=True, event_exported=True, decision_exported=False, authorized=False,
+                            reason="submission failed"),
+    )
+
+    d = decision.to_dict()
+
+    assert d["export"]["attempted"] is True
+    assert d["export"]["event_exported"] is True
+    assert d["export"]["decision_exported"] is False
+    assert d["export"]["authorized"] is False
+    assert d["export"]["reason"] == "submission failed"

@@ -1,10 +1,9 @@
 """
 Guardrail hooks — spec/xibalba-shield-v1.md §4.4.
 
-Spec §14's build order calls for ONE hook point first (tool execution) before generalizing to
-all five (ingress, retrieval/context, model routing, output, tool execution, post-action
-verification). This is that one hook, real and callable — the other four are not implemented
-here and this module does not claim they are.
+This module implements hook point 5 (`tool_execution`). The repository now implements all six
+hook points listed in spec §4.4: ingress, retrieval/context, model routing, output, tool
+execution, and post-action verification.
 
 Distinct from the OS-level sensor (§4.1) because this is a semantic layer: it wraps a specific
 tool call with a policy check *before* the call runs, the same "gate before execution" shape

@@ -9,7 +9,7 @@ TCP-connect/DNS hooks, pushing compact records to user space via a ring buffer.
 | Sensor | File | Status |
 |---|---|---|
 | Process-exec | `process_exec.bpf.c` | ✅ **VERIFIED.** Observed a real spawned subprocess's real `execve`. |
-| File writes | `file_write.bpf.c` | ✅ **VERIFIED.** Observed the test process's own real write-mode `openat`. |
+| File writes | `file_write.bpf.c` | ✅ **VERIFIED.** Observed the test process's own real write-mode `openat`; optional userspace sensitive-path glob filtering is wired from device config. |
 | TCP-connect | `tcp_connect.bpf.c` | 🔴 **BLOCKED.** `#include <net/sock.h>` drags in kernel headers this BCC version can't parse — confirmed a BCC/kernel version-skew problem, not a bug in this file, by reproducing the identical class of failure with BCC's own shipped `tcpconnect-bpfcc` binary. See that file's own comment for the full record. |
 | DNS | not built | Needs a uprobe on `getaddrinfo` or UDP:53 parsing — a different mechanism than a syscall kprobe, deliberately not built alongside the other three. |
 

@@ -114,6 +114,7 @@ class DeviceConfig:
     oracle_url: str = "http://localhost:8080"
     feature_flags: dict[str, bool] = field(default_factory=dict)
     sensitive_paths: list[str] = field(default_factory=list)
+    trusted_policy_hashes: list[str] = field(default_factory=list)
 
     def flag(self, name: str, default: bool = False) -> bool:
         return self.feature_flags.get(name, default)
@@ -136,6 +137,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "oracle_url",
         "feature_flags",
         "sensitive_paths",
+        "trusted_policy_hashes",
     }
     unknown = set(doc.keys()) - known_fields
     if unknown:
@@ -147,4 +149,8 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         raise ConfigError(f"device config file {p}: \"sensitive_paths\" must be an array")
     if any(not isinstance(pattern, str) for pattern in kwargs.get("sensitive_paths", [])):
         raise ConfigError(f"device config file {p}: every \"sensitive_paths\" entry must be a string")
+    if "trusted_policy_hashes" in kwargs and not isinstance(kwargs["trusted_policy_hashes"], list):
+        raise ConfigError(f"device config file {p}: \"trusted_policy_hashes\" must be an array")
+    if any(not isinstance(policy_hash, str) for policy_hash in kwargs.get("trusted_policy_hashes", [])):
+        raise ConfigError(f"device config file {p}: every \"trusted_policy_hashes\" entry must be a string")
     return DeviceConfig(**kwargs)

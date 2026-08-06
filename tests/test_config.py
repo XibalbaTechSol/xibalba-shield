@@ -133,6 +133,7 @@ def test_loads_full_device_config_with_feature_flags(tmp_path):
         "oracle_url": "https://oracle.example.com",
         "feature_flags": {"strict_mode": True},
         "sensitive_paths": ["/home/*/.ssh/*", "/var/secrets/*"],
+        "trusted_policy_hashes": ["sha256:abc"],
     }))
 
     config = load_device_config(path)
@@ -141,6 +142,7 @@ def test_loads_full_device_config_with_feature_flags(tmp_path):
     assert config.flag("strict_mode") is True
     assert config.flag("unknown_flag") is False  # unknown flags default safely, don't raise
     assert config.sensitive_paths == ["/home/*/.ssh/*", "/var/secrets/*"]
+    assert config.trusted_policy_hashes == ["sha256:abc"]
 
 
 def test_device_config_sensitive_paths_must_be_a_list(tmp_path):
@@ -148,6 +150,14 @@ def test_device_config_sensitive_paths_must_be_a_list(tmp_path):
     path.write_text(json.dumps({"device_id": "dev-1", "sensitive_paths": "/tmp/*"}))
 
     with pytest.raises(ConfigError, match="sensitive_paths"):
+        load_device_config(path)
+
+
+def test_device_config_trusted_policy_hashes_must_be_a_list(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({"device_id": "dev-1", "trusted_policy_hashes": "sha256:abc"}))
+
+    with pytest.raises(ConfigError, match="trusted_policy_hashes"):
         load_device_config(path)
 
 

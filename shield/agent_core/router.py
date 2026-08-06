@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Iterable, Protocol
 
-from ..schemas.events import AgentEvent, NormalizedEvent, PolicyDecision
+from ..schemas.events import AgentEvent, ExportStatus, NormalizedEvent, PolicyDecision
 from ..policy_engine.engine import EvaluationContext, PolicyEngine
 from .eventlog import EventLog
 from .registry import AgentRegistry, DeviceContext
@@ -62,8 +62,6 @@ class EventRouter:
             self.registry.touch(event.agent.agent_id)
 
         decision = self.policy_engine.evaluate(event, self._context())
-        if self.event_log is not None:
-            self.event_log.append(decision)
 
         if isinstance(event, AgentEvent):
             for hook in self.guardrail_hooks:
@@ -77,11 +75,23 @@ class EventRouter:
 
         try:
             self.exporter.export_event(event)
-            self.exporter.export_decision(decision)
+            result = self.exporter.export_decision(decision)
+            authorized = result.get("authorized") if isinstance(result, dict) else None
+            decision.export = ExportStatus(
+                attempted=True,
+                event_exported=True,
+                decision_exported=authorized is True,
+                authorized=authorized if isinstance(authorized, bool) else None,
+                reason=str(result.get("reason", "")) if isinstance(result, dict) else "",
+            )
         except Exception:  # noqa: BLE001
             # Evidence export failing must never roll back an already-made enforcement
             # decision — the decision already happened; export is downstream and best-effort,
             # same posture as bcc_middleware's own Merkle-anchor step in the parent repo.
             logger.exception("integrity export failed for decision on %s", decision.event_ref.event_id)
+            decision.export = ExportStatus(attempted=True, reason="integrity export raised")
+
+        if self.event_log is not None:
+            self.event_log.append(decision)
 
         return decision

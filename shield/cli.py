@@ -90,9 +90,14 @@ def _events(args: argparse.Namespace) -> int:
     for row in rows:
         decision = row.get("decision", {})
         rule = row.get("rule", {})
+        export = row.get("export", {})
+        export_status = "not_attempted"
+        if export.get("attempted"):
+            export_status = "ok" if export.get("decision_exported") else "failed"
         print(
             f"{row.get('time', '?')}  {row.get('event_ref', {}).get('class', '?'):16} "
-            f"action={decision.get('action', '?'):9} rule={rule.get('rule_id', '?')}"
+            f"action={decision.get('action', '?'):9} rule={rule.get('rule_id', '?')} "
+            f"export={export_status}"
         )
     return 0
 
@@ -165,6 +170,12 @@ def _run(args: argparse.Namespace) -> int:
         except ConfigError as exc:
             print(f"shield run: {exc}", file=sys.stderr)
             return 1
+        if device_config.trusted_policy_hashes and policy_hash not in device_config.trusted_policy_hashes:
+            print(
+                f"shield run: policy bundle {args.rules} hash {policy_hash} is not trusted by device config",
+                file=sys.stderr,
+            )
+            return 1
     policy_engine = PolicyEngine(rules=rules, policy_version=policy_version, policy_hash=policy_hash)
     if args.rules is not None:
         # PolicyHotReloader has no public "seed with an already-loaded rule set" API, so
@@ -172,7 +183,11 @@ def _run(args: argparse.Namespace) -> int:
         # unchanged from what was just loaded above -- one harmless extra file read+parse
         # at startup, not a correctness issue, and simpler than reaching into its private
         # _last_mtime to skip it.
-        reloader = PolicyHotReloader(policy_engine, args.rules)
+        reloader = PolicyHotReloader(
+            policy_engine,
+            args.rules,
+            trusted_policy_hashes=device_config.trusted_policy_hashes,
+        )
 
     if args.no_exporter:
         exporter = _NullExporter()

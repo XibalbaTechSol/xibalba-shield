@@ -6,11 +6,12 @@ and owns no policy logic and makes no enforcement decisions (that's the Policy E
 kept separate so a sensor bug can never itself become a false-enforcement bug — §4.1's own
 stated reason for this split).
 
-Two implementations exist as of this writing:
+Implementations exist as of this writing:
   - `dev_generator.DevModeSensor` — REAL, synthetic events for testing the rest of the
     pipeline end-to-end. Explicitly not a claim of real telemetry.
-  - `ebpf/` — `[PLANNED]`. No kernel probe is loaded or tested by anything in this repo; see
-    that directory's own README for exactly what exists there and why.
+  - `ebpf/` — real Linux probe implementations. Process-exec and file-write have historical
+    live verification; TCP-connect remains blocked by BCC/kernel compatibility. See that
+    directory's README for the exact status.
 """
 
 from __future__ import annotations

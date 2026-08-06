@@ -1,8 +1,8 @@
 /*
  * Real eBPF program for shield/sensors/ebpf/loader.py's LinuxFileWriteSensor. Written
  * against spec/xibalba-shield-v1.md §4.1's "file open/write hooks on sensitive paths" --
- * only the write half is built here (see the module-level scope note in loader.py for why
- * "sensitive paths" filtering itself isn't yet part of this file).
+ * only the write half is built here. Sensitive-path matching is userspace configuration
+ * (`DeviceConfig.sensitive_paths`) rather than kernel policy logic.
  *
  * Same proven approach as BCC's own `opensnoop` tool (/usr/sbin/opensnoop-bpfcc, shipped by
  * the already-installed `bpfcc-tools` package): a `syscall__`-prefixed kprobe on `openat`'s

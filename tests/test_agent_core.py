@@ -36,6 +36,7 @@ def _router(**kwargs):
         policy_engine=kwargs.get("policy_engine", PolicyEngine(rules=[])),
         exporter=kwargs.get("exporter", _RecordingExporter()),
         guardrail_hooks=kwargs.get("guardrail_hooks", ()),
+        event_log=kwargs.get("event_log"),
     )
 
 
@@ -77,6 +78,22 @@ def test_router_exports_both_event_and_decision():
     assert len(exporter.decisions) == 1
 
 
+def test_router_records_successful_export_status_in_decision_log(tmp_path):
+    from shield.agent_core.eventlog import EventLog
+
+    log_path = tmp_path / "decisions.jsonl"
+    router = _router(event_log=EventLog(log_path))
+    event = ProcessActivity(device_id="dev-1", process=ProcessInfo(pid=1, name="bash"), activity=Activity(type="launch"))
+
+    decision = router.handle(event)
+    row = EventLog(log_path).recent(1)[0]
+
+    assert decision.export.attempted is True
+    assert decision.export.event_exported is True
+    assert decision.export.decision_exported is True
+    assert row["export"]["decision_exported"] is True
+
+
 def test_router_survives_a_raising_exporter():
     class _ExplodingExporter:
         def export_event(self, event):
@@ -89,6 +106,30 @@ def test_router_survives_a_raising_exporter():
     event = ProcessActivity(device_id="dev-1", process=ProcessInfo(pid=1, name="bash"), activity=Activity(type="launch"))
     decision = router.handle(event)  # must not raise
     assert decision.decision.action == "allow"
+    assert decision.export.attempted is True
+    assert decision.export.reason == "integrity export raised"
+
+
+def test_router_records_failed_export_status_in_decision_log(tmp_path):
+    from shield.agent_core.eventlog import EventLog
+
+    class _DenyingExporter:
+        def export_event(self, event):
+            pass
+
+        def export_decision(self, decision):
+            return {"authorized": False, "reason": "submission failed: test"}
+
+    log_path = tmp_path / "decisions.jsonl"
+    router = _router(exporter=_DenyingExporter(), event_log=EventLog(log_path))
+    event = ProcessActivity(device_id="dev-1", process=ProcessInfo(pid=1, name="bash"), activity=Activity(type="launch"))
+
+    decision = router.handle(event)
+    row = EventLog(log_path).recent(1)[0]
+
+    assert decision.export.decision_exported is False
+    assert decision.export.authorized is False
+    assert row["export"]["reason"] == "submission failed: test"
 
 
 def test_guardrail_hook_fires_only_for_agent_events():

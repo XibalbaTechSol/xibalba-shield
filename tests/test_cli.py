@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from shield.agent_core.eventlog import EventLog
+from shield.config import load_policy_bundle
 from shield.cli import main
 
 
@@ -90,6 +91,22 @@ def test_run_dev_sensor_processes_real_events_end_to_end(tmp_path, capsys):
     assert all(row["decision"]["action"] == "allow" for row in rows)  # no rules loaded -> default allow
 
 
+def test_events_prints_export_status(tmp_path, capsys):
+    log_path = tmp_path / "decisions.jsonl"
+    code = main([
+        "--log-path", str(log_path),
+        "run", "--sensor", "dev", "--device-id", "test-dev",
+        "--no-exporter", "--max-events", "1", "--dev-interval", "0",
+    ])
+    assert code == 0
+    capsys.readouterr()
+
+    code = main(["--log-path", str(log_path), "events", "--recent", "1"])
+
+    assert code == 0
+    assert "export=ok" in capsys.readouterr().out
+
+
 def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys):
     log_path = tmp_path / "decisions.jsonl"
     rules_path = tmp_path / "rules.json"
@@ -141,6 +158,46 @@ def test_run_invalid_rules_file_exits_one_and_names_the_problem(tmp_path, capsys
 
     assert code == 1
     assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_run_rejects_policy_hash_not_trusted_by_device_config(tmp_path, capsys):
+    rules_path = _write(tmp_path / "rules.json", {
+        "rules": [{"rule_id": "a", "conditions": [{"type": "process", "match": {"name": ["bash"]}}],
+                   "actions": [{"type": "allow"}]}],
+    })
+    config_path = _write(tmp_path / "device.json", {
+        "device_id": "test-dev",
+        "trusted_policy_hashes": ["sha256:not-this-file"],
+    })
+
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-config", str(config_path),
+        "--no-exporter", "--rules", str(rules_path), "--max-events", "1", "--dev-interval", "0",
+    ])
+
+    assert code == 1
+    assert "not trusted" in capsys.readouterr().err
+
+
+def test_run_accepts_policy_hash_trusted_by_device_config(tmp_path, capsys):
+    rules_path = _write(tmp_path / "rules.json", {
+        "rules": [{"rule_id": "a", "conditions": [{"type": "process", "match": {"name": ["bash"]}}],
+                   "actions": [{"type": "allow"}]}],
+    })
+    policy_hash = load_policy_bundle(rules_path).hash
+    config_path = _write(tmp_path / "device.json", {
+        "device_id": "test-dev",
+        "trusted_policy_hashes": [policy_hash],
+    })
+
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-config", str(config_path),
+        "--no-exporter", "--rules", str(rules_path), "--max-events", "1", "--dev-interval", "0",
+    ])
+
+    assert code == 0
 
 
 def test_run_process_exec_sensor_without_root_fails_cleanly(tmp_path, capsys):
