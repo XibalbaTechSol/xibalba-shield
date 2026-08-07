@@ -96,6 +96,23 @@ Shield v1 runs as one lightweight endpoint process composed of internal modules 
 - Malformed policy bundles must be rejected as a whole, with the last-known-good policy retained.
 - No module may claim to be verified unless a test or live run exercises the real dependency.
 
+### 3.4 Hybrid Cascading Architecture (A2A)
+
+Shield employs a three-tiered cascading architecture to balance machine-speed enforcement, privacy, and advanced reasoning:
+- **Tier 1 (Deterministic Core):** Hardcoded JSON policies executed locally in microseconds for baseline known-bad behaviors.
+- **Tier 2 (Local Xibalba SLM):** A local Small Language Model (e.g., fine-tuned sub-2B parameter model) running on-device. It analyzes semantic intent and detects zero-day anomalies without sending telemetry to the cloud.
+- **Tier 3 (Cloud Frontier Inference):** When the local SLM encounters ambiguous, high-novelty events (low confidence), it uses structured Agent-to-Agent (A2A) communication to escalate the context to a cloud frontier model.
+
+The Action Broker pauses the suspicious local process while the Cloud Agent analyzes the A2A request and returns a structured decision (allow/contain/escalate). This ensures privacy by default and reserves cloud costs/latency for the top 5% of complex evaluations.
+
+### 3.4.1 SLM Optimization and Constraints
+
+Because the Tier 2 Local Xibalba SLM is strictly constrained to structural event routing and does not require general conversational capabilities, it must be aggressively optimized for enterprise hardware (sub-500M parameters, <1GB RAM):
+- **Grammar-Constrained Inference:** The inference engine (e.g., `llama.cpp`) must enforce strict JSON schema grammar constraints during generation. This eliminates the need for the model to learn JSON syntax, dedicating all parameters to security reasoning.
+- **Few-Shot Prompting (MVP approach):** Instead of immediate fine-tuning, the SLM uses a tightly constrained system prompt with curated examples of telemetry-to-JSON routing. This allows off-the-shelf sub-1B instruct models (like Qwen2.5 0.5B or SmolLM) to function out of the box.
+- **Task-Specific Fine-Tuning (Future Optimization):** For production deployment, the model can be hyper-specialized (overfit) on the Shield Event schema and Action Broker JSON outputs to outperform larger generalized models in this narrow routing task.
+- **Vocabulary Pruning:** Unused tokens (e.g., conversational text, formatting) should be mathematically pruned from the model weights to physically reduce the binary size and memory footprint.
+
 ## 4. Event Model
 
 ### 4.1 Common Requirements

@@ -116,6 +116,17 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 - [x] Add root-free burn-in harness for throughput/RSS/decision mix snapshots.
 - [x] Add aggregate pilot gate report for external verification artifacts.
 
+### Hybrid Cascading Architecture (A2A)
+
+- [x] Integrate local Xibalba SLM inference engine (e.g. `llama.cpp`) for Tier 2 evaluation (MVP deployed via Qwen 0.5B).
+- [x] Implement Action Broker to terminate suspicious processes using process group signals (`os.killpg`).
+- [ ] Transition Action Broker from SIGKILL to cgroups/SIGSTOP for freezing processes during evaluation.
+- [x] Implement Chain of Thought (CoT) structured JSON grammar to improve zero-shot Tier 2 accuracy.
+- [x] Generate Supervised Fine-Tuning (SFT) dataset for Tier 2 model optimization.
+- [ ] Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud escalations.
+- [ ] Implement Tier 3 Cloud Frontier fallback for ambiguous/low-confidence SLM decisions.
+- [ ] Add cloud-fallback latency and decision metrics to burn-in reporting.
+
 ### Platform Expansion
 
 - [ ] Windows ETW sensor.

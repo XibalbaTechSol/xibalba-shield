@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 *.jsonl
 .xibalba-shield/
+models/
+slm_training/

@@ -61,6 +61,32 @@ This gives Shield two complementary control planes:
 
 The policy engine remains local and deterministic. Enforcement does not require a cloud round trip. Export is downstream evidence propagation, not the authority that decides whether an action is allowed.
 
+## The Xibalba Agent: Hybrid Cascading Architecture (A2A)
+
+While Shield’s core policy engine is deterministic and operates at machine speed to enforce rules, the **Xibalba Agent** acts as an advanced proprietary inference layer that operates alongside it. 
+
+Rather than acting as a slow, probabilistic inline gate for every syscall, Shield employs a three-tiered **Hybrid Cascading Architecture**:
+
+```text
+Tier 1: Event stream ──→ Shield Policy Engine (Deterministic) ──→ immediate allow/deny
+                             │
+Tier 2:                      └──────→ Local Xibalba Agent (SLM) ──→ semantic analysis, anomaly detection
+                                          │
+Tier 3 (A2A Escalation):                  └──────→ Cloud Frontier Agent (LLM) ──→ deep reasoning for ambiguous threats
+```
+
+1. **Tier 1 (Deterministic Core):** Hardcoded JSON policies executed locally in microseconds for baseline known-bad behaviors.
+2. **Tier 2 (Local Xibalba SLM):** A local Small Language Model (e.g., a fine-tuned sub-2B parameter model) running on-device. It analyzes semantic intent and detects zero-day anomalies without sending telemetry to the cloud.
+3. **Tier 3 (Cloud Frontier Inference):** When the local SLM encounters ambiguous, high-novelty events (low confidence), it uses structured Agent-to-Agent (A2A) communication to escalate the context to a massive cloud frontier model.
+
+For high-risk cases where contextual defense is necessary, the Action Broker pauses the suspicious local process while the SLM (or Cloud Agent via A2A) returns a structured decision. The broker validates the scope, policy, signature, and expiry of the action before Shield executes bounded actions such as:
+- Terminating or pausing a process
+- Revoking a specific tool capability
+- Isolating a network destination or quarantining a workspace
+- Escalating severity and requiring operator approval
+
+This layered control system ensures privacy by default and reserves cloud latency/cost for the top 5% of complex evaluations, providing a proprietary, intelligent defense without making endpoint security depend exclusively on the cloud.
+
 ## Current Status
 
 Legend: real and tested means there is code and a test or live verification path. Partial means real code exists but a named dependency or environment requirement remains.
