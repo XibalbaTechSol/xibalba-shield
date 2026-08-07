@@ -453,6 +453,22 @@ shield --log-path /var/log/xibalba-shield/decisions.jsonl siem-export \
 
 No eBPF sensor should be marked verified unless it is loaded as root and observes a real event on the target kernel.
 
+## Development sensor vs real Linux sensors
+
+Keep these two sources distinct when reading evidence or filing bugs:
+
+| Sensor | Status | Command | Prerequisites | Telemetry source |
+|---|---|---|---|---|
+| `dev` | Synthetic | `.venv/bin/shield run --sensor dev --device-id dev-1 --no-exporter --max-events 10` | none | Generated events, never kernel-observed |
+| `process-exec` | Verified | `sudo .venv/bin/shield run --sensor process-exec --device-id dev-1 --no-exporter` | root / BPF load permission | Real kernel `execve` events |
+| `file-write` | Verified | `sudo .venv/bin/shield run --sensor file-write --device-id dev-1 --no-exporter` | root / BPF load permission | Real kernel `openat` write events |
+| `tcp-connect` | Blocked | not runnable yet | newer BCC or verified `struct sock_common` layout | real kernel events, unverified |
+
+The `dev` sensor exists to exercise the routing, policy, export, and event-log loop without
+privileges. It must not be presented as kernel-observed telemetry in evidence or status
+reports. The real eBPF sensors are the only source that may be labeled as real Linux sensor
+telemetry, and only `process-exec` / `file-write` are currently verified.
+
 ## Managed Linux Service
 
 Systemd artifacts:
