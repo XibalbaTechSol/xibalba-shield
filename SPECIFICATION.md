@@ -45,7 +45,23 @@ Shield v1 is not:
 - A payment rail, custodial key service, or settlement system.
 - A HIPAA healthcare product; Integrity Health is the healthcare vertical.
 
-## 2. System Relationship
+## 2. Ecosystem Role: 🛡️ The Immune System
+
+This repository is the immune system in a four-project ecosystem designed as a living organism:
+
+- **🧠 The Brain** (`xibalba-graph-memory`): The agent's cognitive store — memories, context, reasoning provenance, session Merkle roots.
+- **🛡️ The Immune System** (`xibalba-shield`, this repo): Endpoint enforcement, kernel sensing, policy gating, semantic guardrails. Detects threats and produces verifiable evidence.
+- **🦴 The Unifying Backend** (`INTEGRITY-LATEST`): The protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts, ZK circuits.
+- **👁️ The Human Control Center** (`integrity-mvp`): Operator dashboard — visualizes health, surfaces evidence, enables human intervention.
+
+```mermaid
+flowchart LR
+    Agent["🤖 Agent"] -->|"System calls"| Immune["🛡️ This Repo"]
+    Immune -->|"Signed BCC + telemetry"| Backbone["🦴 INTEGRITY-LATEST"]
+    Brain["🧠 xibalba-graph-memory"] -->|"Session roots"| Backbone
+    Backbone -->|"AIS, evidence"| Eyes["👁️ integrity-mvp"]
+    Eyes -->|"Policy updates"| Agent
+```
 
 ### 2.1 Dependency Direction
 

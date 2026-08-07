@@ -6,6 +6,33 @@ It is built around a simple premise: if the most powerful software now running o
 
 Shield is not a chatbot wrapper and not a dashboard-only compliance tool. It is the local sensor and enforcement layer. Integrity Protocol is the identity, BCC, telemetry, scoring, and evidence substrate that receives Shield's signed decisions.
 
+## Ecosystem Role: 🛡️ The Immune System
+
+This repository is the **immune system** in a four-project ecosystem designed as a living organism:
+
+| Repository | Analogy | Role |
+|---|---|---|
+| `xibalba-graph-memory` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
+| **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
+| `INTEGRITY-LATEST` | 🦴 The Unifying Backend | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts |
+| `integrity-mvp` | 👁️ The Human Control Center | Operator dashboard — visualizes health, surfaces evidence, enables human intervention |
+
+**How the Immune System connects:**
+- **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
+- **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to INTEGRITY-LATEST's BCC middleware and Oracle.
+- **Outbound (to Control Center):** `integrity-mvp` surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
+
+```mermaid
+flowchart LR
+    Agent["🤖 Agent"] -->|"System calls &<br/>tool execution"| Immune["🛡️ xibalba-shield<br/>(This repo)"]
+    Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 INTEGRITY-LATEST<br/>(BCC → Oracle → Chain)"]
+    Brain["🧠 xibalba-graph-memory"] -->|"Session Merkle roots"| Backbone
+    Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-mvp<br/>(Shield page)"]
+    Eyes -->|"Operator interventions<br/>& policy updates"| Agent
+```
+
+See [`INTEGRITY-LATEST/docs/architecture/ecosystem-dependencies.md`](https://github.com/XibalbaTechSol/integrity-latest/blob/main/docs/architecture/ecosystem-dependencies.md) for the canonical ownership boundaries.
+
 ## What Shield Protects
 
 Shield is designed for the devices that are most likely to get overrun by powerful agent tooling before they get enterprise-grade security:
@@ -60,6 +87,12 @@ This gives Shield two complementary control planes:
 - **Agent-level guardrails:** library hooks let instrumented agent runtimes gate semantic boundaries before risky actions happen.
 
 The policy engine remains local and deterministic. Enforcement does not require a cloud round trip. Export is downstream evidence propagation, not the authority that decides whether an action is allowed.
+
+The bounded Action Broker is implemented in `shield/agent_core/action_broker.py`. It uses
+resumable `SIGSTOP`/`SIGCONT` for ordinary process containment, supports explicit cgroup v2
+freezing for containerized agents, and only sends `SIGKILL` from an explicit timeout escalation.
+The broker does not make policy decisions; callers must supply the already-authorized action.
+The verification record is [`docs/audits/2026-08-07-action-broker.md`](docs/audits/2026-08-07-action-broker.md).
 
 ## The Xibalba Agent: Hybrid Cascading Architecture (A2A)
 
