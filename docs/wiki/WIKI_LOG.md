@@ -12,9 +12,9 @@
 - Wrote 2 entity pages: device context/agent registry (merged onto one canonical page per the
   no-duplication rule — `AgentRegistry`'s distinct surface was too thin to justify a separate
   page), and the local event log.
-- Wrote 2 architecture pages: the ecosystem role (Shield as the Immune System in the four-project
-  ecosystem) and the end-to-end enforcement pipeline diagram tying the four core concept pages
-  together.
+- Wrote 2 architecture pages: the ecosystem role (Shield as the Immune System in the
+  three-repository ecosystem) and the end-to-end enforcement pipeline diagram tying the four core
+  concept pages together.
 - Wrote 1 query page: the compliance evidence trail, sharing its title with `xibalba-cortex`'s
   own page of the same name so the two repositories' compliance stories read as one narrative.
 - Wrote `WIKI_SCHEMA.md`, `WIKI_INDEX.md`, and `index.md`, adapted from `integrity-core`'s wiki

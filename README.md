@@ -22,26 +22,28 @@ Full technical detail lives in the [wiki](../../wiki) (`docs/wiki/` in this repo
 
 ## Ecosystem Role: 🛡️ The Immune System
 
-This repository is the **immune system** in a four-project ecosystem designed as a living organism:
+This repository is the **immune system** in a three-repository ecosystem designed as a living
+organism. (`integrity-dashboard` — the operator presentation layer, previously developed as a
+separate `integrity-mvp` repository — now lives inside `integrity-core` as a component, not a
+fourth sibling repository; the table below reflects that.)
 
 | Repository | Analogy | Role |
 |---|---|---|
 | `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
-| `integrity-core` | 🦴 The Unifying Backend | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts |
-| `integrity-mvp` | 👁️ The Human Control Center | Operator dashboard — visualizes health, surfaces evidence, enables human intervention |
+| `integrity-core` | 🦴 The Unifying Backend (+ 👁️ Control Center) | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts — plus `integrity-dashboard/`, the operator presentation layer that visualizes health and surfaces evidence |
 
 **How the Immune System connects:**
 - **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
 - **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to integrity-core's BCC middleware and Oracle, running alongside an independent OpenTelemetry span for every decision.
-- **Outbound (to Control Center):** `integrity-mvp` surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
+- **Outbound (to Control Center):** `integrity-core`'s `integrity-dashboard/` component surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
 
 ```mermaid
 flowchart LR
     Agent["🤖 Agent"] -->|"System calls &<br/>tool execution"| Immune["🛡️ xibalba-shield<br/>(This repo)"]
     Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 integrity-core<br/>(BCC → Oracle → Chain)"]
     Brain["🧠 xibalba-cortex"] -->|"Session Merkle roots"| Backbone
-    Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-mvp<br/>(Shield page)"]
+    Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-core/integrity-dashboard<br/>(Shield page)"]
     Eyes -->|"Operator interventions<br/>& policy updates"| Agent
 ```
 

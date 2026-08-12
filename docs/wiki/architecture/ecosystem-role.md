@@ -19,15 +19,16 @@ source_files:
 
 ## Overview
 
-Xibalba Shield is one of four projects in a living-organism-shaped ecosystem, described in
-`README.md`'s "Ecosystem Role" section. Shield is **🛡️ The Immune System**:
+Xibalba Shield is one of three repositories in a living-organism-shaped ecosystem, described in
+`README.md`'s "Ecosystem Role" section. Shield is **🛡️ The Immune System**. (`integrity-dashboard`
+— the operator presentation layer, previously developed as a separate `integrity-mvp` repository
+— now lives inside `integrity-core` as a component, not a fourth sibling repository.)
 
 | Repository | Analogy | Role |
 |---|---|---|
 | `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
-| `integrity-core` | 🦴 The Unifying Backend | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts |
-| `integrity-mvp` | 👁️ The Human Control Center | Operator dashboard — visualizes health, surfaces evidence, enables human intervention |
+| `integrity-core` | 🦴 The Unifying Backend + 👁️ Control Center | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts — plus `integrity-dashboard/`, the operator presentation layer |
 
 ## How the Immune System connects
 
@@ -39,16 +40,17 @@ Xibalba Shield is one of four projects in a living-organism-shaped ecosystem, de
   signs BCC commitments using `integrity-sdk` and submits signed decisions plus telemetry to
   `integrity-core`'s BCC middleware and Oracle, running alongside an independent OpenTelemetry
   span for every decision — see [Event Router](../concepts/event-router.md).
-- **Outbound, to the Control Center.** `integrity-mvp` surfaces Shield evidence, sensor status,
-  guardrail decisions, and export status on its Shield page (a consumer of Shield's exported
-  data, not documented in this wiki — see `integrity-mvp`'s own repository).
+- **Outbound, to the Control Center.** `integrity-core`'s `integrity-dashboard/` component
+  surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield
+  page (a consumer of Shield's exported data, not documented in this wiki — see
+  `integrity-core`'s own repository).
 
 ```mermaid
 flowchart LR
     Agent["Agent"] -->|"System calls &<br/>tool execution"| Immune["xibalba-shield<br/>(this repo)"]
     Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["integrity-core<br/>(BCC to Oracle to Chain)"]
     Brain["xibalba-cortex"] -->|"Session Merkle roots"| Backbone
-    Backbone -->|"AIS, identity, evidence"| Eyes["integrity-mvp<br/>(Shield page)"]
+    Backbone -->|"AIS, identity, evidence"| Eyes["integrity-core/integrity-dashboard<br/>(Shield page)"]
     Eyes -->|"Operator interventions<br/>& policy updates"| Agent
 ```
 

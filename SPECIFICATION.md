@@ -60,19 +60,21 @@ network dependency in that loop. What follows describes how Shield's evidence *a
 flows into the broader Integrity Protocol ecosystem when configured to — not a requirement for
 Shield's core enforcement behavior.
 
-This repository is the immune system in a four-project ecosystem designed as a living organism:
+This repository is the immune system in a three-repository ecosystem designed as a living
+organism. (`integrity-dashboard` — the operator presentation layer, previously developed as a
+separate `integrity-mvp` repository — now lives inside `integrity-core` as a component, not a
+fourth sibling repository.)
 
 - **🧠 The Brain** (`xibalba-cortex`): The agent's cognitive store — memories, context, reasoning provenance, session Merkle roots.
 - **🛡️ The Immune System** (`xibalba-shield`, this repo): Endpoint enforcement, kernel sensing, policy gating, semantic guardrails. Detects threats and produces verifiable evidence.
-- **🦴 The Unifying Backend** (`integrity-core`): The protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts, ZK circuits.
-- **👁️ The Human Control Center** (`integrity-mvp`): Operator dashboard — visualizes health, surfaces evidence, enables human intervention.
+- **🦴 The Unifying Backend + 👁️ Control Center** (`integrity-core`): The protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts, ZK circuits — plus `integrity-dashboard/`, the operator presentation layer that visualizes health and surfaces evidence.
 
 ```mermaid
 flowchart LR
     Agent["🤖 Agent"] -->|"System calls"| Immune["🛡️ This Repo"]
     Immune -->|"Signed BCC + telemetry"| Backbone["🦴 integrity-core"]
     Brain["🧠 xibalba-cortex"] -->|"Session roots"| Backbone
-    Backbone -->|"AIS, evidence"| Eyes["👁️ integrity-mvp"]
+    Backbone -->|"AIS, evidence"| Eyes["👁️ integrity-core/integrity-dashboard"]
     Eyes -->|"Policy updates"| Agent
 ```
 

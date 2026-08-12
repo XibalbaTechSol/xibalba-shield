@@ -227,9 +227,15 @@ its containment logic — decisions still route through the real `ActionBroker`)
 Real gaps, honestly listed as open rather than implied closed. Each is either not this
 repository's decision to make, or needs a resource this session doesn't have:
 
-- **`INTEGRITY_CORE_PAT` GitHub secret does not exist.** Owned by the user — it's a fine-grained
-  PAT for `integrity-mvp`'s dashboard wiki-sync workflow to check out the private `integrity-core`
-  repo, unrelated to this repo's own `sync-wiki.yml` (which needs only the default `GITHUB_TOKEN`).
+- **`INTEGRITY_CORE_PAT` GitHub secret does not exist, and may no longer even be needed.** It was
+  meant for `integrity-dashboard`'s wiki-sync workflow to check out `integrity-core` as a private
+  sibling repo — but `integrity-dashboard` now lives *inside* `integrity-core` (folded in during
+  an earlier session), and that workflow (`integrity-dashboard/.github/workflows/wiki-sync.yml`)
+  still does a redundant second checkout of `integrity-core` from within `integrity-core` itself.
+  Removing that redundant checkout (reading `docs/wiki/` from the already-checked-out repo
+  instead) would likely eliminate the need for this secret entirely — an `integrity-core`-side
+  fix, out of scope for this repo, not evaluated further this session. Unrelated to this repo's
+  own `sync-wiki.yml`, which only ever needed the default `GITHUB_TOKEN`.
 - **`audit/harness-loop-2026-07-30` (in `integrity-core`) is not landed into `main`.** A timing
   decision for the user, not a code gap.
 - **ZK verifier test coverage in `integrity-core`** (`UltraPlonkVerifier.sol` has zero tests

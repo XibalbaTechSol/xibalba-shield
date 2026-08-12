@@ -33,7 +33,7 @@
 
 ## Architecture
 
-- [Ecosystem Role](architecture/ecosystem-role.md) — Shield's role as 🛡️ The Immune System in the four-project ecosystem
+- [Ecosystem Role](architecture/ecosystem-role.md) — Shield's role as 🛡️ The Immune System in the three-repository ecosystem
 - [Enforcement Pipeline](architecture/enforcement-pipeline.md) — the full sensor-to-evidence flowchart tying Event Router, Policy Engine, Action Broker, and Integrity Exporter together
 
 ## Queries
