@@ -162,18 +162,19 @@ def check_root_ebpf(report: Report) -> None:
 
 
 def check_live_bcc(report: Report, bcc_url: str) -> None:
-    host_port = bcc_url.removeprefix("http://").removeprefix("https://").split("/", 1)[0]
-    host, _, raw_port = host_port.partition(":")
-    port = int(raw_port or (443 if bcc_url.startswith("https://") else 80))
-    if not _reachable(host, port):
-        report.add("live bcc_middleware", "SKIP", f"{bcc_url} is not reachable")
-        return
-    proc = _run(
-        [PYTHON, "-m", "pytest", "-q", "tests/test_integrity_exporter.py"],
-        timeout=120,
-        env={"BCC_MIDDLEWARE_URL": bcc_url},
+    # `tests/test_integrity_exporter.py` was removed when router.py moved from a
+    # constructor-injected IntegrityExporter to unconditional OTel spans via
+    # integrity_sdk.telemetry.tracing.get_tracer() -- no replacement integration test
+    # exercising real span export against a live bcc_middleware exists yet. This is a real
+    # gap (this used to be the one integration test with actual network/signing coverage),
+    # not something to silently skip past -- report it as a known gap explicitly.
+    report.add(
+        "live bcc exporter",
+        "GAP",
+        "no replacement for the removed tests/test_integrity_exporter.py exists since the "
+        "OTel telemetry refactor -- real end-to-end span export against bcc_middleware is "
+        "currently untested",
     )
-    _add_process_result(report, "live bcc exporter", proc)
 
 
 def check_exporter_registration_readback(report: Report) -> None:

@@ -78,7 +78,7 @@ class PolicyHotReloader:
             )
             return False
 
-        self._policy_engine.rules = bundle.rules
+        # We no longer set self._policy_engine.rules, OPA handles rule logic.
         self._policy_engine.policy_version = bundle.version
         self._policy_engine.policy_hash = bundle.hash
         self._last_mtime = mtime

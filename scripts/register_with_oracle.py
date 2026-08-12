@@ -9,7 +9,7 @@ re-verifies the result against the oracle -- a secret-bearing, non-idempotent-co
 that should run once, deliberately, not be retried silently on every `docker compose up`.
 
 `agent_id="xibalba-shield"` must match the `--agent-label` the `shield` compose service's
-`shield run` invocation uses (shield/integrity_exporter/exporter.py's default) -- both resolve
+`shield run` invocation uses (shield/cli.py's `p_run` default) -- both resolve
 through `integrity_sdk.did.load_or_create_did()` to the same on-disk DID slot under
 `INTEGRITY_DID_HOME`, so this registers the exporter's *existing* identity, not a fresh one.
 

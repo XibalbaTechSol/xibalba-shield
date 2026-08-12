@@ -4,12 +4,12 @@ Measures the real RAM/CPU footprint of the Shield agent-core pipeline against sp
 binding resource budget: RAM ceiling <=90MB, CPU ceiling <=3-5% sustained.
 
 SCOPE, stated plainly: this measures the Python agent-core process (Agent Core + Policy
-Engine + Guardrail Hooks + Integrity Exporter), driven by DevModeSensor at a configurable
-rate. It does NOT include the real Linux eBPF kernel-sensor overhead -- process_exec and
-file_write are separately verified (see shield/sensors/ebpf/README.md) but LOADING an eBPF
-program needs root, which this script does not require or request. eBPF programs also do
-their filtering/capture work in KERNEL space with a cheap perf-buffer handoff to userspace,
-which is a fundamentally different (and, by design, much smaller) cost than what this script
+Engine + Guardrail Hooks + telemetry), driven by DevModeSensor at a configurable rate. It
+does NOT include the real Linux eBPF kernel-sensor overhead -- process_exec and file_write
+are separately verified (see shield/sensors/ebpf/README.md) but LOADING an eBPF program needs
+root, which this script does not require or request. eBPF programs also do their
+filtering/capture work in KERNEL space with a cheap perf-buffer handoff to userspace, which
+is a fundamentally different (and, by design, much smaller) cost than what this script
 measures. Someone who wants the full picture including kernel-sensor overhead needs a
 separate root-run measurement; this script establishes the userspace baseline honestly, not
 the whole system.
@@ -25,10 +25,23 @@ Runs two scenarios:
   2. IDLE: DevModeSensor at its default background rate (1 event/sec) for `--idle-seconds`
      -- closer to what spec §3 actually means by "sustained."
 
-Each scenario runs both WITH a real IntegrityExporter (against `--bcc-middleware-url`, real
-BCC signing + a real HTTP POST per event -- self-skips to a no-op exporter if unreachable,
-logged, never silently substituted) and WITHOUT one (`--no-exporter`), so network/signing
-overhead is visible as its own line rather than folded invisibly into one number.
+There is no WITH/WITHOUT-exporter split anymore. `EventRouter` (agent_core/router.py) emits
+telemetry unconditionally via `integrity_sdk.telemetry.tracing.get_tracer()` OTel spans on
+every `handle()` call -- there is no `exporter=` constructor argument left to inject a no-op
+against, so both scenarios below measure the pipeline as it actually runs in production,
+including span creation cost. Whether those spans are exported anywhere over the network is a
+separate, SDK-level concern (OTel exporter/collector configuration, e.g.
+`OTEL_EXPORTER_OTLP_ENDPOINT`), not something this script's process-local RSS/CPU measurement
+can isolate.
+
+`PolicyEngine` also no longer evaluates an in-process rule list -- it makes a real HTTP call
+to an OPA server per event (`shield/policy_engine/engine.py`, using the `integrity-sdk` OPA
+client). This script now requires a running OPA instance with `policies/rego/` loaded (e.g.
+`docker compose up -d opa` from the local dev stack) to produce meaningful numbers; without
+one, every `evaluate()` call will hit the fail-closed OPA-unreachable path and this becomes a
+measurement of that failure path's cost, not real policy-evaluation cost. There is no more
+`--opa-url` override here beyond `PolicyEngine`'s own default
+(`http://localhost:8181`); pass one through if your local OPA runs elsewhere.
 """
 
 from __future__ import annotations
@@ -39,65 +52,7 @@ import time
 
 from shield.agent_core import AgentRegistry, DeviceContext, EventRouter
 from shield.policy_engine import PolicyEngine
-from shield.schemas.policy_rule import Condition, PolicyRule, RuleAction, RuleScope
 from shield.sensors import DevModeSensor
-
-
-class _NullExporter:
-    """Explicitly not a mock of a real exporter -- a deliberate, labeled no-op used only to
-    isolate agent-core/policy-engine overhead from exporter network/signing cost in the
-    IDLE/STRESS-without-exporter scenarios below."""
-
-    def export_event(self, event) -> None:
-        pass
-
-    def export_decision(self, decision) -> dict:
-        return {"authorized": True}
-
-
-def _real_exporter(bcc_middleware_url: str):
-    """Returns a real IntegrityExporter if bcc_middleware is reachable, or None (logged) if
-    not -- never a silent substitution."""
-    import socket
-    from urllib.parse import urlparse
-
-    parsed = urlparse(bcc_middleware_url)
-    host, port = parsed.hostname or "localhost", parsed.port or 80
-    try:
-        with socket.create_connection((host, port), timeout=1.0):
-            pass
-    except OSError:
-        print(f"  (bcc_middleware not reachable at {bcc_middleware_url} -- skipping WITH-exporter scenario)")
-        return None
-
-    from shield.integrity_exporter import IntegrityExporter
-
-    return IntegrityExporter(bcc_middleware_url=bcc_middleware_url, agent_label="xibalba-shield-resource-bench")
-
-
-def _sample_rules() -> list[PolicyRule]:
-    """A realistic, non-trivial rule set -- an empty rule list would understate real
-    per-event evaluation cost, since every event would hit the cheap `_no_match` path."""
-    return [
-        PolicyRule(
-            rule_id="deny-shadow-ai", name="Deny unregistered shadow AI", version="1.0.0",
-            scope=RuleScope(),
-            conditions=[Condition(type="agent", match={"registered": [False]})],
-            actions=[RuleAction(type="deny", message="unregistered agent")],
-        ),
-        PolicyRule(
-            rule_id="flag-high-risk-inference", name="Flag high-risk inference", version="1.0.0",
-            scope=RuleScope(),
-            conditions=[Condition(type="activity", match={"risk_level": ["high"]})],
-            actions=[RuleAction(type="escalate", message="high risk inference")],
-        ),
-        PolicyRule(
-            rule_id="log-network", name="Log all network flows", version="1.0.0",
-            scope=RuleScope(),
-            conditions=[Condition(type="process", match={"name": ["python.exe"]})],
-            actions=[RuleAction(type="log_only")],
-        ),
-    ]
 
 
 class ScenarioResult:
@@ -123,14 +78,14 @@ class ScenarioResult:
         return 1_000_000.0 * self.cpu_delta / self.count if self.count > 0 else 0.0
 
 
-def _run_scenario(name: str, seconds: float, interval_sec: float, exporter) -> ScenarioResult:
+def _run_scenario(name: str, seconds: float, interval_sec: float) -> ScenarioResult:
     device = DeviceContext(device_id="bench-device", tenant_id="bench", device_role="workstation")
     registry = AgentRegistry()
     registry.register("copilot-agent", "Copilot")  # one of DevModeSensor's sample agent_ids, so
     # the "registered" condition actually exercises both branches, not just the unregistered one
     router = EventRouter(
-        device=device, registry=registry, policy_engine=PolicyEngine(rules=_sample_rules()),
-        exporter=exporter, guardrail_hooks=[],
+        device=device, registry=registry, policy_engine=PolicyEngine(),
+        guardrail_hooks=[],
     )
     sensor = DevModeSensor(device_id="bench-device", interval_sec=interval_sec, seed=42)
 
@@ -163,8 +118,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--stress-seconds", type=float, default=15.0)
     ap.add_argument("--idle-seconds", type=float, default=15.0)
-    ap.add_argument("--bcc-middleware-url", default="http://localhost:8000")
-    ap.add_argument("--no-exporter", action="store_true", help="skip the WITH-exporter scenarios entirely")
     args = ap.parse_args()
 
     budget_ram_mb = 90.0
@@ -174,21 +127,9 @@ def main() -> int:
 
     results: dict[str, "ScenarioResult"] = {}
 
-    print("Without exporter (agent core + policy engine only):")
-    results["stress_no_exporter"] = _run_scenario(
-        "STRESS", args.stress_seconds, interval_sec=0, exporter=_NullExporter())
-    results["idle_no_exporter"] = _run_scenario(
-        "IDLE", args.idle_seconds, interval_sec=1.0, exporter=_NullExporter())
-
-    if not args.no_exporter:
-        exporter = _real_exporter(args.bcc_middleware_url)
-        if exporter is not None:
-            print("\nWith real IntegrityExporter (real BCC signing + real HTTP POST per event):")
-            results["stress_with_exporter"] = _run_scenario(
-                "STRESS", args.stress_seconds, interval_sec=0, exporter=exporter)
-            results["idle_with_exporter"] = _run_scenario(
-                "IDLE", args.idle_seconds, interval_sec=1.0, exporter=exporter)
-            exporter.flush()
+    print("Agent core + policy engine + guardrail hooks + telemetry spans:")
+    results["stress"] = _run_scenario("STRESS", args.stress_seconds, interval_sec=0)
+    results["idle"] = _run_scenario("IDLE", args.idle_seconds, interval_sec=1.0)
 
     # STRESS scenarios run at ~tens of thousands of events/sec -- far beyond any
     # plausible real device's security-event rate, so their raw cpu_percent (which
@@ -196,14 +137,11 @@ def main() -> int:
     # comparison against a budget meant for realistic sustained load. per_event_us IS
     # rate-independent, so project it to a genuinely busy device (10 events/sec,
     # already a lot of process/file/network activity to police) instead.
-    stress_results = {k: v for k, v in results.items() if k.startswith("stress_")}
-    idle_results = {k: v for k, v in results.items() if k.startswith("idle_")}
-
     assumed_busy_rate = 10  # events/sec
-    worst_per_event_us = max(r.per_event_us for r in stress_results.values())
+    worst_per_event_us = results["stress"].per_event_us
     projected_cpu_at_busy_rate = worst_per_event_us * assumed_busy_rate / 1_000_000.0 * 100.0
 
-    worst_idle_cpu = max(r.cpu_percent for r in idle_results.values())
+    worst_idle_cpu = results["idle"].cpu_percent
     worst_ram = max(r.peak_rss_mb for r in results.values())
 
     print(f"\nAgainst budget (RAM <= {budget_ram_mb} MB, CPU <= {budget_cpu_pct}% sustained):")
@@ -214,9 +152,9 @@ def main() -> int:
           f"({'within' if projected_cpu_at_busy_rate <= budget_cpu_pct else 'EXCEEDS'} budget)")
     print(f"  Peak RSS across all scenarios: {worst_ram:.1f} MB "
           f"({'within' if worst_ram <= budget_ram_mb else 'EXCEEDS'} budget)")
-    print(f"  (STRESS scenarios' raw ~{max(r.cpu_percent for r in stress_results.values()):.0f}% CPU "
-          f"figures are NOT compared against the budget -- that's a synthetic max-throughput "
-          f"saturation number, not a realistic sustained rate; see per-event µs above instead)")
+    print(f"  (STRESS scenario's raw ~{results['stress'].cpu_percent:.0f}% CPU figure is NOT "
+          f"compared against the budget -- that's a synthetic max-throughput saturation number, "
+          f"not a realistic sustained rate; see per-event µs above instead)")
 
     within_budget = (
         worst_idle_cpu <= budget_cpu_pct

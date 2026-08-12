@@ -11,7 +11,7 @@ import pytest
 
 from shield.agent_core.eventlog import EventLog
 from shield.config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_config, load_policy_bundle
-from shield.content_classifier import classify_metadata
+from integrity_sdk.security.redactor import classify_metadata
 from shield.integrations.siem import export_decision_log_to_jsonl, post_decision_log_to_webhook
 from shield.schemas.events import Activity, EventRef, PolicyDecision, ProcessActivity, ProcessInfo, RuleRef, Decision
 

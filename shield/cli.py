@@ -26,21 +26,7 @@ DEFAULT_LOG_PATH = Path.home() / ".xibalba-shield" / "decisions.jsonl"
 _SENSOR_CHOICES = ("process-exec", "file-write", "tcp-connect", "dev")
 
 
-class _NullExporter:
-    """A real, deliberate no-op -- not a mock of a real exporter. `--no-exporter` is a
-    legitimate operational mode (local-only enforcement, no evidence leaves the device),
-    matching spec §4.3's requirement that the CORE enforcement loop work with zero cloud
-    round-trip. Using this means "no telemetry is being exported," stated as such by the
-    CLI (see `_run`'s own printed warning) -- never silently substituted for a real one."""
 
-    def export_event(self, event) -> None:
-        pass
-
-    def export_decision(self, decision) -> dict:
-        return {"authorized": True}
-
-    def flush(self) -> None:
-        pass
 
 
 def _make_sensor(
@@ -180,7 +166,7 @@ def _run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-    policy_engine = PolicyEngine(rules=rules, policy_version=policy_version, policy_hash=policy_hash)
+    policy_engine = PolicyEngine(policy_version=policy_version, policy_hash=policy_hash)
     if args.rules is not None:
         # PolicyHotReloader has no public "seed with an already-loaded rule set" API, so
         # its own first check_and_reload() will re-parse args.rules once more and find it
@@ -193,24 +179,12 @@ def _run(args: argparse.Namespace) -> int:
             trusted_policy_hashes=device_config.trusted_policy_hashes,
         )
 
-    if args.no_exporter:
-        exporter = _NullExporter()
-        print("shield run: --no-exporter set, no evidence will be exported")
-    else:
-        from .integrity_exporter import IntegrityExporter
-
-        exporter = IntegrityExporter(
-            bcc_middleware_url=device_config.bcc_middleware_url,
-            oracle_url=args.oracle_url or device_config.oracle_url,
-            agent_label=args.agent_label,
-        )
-
     device = DeviceContext(device_id=device_config.device_id, tenant_id=device_config.tenant_id,
                            device_role=device_config.device_role)
     registry = AgentRegistry()
     event_log = EventLog(args.log_path, integrity_key_path=args.log_integrity_key)
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
-                         exporter=exporter, event_log=event_log)
+                         event_log=event_log)
 
     try:
         sensor = _make_sensor(
@@ -225,8 +199,7 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     print(f"shield run: sensor={args.sensor} device_id={device_config.device_id!r} "
-          f"rules={len(rules)} policy_hash={policy_hash or '(none)'} "
-          f"exporter={'none' if args.no_exporter else 'real'}")
+          f"rules={len(rules)} policy_hash={policy_hash or '(none)'}")
 
     count = 0
     try:
@@ -239,8 +212,6 @@ def _run(args: argparse.Namespace) -> int:
                 break
     except KeyboardInterrupt:
         print(f"\nshield run: interrupted after {count} event(s)")
-    finally:
-        exporter.flush()
 
     print(f"shield run: processed {count} event(s), exiting")
     return 0

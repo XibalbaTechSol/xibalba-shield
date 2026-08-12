@@ -22,13 +22,32 @@ This plan merges README.md, SPECIFICATION.md, SECURITY.md, archived HANDOFF.md, 
 
 Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 103 tests passed and 7 skipped. The audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect still needs root live verification. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
 
+## Known gap — 2026-08-12: BCC signing/submission path removed, not replaced
+
+An uncommitted working-tree change (present since at least 2026-08-07, found while stabilizing
+this repo ahead of a cross-repo rename pass) deleted `shield/integrity_exporter/` (the module
+that called `integrity_sdk.bcc.build_bcc_commitment` and submitted signed decisions to
+`bcc_middleware`'s `/v1/bcc/intercept`) and replaced it with unconditional OpenTelemetry spans
+in `agent_core/router.py` via `integrity_sdk.telemetry.tracing.get_tracer()`. Verified directly,
+not assumed: no file under `shield/` calls `build_bcc_commitment` anymore, and `bcc_middleware`
+has no endpoint that ingests incoming OTel spans (its own OTel usage only wraps its *own*
+`/v1/bcc/intercept` pipeline in a span, it does not receive spans from callers). **The net
+effect: Shield currently has no path to a signed BCC commitment at all** — this is a real
+regression from the "Closed" item below, not a planned-but-unbuilt gap. Tracked here per user
+decision (2026-08-12) to continue other stabilization/rename work rather than redesign BCC
+submission immediately. The open design question, when this is picked back up: should Shield
+call `build_bcc_commitment` directly again (reverting the OTel direction), or should
+`bcc_middleware` gain a real OTLP ingestion endpoint that converts incoming spans into signed
+commitments (continuing the OTel direction)?
+
 ## Closed
 
 - [x] Event schemas match Shield spec event classes.
 - [x] Policy rule schema exists.
 - [x] Policy Engine is table-driven, first-match, local/offline, and tested.
 - [x] Agent Core exists: DeviceContext, AgentRegistry, EventRouter, EventLog.
-- [x] Integrity Exporter uses real integrity-sdk BCC signing and telemetry submission.
+- [~] Integrity Exporter uses real integrity-sdk BCC signing and telemetry submission. **Regressed
+  2026-08-07 (uncommitted) — see "Known gap" above; not currently true.**
 - [x] Exporter has historically documented live-stack proof against bcc_middleware with real verification token/batch index; current audit did not reproduce the live exporter path.
 - [x] All six guardrail hooks exist and are tested.
 - [x] CLI supports shield status, shield events, shield validate, and shield run.
@@ -143,6 +162,7 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 - [ ] Hosted tenant policy API service is outside this repo; client is implemented and tested with a real HTTP server.
 
 - [ ] Current live eBPF/exporter re-verification is blocked until the audit environment has root capability and a live Integrity stack; `scripts/pilot_gate_report.py` records this as blocked until real artifacts are supplied.
+- [ ] Real BCC signing/submission is blocked on a design decision — see "Known gap — 2026-08-12" above — before it can be re-verified or re-closed.
 
 ## Acceptance Criteria
 

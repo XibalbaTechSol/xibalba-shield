@@ -31,44 +31,38 @@ from shield.policy_engine.engine import PolicyEngine
 from shield.schemas.policy_rule import PolicyRule
 
 
-class _RecordingExporter:
-    def export_event(self, event):
-        pass
+from unittest.mock import AsyncMock, patch
+from integrity_sdk.policy.opa_client import OPADecision
 
-    def export_decision(self, decision):
-        return {"authorized": True}
+@pytest.fixture(autouse=True)
+def mock_opa():
+    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
+        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
+        yield mock_eval
 
-
-def _router(rules=()):
+def _router():
     return EventRouter(
         device=DeviceContext(device_id="dev-1", tenant_id="t", device_role="workstation"),
         registry=AgentRegistry(),
-        policy_engine=PolicyEngine(rules=list(rules)),
-        exporter=_RecordingExporter(),
+        policy_engine=PolicyEngine(),
     )
 
-
-def _deny_rule(rule_id: str, condition_type: str, match: dict) -> PolicyRule:
-    return PolicyRule.from_dict({
-        "rule_id": rule_id,
-        "name": rule_id,
-        "version": "1.0.0",
-        "conditions": [{"type": condition_type, "match": match}],
-        "actions": [{"type": "deny", "message": f"blocked by {rule_id}"}],
-    })
+def set_mock_deny(mock_eval):
+    mock_eval.return_value = OPADecision(allow=False, raw_result={"action": "deny"})
 
 
 # ---- ingress ----
 
-def test_guard_ingress_allows_and_invokes_call_by_default():
+def test_guard_ingress_allows_and_invokes_call_by_default(mock_opa):
     calls = []
     result = guard_ingress(_router(), agent_id="a1", agent_name="Agent", call=lambda: calls.append(1) or "ok")
     assert result == "ok"
     assert calls == [1]
 
 
-def test_guard_ingress_denies_and_never_invokes_call():
-    router = _router(rules=[_deny_rule("deny-all-agents", "agent", {"agent_id": ["a1"]})])
+def test_guard_ingress_denies_and_never_invokes_call(mock_opa):
+    set_mock_deny(mock_opa)
+    router = _router()
     calls = []
     with pytest.raises(IngressDenied):
         guard_ingress(router, agent_id="a1", agent_name="Agent", call=lambda: calls.append(1))
@@ -77,7 +71,7 @@ def test_guard_ingress_denies_and_never_invokes_call():
 
 # ---- retrieval/context ----
 
-def test_guard_retrieval_allows_and_invokes_call_by_default():
+def test_guard_retrieval_allows_and_invokes_call_by_default(mock_opa):
     calls = []
     result = guard_retrieval(
         _router(), agent_id="a1", agent_name="Agent", data_sources=["billing_db"],
@@ -87,8 +81,9 @@ def test_guard_retrieval_allows_and_invokes_call_by_default():
     assert calls == [1]
 
 
-def test_guard_retrieval_denies_ehr_access_and_never_invokes_call():
-    router = _router(rules=[_deny_rule("deny-ehr", "context", {"data_sources": ["ehr_encounter"]})])
+def test_guard_retrieval_denies_ehr_access_and_never_invokes_call(mock_opa):
+    set_mock_deny(mock_opa)
+    router = _router()
     calls = []
     with pytest.raises(RetrievalDenied):
         guard_retrieval(
@@ -98,15 +93,15 @@ def test_guard_retrieval_denies_ehr_access_and_never_invokes_call():
     assert calls == []
 
 
-def test_guard_retrieval_allows_unrelated_data_source():
-    router = _router(rules=[_deny_rule("deny-ehr", "context", {"data_sources": ["ehr_encounter"]})])
+def test_guard_retrieval_allows_unrelated_data_source(mock_opa):
+    router = _router()
     result = guard_retrieval(router, agent_id="a1", agent_name="Agent", data_sources=["billing_db"], call=lambda: "ok")
     assert result == "ok"
 
 
 # ---- model routing ----
 
-def test_guard_model_routing_allows_and_invokes_call_by_default():
+def test_guard_model_routing_allows_and_invokes_call_by_default(mock_opa):
     result = guard_model_routing(
         _router(), agent_id="a1", agent_name="Agent", model_endpoint="https://approved.example/v1",
         call=lambda: "routed",
@@ -114,8 +109,9 @@ def test_guard_model_routing_allows_and_invokes_call_by_default():
     assert result == "routed"
 
 
-def test_guard_model_routing_denies_unapproved_endpoint_and_never_invokes_call():
-    router = _router(rules=[_deny_rule("deny-unapproved", "context", {"model_endpoint": ["https://unapproved.example/*"]})])
+def test_guard_model_routing_denies_unapproved_endpoint_and_never_invokes_call(mock_opa):
+    set_mock_deny(mock_opa)
+    router = _router()
     calls = []
     with pytest.raises(ModelRoutingDenied):
         guard_model_routing(
@@ -127,13 +123,14 @@ def test_guard_model_routing_denies_unapproved_endpoint_and_never_invokes_call()
 
 # ---- output ----
 
-def test_guard_output_allows_low_risk_by_default():
+def test_guard_output_allows_low_risk_by_default(mock_opa):
     result = guard_output(_router(), agent_id="a1", agent_name="Agent", risk_level="low", call=lambda: "released")
     assert result == "released"
 
 
-def test_guard_output_denies_high_risk_and_never_invokes_call():
-    router = _router(rules=[_deny_rule("deny-high-risk", "activity", {"risk_level": ["high", "critical"]})])
+def test_guard_output_denies_high_risk_and_never_invokes_call(mock_opa):
+    set_mock_deny(mock_opa)
+    router = _router()
     calls = []
     with pytest.raises(OutputBlocked):
         guard_output(
@@ -145,7 +142,7 @@ def test_guard_output_denies_high_risk_and_never_invokes_call():
 
 # ---- post-action verification ----
 
-def test_verify_post_action_matching_hashes_is_low_risk_and_returns_decision():
+def test_verify_post_action_matching_hashes_is_low_risk_and_returns_decision(mock_opa):
     router = _router()
     decision = verify_post_action(
         router, agent_id="a1", agent_name="Agent", tool_name="write_file",
@@ -154,8 +151,9 @@ def test_verify_post_action_matching_hashes_is_low_risk_and_returns_decision():
     assert decision.decision.action == "allow"
 
 
-def test_verify_post_action_mismatched_hashes_raises_when_a_rule_flags_it():
-    router = _router(rules=[_deny_rule("flag-mismatch", "activity", {"policy_violation": [True]})])
+def test_verify_post_action_mismatched_hashes_raises_when_a_rule_flags_it(mock_opa):
+    set_mock_deny(mock_opa)
+    router = _router()
     with pytest.raises(PostActionAnomaly):
         verify_post_action(
             router, agent_id="a1", agent_name="Agent", tool_name="write_file",
@@ -163,7 +161,7 @@ def test_verify_post_action_mismatched_hashes_raises_when_a_rule_flags_it():
         )
 
 
-def test_verify_post_action_mismatch_without_a_matching_rule_still_returns_a_decision():
+def test_verify_post_action_mismatch_without_a_matching_rule_still_returns_a_decision(mock_opa):
     """No exception when nothing is configured to react to the mismatch -- the hook still
     reports it (policy_violation would be visible in the exported event), it just doesn't
     force an exception on a caller who hasn't asked to be told."""

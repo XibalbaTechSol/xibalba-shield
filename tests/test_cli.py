@@ -15,6 +15,16 @@ from shield.agent_core.eventlog import EventLog
 from shield.config import load_policy_bundle
 from shield.cli import main
 
+import pytest
+from unittest.mock import AsyncMock, patch
+from integrity_sdk.policy.opa_client import OPADecision
+
+@pytest.fixture(autouse=True)
+def mock_opa():
+    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
+        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
+        yield mock_eval
+
 
 def _write(path, obj):
     path.write_text(json.dumps(obj))
@@ -78,7 +88,7 @@ def test_run_dev_sensor_processes_real_events_end_to_end(tmp_path, capsys):
     code = main([
         "--log-path", str(log_path),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--no-exporter", "--max-events", "5", "--dev-interval", "0",
+        "--max-events", "5", "--dev-interval", "0",
     ])
 
     assert code == 0
@@ -96,7 +106,7 @@ def test_events_prints_export_status(tmp_path, capsys):
     code = main([
         "--log-path", str(log_path),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--no-exporter", "--max-events", "1", "--dev-interval", "0",
+        "--max-events", "1", "--dev-interval", "0",
     ])
     assert code == 0
     capsys.readouterr()
@@ -115,7 +125,7 @@ def test_verify_log_command_detects_tamper_evident_log(tmp_path, capsys):
     code = main([
         "--log-path", str(log_path),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--no-exporter", "--max-events", "1", "--dev-interval", "0",
+        "--max-events", "1", "--dev-interval", "0",
         "--log-integrity-key", str(key_path),
     ])
     assert code == 0
@@ -141,7 +151,7 @@ def test_siem_export_command_writes_jsonl(tmp_path, capsys):
     code = main([
         "--log-path", str(log_path),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--no-exporter", "--max-events", "1", "--dev-interval", "0",
+        "--max-events", "1", "--dev-interval", "0",
     ])
     assert code == 0
     capsys.readouterr()
@@ -153,7 +163,8 @@ def test_siem_export_command_writes_jsonl(tmp_path, capsys):
     assert json.loads(output_path.read_text())["event.module"] == "xibalba-shield"
 
 
-def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys):
+def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys, mock_opa):
+    mock_opa.return_value = OPADecision(allow=False, raw_result={"action": "deny", "rule_id": "deny-network"})
     log_path = tmp_path / "decisions.jsonl"
     rules_path = tmp_path / "rules.json"
     rules_path.write_text(json.dumps({
@@ -168,7 +179,7 @@ def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys):
     code = main([
         "--log-path", str(log_path),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--no-exporter", "--rules", str(rules_path), "--max-events", "20", "--dev-interval", "0",
+        "--rules", str(rules_path), "--max-events", "20", "--dev-interval", "0",
     ])
 
     assert code == 0
@@ -199,7 +210,7 @@ def test_run_invalid_rules_file_exits_one_and_names_the_problem(tmp_path, capsys
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--no-exporter", "--rules", str(rules_path), "--max-events", "1",
+        "--rules", str(rules_path), "--max-events", "1",
     ])
 
     assert code == 1
@@ -219,7 +230,7 @@ def test_run_rejects_policy_hash_not_trusted_by_device_config(tmp_path, capsys):
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),
         "run", "--sensor", "dev", "--device-config", str(config_path),
-        "--no-exporter", "--rules", str(rules_path), "--max-events", "1", "--dev-interval", "0",
+        "--rules", str(rules_path), "--max-events", "1", "--dev-interval", "0",
     ])
 
     assert code == 1
@@ -240,7 +251,7 @@ def test_run_accepts_policy_hash_trusted_by_device_config(tmp_path, capsys):
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),
         "run", "--sensor", "dev", "--device-config", str(config_path),
-        "--no-exporter", "--rules", str(rules_path), "--max-events", "1", "--dev-interval", "0",
+        "--rules", str(rules_path), "--max-events", "1", "--dev-interval", "0",
     ])
 
     assert code == 0
@@ -258,7 +269,7 @@ def test_run_process_exec_sensor_without_root_fails_cleanly(tmp_path, capsys):
 
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),
-        "run", "--sensor", "process-exec", "--device-id", "test-dev", "--no-exporter",
+        "run", "--sensor", "process-exec", "--device-id", "test-dev",
     ])
 
     assert code == 1
@@ -275,7 +286,7 @@ def test_run_tcp_connect_sensor_without_root_fails_cleanly(tmp_path, capsys):
 
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),
-        "run", "--sensor", "tcp-connect", "--device-id", "test-dev", "--no-exporter",
+        "run", "--sensor", "tcp-connect", "--device-id", "test-dev",
     ])
 
     assert code == 1
