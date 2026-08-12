@@ -6,6 +6,20 @@ It is built around a simple premise: if the most powerful software now running o
 
 Shield is not a chatbot wrapper and not a dashboard-only compliance tool. It is the local sensor and enforcement layer. Integrity Protocol is the identity, BCC, telemetry, scoring, and evidence substrate that receives Shield's signed decisions.
 
+## Shield is a standalone product
+
+Shield runs and enforces policy on its own — a laptop, an SMB workstation, a regulated desktop —
+with no dependency on any other repository to function. `shield run` senses, decides, contains,
+and logs locally with zero cloud round-trip; that loop works today with `--no-exporter` and no
+Integrity Protocol account of any kind. Evidence export to Integrity Protocol (signed BCC
+commitments, SIEM/SOAR forwarding) is additive value on top of a product that already does its
+core job — real-time containment of risky processes and agent tool calls — by itself. The
+"Ecosystem Role" section below describes how Shield plugs into the broader Integrity Protocol
+ecosystem; it is not a description of a dependency Shield needs in order to work.
+
+Full technical detail lives in the [wiki](../../wiki) (`docs/wiki/` in this repository) and
+[`SPECIFICATION.md`](SPECIFICATION.md).
+
 ## Ecosystem Role: 🛡️ The Immune System
 
 This repository is the **immune system** in a four-project ecosystem designed as a living organism:
@@ -100,7 +114,7 @@ latency. `shield run` constructs a real broker by default (`--no-containment` op
 
 ## The Xibalba Agent: Hybrid Cascading Architecture (A2A)
 
-While Shield’s core policy engine is deterministic and operates at machine speed to enforce rules, the **Xibalba Agent** acts as an advanced proprietary inference layer that operates alongside it. 
+While Shield's core policy engine is deterministic and operates at machine speed to enforce rules, the **Xibalba Agent** acts as an advanced inference layer that operates alongside it.
 
 Rather than acting as a slow, probabilistic inline gate for every syscall, Shield employs a three-tiered **Hybrid Cascading Architecture**:
 
@@ -112,17 +126,63 @@ Tier 2:                      └──────→ Local Xibalba Agent (SLM) 
 Tier 3 (A2A Escalation):                  └──────→ Cloud Frontier Agent (LLM) ──→ deep reasoning for ambiguous threats
 ```
 
-1. **Tier 1 (Deterministic Core):** Hardcoded JSON policies executed locally in microseconds for baseline known-bad behaviors.
-2. **Tier 2 (Local Xibalba SLM):** A local Small Language Model (e.g., a fine-tuned sub-2B parameter model) running on-device. It analyzes semantic intent and detects zero-day anomalies without sending telemetry to the cloud.
-3. **Tier 3 (Cloud Frontier Inference):** When the local SLM encounters ambiguous, high-novelty events (low confidence), it uses structured Agent-to-Agent (A2A) communication to escalate the context to a massive cloud frontier model.
+1. **Tier 1 (Deterministic Core, real and wired):** OPA/Rego policy executed locally for baseline known-bad behaviors — see "Policy Model" above for the current OPA-dependency caveat.
+2. **Tier 2 (Local Xibalba SLM, real inference, demo-stage integration):** A local Small Language Model analyzes semantic intent and detects zero-day anomalies without sending telemetry to the cloud.
+3. **Tier 3 (Cloud Frontier Inference, `[PLANNED]`):** When the local SLM encounters ambiguous, high-novelty events, it will use structured Agent-to-Agent (A2A) communication to escalate to a cloud frontier model. No code exists for this tier yet — honestly unbuilt, not a placeholder pretending otherwise.
 
-For high-risk cases where contextual defense is necessary, the Action Broker pauses the suspicious local process while the SLM (or Cloud Agent via A2A) returns a structured decision. The broker validates the scope, policy, signature, and expiry of the action before Shield executes bounded actions such as:
+### Community: help build Tier 2
+
+**Shield cannot build a production-grade Tier-2 SLM from scratch alone, and isn't trying to.**
+The plan is to use an appropriate off-the-shelf/community small language model as the Tier-2
+inference engine — not a from-scratch foundation model — and to lean on community contribution
+for the parts that need real compute: training/fine-tuning at scale, and the synthetic-data
+generation that feeds it.
+
+What's real today:
+- `slm_training/app.py` runs real, working, grammar-constrained inference against
+  **Qwen2.5-0.5B-Instruct** (JSON-schema-constrained chain-of-thought output: `reasoning` +
+  `action`), as a standalone demo.
+- `slm_training/generate_dataset.py` generates a small SFT dataset (~950 rows) from 10 malicious
+  + 8 benign command patterns. This is real but small and template-based — nowhere near the
+  diversity a production classifier needs.
+- `slm_training/train.py` is a real QLoRA fine-tune script, but it needs an NVIDIA GPU this
+  development environment doesn't have — no fine-tune has actually been run on it yet.
+
+**What the project needs from the community:** more diverse synthetic (or real, appropriately
+licensed) training examples across a wider range of benign/malicious behaviors; GPU/inference
+compute to actually run `train.py` and iterate; and evaluation against real endpoint telemetry,
+not just the current template-generated set. This is explicitly a place where outside
+contribution moves the project forward faster than solo development can.
+
+### Testing the cascade today: real model or simulated
+
+You don't need a fine-tuned model to exercise the Tier-2 escalation path. `shield run` accepts
+`--slm-backend {none,simulated,local}` (default `none`, unchanged behavior):
+
+```bash
+# Deterministic, synthetic Tier-2 stand-in -- no model file needed, safe for CI:
+.venv/bin/shield run --sensor dev --device-id dev-1 --rules policies/defaults/smb.json \
+  --no-exporter --slm-backend simulated --max-events 12 --dev-interval 0
+
+# Real Qwen2.5-0.5B inference (needs `pip install llama-cpp-python` + the model file in
+# slm_training/models/):
+.venv/bin/shield run --sensor dev --device-id dev-1 --rules policies/defaults/smb.json \
+  --no-exporter --slm-backend local --max-events 12 --dev-interval 0
+```
+
+`shield/agent_core/slm_backend.py` defines the `SlmBackend` interface both implementations
+satisfy — a Tier-2 backend is only ever consulted for events Tier 1 already decided `escalate`;
+`--slm-backend none` never calls it at all. A `contain` decision from either backend still routes
+through the real `ActionBroker` (SIGSTOP-based), never through `slm_training/app.py`'s own
+SIGKILL-only demo containment.
+
+For high-risk cases where contextual defense is necessary, the Action Broker pauses the suspicious local process while the SLM (or, once Tier 3 is built, a Cloud Agent via A2A) returns a structured decision. Bounded actions Shield can execute on a `contain` decision:
 - Terminating or pausing a process
-- Revoking a specific tool capability
-- Isolating a network destination or quarantining a workspace
+- Revoking a specific tool capability (guardrail hooks, when an agent runtime calls them)
+- Isolating a network destination or quarantining a workspace (`[PLANNED]`)
 - Escalating severity and requiring operator approval
 
-This layered control system ensures privacy by default and reserves cloud latency/cost for the top 5% of complex evaluations, providing a proprietary, intelligent defense without making endpoint security depend exclusively on the cloud.
+This layered control system is designed to ensure privacy by default and reserve cloud latency/cost for the smallest slice of complex evaluations, without making endpoint security depend exclusively on the cloud — Tier 3 is the piece that isn't built yet.
 
 ## Current Status
 
@@ -131,7 +191,7 @@ Legend: real and tested means there is code and a test or live verification path
 | Area | Status | Evidence |
 |---|---|---|
 | Event schemas | Real and tested | `shield/schemas/events.py`, `tests/test_schemas.py` |
-| Policy engine | Real and tested | Table-driven, first-match, local/offline. Supports `process`, `agent`, `file`, `flow`, `context`, and `activity` conditions. |
+| Policy engine | Real and tested, requires a running local OPA sidecar | `shield/policy_engine/engine.py` delegates rule evaluation to a local OPA server (`opa_url`, default `http://localhost:8181`) at package `shield/policy` — see "Policy Model" below for why, and what this means for the Quickstart. Supports `process`, `agent`, `file`, `flow`, `context`, and `activity` conditions in the Rego policy. Fails closed (`deny`) if OPA is unreachable — never a silent allow. |
 | Agent core | Real and tested | Registry, router, device context, event log, export-status recording. |
 | Guardrail hooks | Real and tested | All six hook points exist: ingress, retrieval/context, model routing, output, tool execution, post-action verification. |
 | CLI | Real and tested | `shield status`, `shield events`, `shield validate`, `shield run`, `shield fetch-policy`, `shield verify-log`, `shield siem-export`. |
@@ -152,6 +212,7 @@ Current root-free validation:
 
 ```text
 pytest -q
+118 passed, 9 skipped (2026-08-12)
 Root-free tests currently pass locally; root/live-service tests skip unless their real dependencies exist.
 ```
 
@@ -161,7 +222,8 @@ Skipped tests are root-gated eBPF verification or live-stack exporter checks. Th
 
 ```text
 shield/
-  agent_core/          DeviceContext, AgentRegistry, EventRouter, EventLog
+  agent_core/          DeviceContext, AgentRegistry, EventRouter, EventLog, ActionBroker,
+                        slm_backend.py (Tier-2 SlmBackend interface + Simulated/Local impls)
   config/              JSON config loader, policy bundle hashing, hot reload
   guardrail_hooks/     Six semantic agent boundary gates
   integrity_exporter/  Integrity SDK DID, BCC signing, telemetry submission
@@ -196,9 +258,11 @@ python3 scripts/e2e_validate.py
 
 The harness always runs root-free tests, validates default policy packs, runs the dev sensor through the real router/policy/log path, checks kernel BTF layout when available, and reports root/live-stack checks as `SKIP` when their real dependencies are absent.
 
-Run a local Shield loop:
+Run a local Shield loop. **Without a running local OPA server, every event fails closed as
+`deny`** — see "Policy Model" below for why and how to actually exercise decisions:
 
 ```bash
+opa run --server --addr localhost:8181 policies/rego/smb.rego &   # required, see Policy Model
 .venv/bin/shield run \
   --sensor dev \
   --device-id dev-1 \
@@ -252,7 +316,40 @@ sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v
 
 ## Policy Model
 
-Policies are ordered JSON rule bundles. First match wins.
+**Corrected 2026-08-12 — read this before relying on the Quickstart below.** A 2026-08-07 change
+to `shield/policy_engine/engine.py` moved rule *evaluation* from an in-process JSON-bundle
+first-match loop to a real OPA (Open Policy Agent) REST call (`hot_reload.py`'s own comment: "We
+no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
+
+- **A local OPA server must be running** (default `http://localhost:8181`, package path
+  `/v1/data/shield/policy`) for `shield run` to evaluate anything but a hardcoded fail-closed
+  `deny`. Nothing in this repo's Quickstart currently starts one — this is a real, open gap (see
+  IMPLEMENTATION_PLAN.md), not something to work around silently.
+- The JSON policy bundle passed to `--rules` (`smb.json` etc., schema below) is still real and
+  still enforced for **version/hash pinning and hot-reload trust** (`trusted_policy_hashes`), but
+  its `rules` array is **no longer the decision source**. The actual decision logic lives in Rego
+  policy loaded into OPA.
+- Only one JSON policy pack has a matching Rego translation today: `policies/rego/smb.rego`
+  (package `shield.policy`, hand-ported from `smb.json`'s three rules). `professional-services.json`
+  and `regulated.json` have **no Rego equivalent yet** — running `shield run --rules
+  policies/defaults/regulated.json` today enforces nothing from that file's rule content until a
+  matching Rego policy exists and is loaded into OPA.
+
+To actually exercise policy decisions locally:
+
+```bash
+opa run --server --addr localhost:8181 policies/rego/smb.rego
+# in another terminal:
+.venv/bin/shield run --sensor dev --device-id dev-1 --rules policies/defaults/smb.json \
+  --no-exporter --max-events 12 --dev-interval 0
+```
+
+The JSON rule bundle format below documents the schema `load_policy_bundle` parses (for version/
+hash pinning) and the shape `smb.rego` was hand-translated from — treat it as documentation of
+intent and of the hash-pinning contract, not as a live description of what currently decides an
+event's action.
+
+Policies are ordered JSON rule bundles. First match wins (as translated into Rego today).
 
 ```json
 {
@@ -300,9 +397,13 @@ Every evaluation produces a `PolicyDecision`, including default allow/no-match d
 
 Default packs live under `policies/defaults/`:
 
-- `smb.json`: shadow AI process paths, unregistered agent tools, sensitive writes.
+- `smb.json`: shadow AI process paths, unregistered agent tools, sensitive writes. **Has a real
+  Rego translation** (`policies/rego/smb.rego`) — this is the only pack whose content currently
+  drives OPA decisions.
 - `professional-services.json`: unregistered agents, unapproved model routing, client-data context.
+  **No Rego translation exists yet** — see "Policy Model" above.
 - `regulated.json`: unregistered agents, PHI-class context, high-risk output, regulated sensitive writes.
+  **No Rego translation exists yet** — see "Policy Model" above.
 
 Validate them:
 
@@ -547,11 +648,45 @@ Important boundaries:
 - Shield is not a full EDR/XDR replacement in v1.
 - Shield is not a HIPAA product by itself; regulated deployments require separate operational and contractual controls.
 
+## Goals and Milestones
+
+Shield's north star: constrain what an AI agent (or a legacy threat) can do on an endpoint, in
+real time, with evidence an auditor can trust — without depending on a cloud round-trip for the
+enforcement decision itself. Framed for the verticals this matters most for today (finance,
+healthcare):
+
+- **Real-time containment** — a `contain` decision freezes a process via a real OS signal
+  (SIGSTOP), not a queued alert someone reviews tomorrow. Built and wired (`ActionBroker`).
+- **Signed, exportable evidence** — every decision can be exported as a signed BCC commitment to
+  Integrity Protocol, giving a compliance reviewer a cryptographically-backed decision trail, not
+  just a local log file. Built (`IntegrityExporter`), registration/live-anchoring still pending
+  funded oracle credentials.
+- **No silent gaps** — every unbuilt or partially-built piece is marked as such in this README's
+  status table, never implied complete. This is a deliberate product commitment, not just a
+  documentation habit: a compliance/audit buyer needs to know exactly what's enforced today.
+
+Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full ledger):
+
+1. **Policy Model completeness** — Rego translations for `professional-services.json` and
+   `regulated.json` (only `smb.json` has one today), and a documented/scripted way to run OPA
+   alongside `shield run` instead of requiring a manually-started sidecar.
+2. **Tier-2 SLM, from demo to backbone** — grow past the current small template-generated
+   dataset with community help (see "Community: help build Tier 2" above), and evaluate real
+   fine-tuned model quality against real endpoint telemetry.
+3. **Tier-3 A2A escalation** — currently zero code; design the structured escalation schema once
+   Tier 2 has enough real-world signal to know what "ambiguous" actually looks like.
+4. **Platform breadth** — Windows/macOS native sensors (currently interface-boundary stubs), and
+   root-verified TCP-connect eBPF on Linux.
+5. **Compliance-specific packaging** — a documented mapping from Shield's decision/evidence model
+   to specific finance (e.g. SOC 2, data-handling controls) and healthcare (HIPAA) audit
+   requirements. Not started; requires domain expertise this repo doesn't claim to have alone.
+
 ## Documentation Map
 
 | Document | Purpose |
 |---|---|
 | `SPECIFICATION.md` | Normative Shield product and implementation specification |
+| [Wiki](../../wiki) (`docs/wiki/`) | Architecture concept pages, ecosystem role, compliance evidence trail |
 | `SECURITY.md` | Threat model, security posture, limitations |
 | `IMPLEMENTATION_PLAN.md` | Living implementation ledger |
 | `docs/audits/2026-08-06-status.md` | Current audit/status record |
@@ -564,6 +699,9 @@ Important boundaries:
 
 Highest-priority gaps:
 
+- Write Rego translations for `professional-services.json` and `regulated.json` (only `smb.json`
+  has one, `policies/rego/smb.rego`), and document/script a way to run OPA alongside `shield run`
+  rather than requiring a manually-started sidecar (see "Policy Model" above).
 - Run root live verification for TCP-connect eBPF on the target kernel and archive `scripts/verify_tcp_connect_root.py` JSON output.
 - Register the Shield exporter DID with Integrity Oracle and archive live `GET /v1/agent/{did}` or registry readback evidence.
 - Verify exported Shield decisions through the intended Integrity evidence/audit surface.

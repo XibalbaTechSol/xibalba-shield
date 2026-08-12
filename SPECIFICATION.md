@@ -2,16 +2,22 @@
 
 **Version:** 1.0 implementation specification
 **Status:** normative for the xibalba-shield repository
-**Updated:** 2026-08-06
+**Updated:** 2026-08-12
 **Owner:** Xibalba Solutions
 
 Xibalba Shield is an endpoint security agent for discovering AI agents and tools, constraining risky behavior, and exporting verifiable evidence into Integrity Protocol. Shield is the endpoint sensor and local enforcer. Integrity Protocol is the identity, BCC, telemetry, scoring, and evidence substrate. Shield consumes Integrity; it does not duplicate it.
+
+**Shield is a standalone product.** It senses, decides, and contains locally with zero cloud
+round-trip; that core loop requires no other repository or account to function. Integrity
+Protocol integration (signed evidence export, SIEM/SOAR forwarding) is additive value, not a
+dependency the enforcement loop needs. §2 below describes the ecosystem role without implying
+that role is required for Shield to work.
 
 This specification defines what Shield must do, how the current repository is organized, which interfaces are stable, and which gaps remain. The implementation status ledger remains [README.md](README.md); this document defines the target behavior and module contracts.
 
 ## Current audit and implementation boundary
 
-The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 103 tests passed and 7 skipped. Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
+The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md), corrected by a 2026-08-12 update note at the top of that file. The root-free suite reports **118 tests passed, 9 skipped** (2026-08-12; grew from 103/7 after the ActionBroker-wiring and Tier-2 `SlmBackend` tests landed). Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. Two closed since the 2026-08-06 audit boundary: the Integrity Exporter (deleted 2026-08-07, restored 2026-08-12, see IMPLEMENTATION_PLAN.md) and the Action Broker (existed but was never called from `shield run`'s live loop; wired 2026-08-12). This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
 
 ## 1. Source Of Truth And Scope
 
@@ -23,6 +29,7 @@ The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/202
 | [README.md](README.md) | Current implementation status, verification evidence, commands, and plan. |
 | [SECURITY.md](SECURITY.md) | Implemented security posture, threat model, disclosure handling, and current limitations. |
 | [shield/sensors/ebpf/README.md](shield/sensors/ebpf/README.md) | Linux eBPF verification record and TCP-connect blocker details. |
+| [Wiki](../../wiki) (`docs/wiki/`) | Architecture concept pages, ecosystem role, compliance evidence trail — a core set, not exhaustive. |
 | integrity-core spec/integrity-protocol-v0.4.md | Protocol primitives consumed by Shield: DID, BCC, telemetry, AIS, Merkle anchoring, delegation, and evidence exports. |
 | integrity-core spec/xibalba-shield-v1.md | Protocol-facing companion boundary for Shield. |
 
@@ -46,6 +53,12 @@ Shield v1 is not:
 - A HIPAA healthcare product; Integrity Health is the healthcare vertical.
 
 ## 2. Ecosystem Role: 🛡️ The Immune System
+
+Shield is a standalone product first: `shield run` senses, decides via the local policy engine,
+and contains via the real Action Broker, entirely offline, with no Integrity Protocol account or
+network dependency in that loop. What follows describes how Shield's evidence *additionally*
+flows into the broader Integrity Protocol ecosystem when configured to — not a requirement for
+Shield's core enforcement behavior.
 
 This repository is the immune system in a four-project ecosystem designed as a living organism:
 
@@ -115,19 +128,67 @@ Shield v1 runs as one lightweight endpoint process composed of internal modules 
 ### 3.4 Hybrid Cascading Architecture (A2A)
 
 Shield employs a three-tiered cascading architecture to balance machine-speed enforcement, privacy, and advanced reasoning:
-- **Tier 1 (Deterministic Core):** Hardcoded JSON policies executed locally in microseconds for baseline known-bad behaviors.
-- **Tier 2 (Local Xibalba SLM):** A local Small Language Model (e.g., fine-tuned sub-2B parameter model) running on-device. It analyzes semantic intent and detects zero-day anomalies without sending telemetry to the cloud.
-- **Tier 3 (Cloud Frontier Inference):** When the local SLM encounters ambiguous, high-novelty events (low confidence), it uses structured Agent-to-Agent (A2A) communication to escalate the context to a cloud frontier model.
+- **Tier 1 (Deterministic Core, real):** Local OPA/Rego policy evaluation for baseline known-bad
+  behaviors — see §7.5 for the current OPA-sidecar dependency.
+- **Tier 2 (Local Xibalba SLM, real inference / demo-stage integration):** A local Small Language
+  Model analyzes semantic intent and detects zero-day anomalies without sending telemetry to the
+  cloud. The `SlmBackend` contract is normative below (§3.4.2); the MVP model is off-the-shelf
+  (Qwen2.5-0.5B-Instruct), not purpose-built — see §3.4.3.
+- **Tier 3 (Cloud Frontier Inference, `[PLANNED]`):** No code exists yet. Structured Agent-to-Agent
+  (A2A) escalation is designed conceptually here but not implemented.
 
-The Action Broker pauses the suspicious local process while the Cloud Agent analyzes the A2A request and returns a structured decision (allow/contain/escalate). This ensures privacy by default and reserves cloud costs/latency for the top 5% of complex evaluations.
+Tier 1 evaluates every event. A Tier-2 backend, when configured, is consulted **only** for events
+Tier 1 already decided `escalate` — it is never the first evaluator an event sees, and Tier 1's
+decision vocabulary (`allow`/`deny`/`contain`/`log_only`/`escalate`) is exactly what Tier 2 must
+also produce, so a Tier-2 decision is a drop-in replacement for the `escalate` outcome, not a
+parallel authority. The Action Broker acts on whichever tier's decision is final; it never
+distinguishes which tier decided.
 
 ### 3.4.1 SLM Optimization and Constraints
 
 Because the Tier 2 Local Xibalba SLM is strictly constrained to structural event routing and does not require general conversational capabilities, it must be aggressively optimized for enterprise hardware (sub-500M parameters, <1GB RAM):
-- **Grammar-Constrained Inference:** The inference engine (e.g., `llama.cpp`) must enforce strict JSON schema grammar constraints during generation. This eliminates the need for the model to learn JSON syntax, dedicating all parameters to security reasoning.
-- **Few-Shot Prompting (MVP approach):** Instead of immediate fine-tuning, the SLM uses a tightly constrained system prompt with curated examples of telemetry-to-JSON routing. This allows off-the-shelf sub-1B instruct models (like Qwen2.5 0.5B or SmolLM) to function out of the box.
-- **Task-Specific Fine-Tuning (Future Optimization):** For production deployment, the model can be hyper-specialized (overfit) on the Shield Event schema and Action Broker JSON outputs to outperform larger generalized models in this narrow routing task.
-- **Vocabulary Pruning:** Unused tokens (e.g., conversational text, formatting) should be mathematically pruned from the model weights to physically reduce the binary size and memory footprint.
+- **Grammar-Constrained Inference:** The inference engine (`llama.cpp`, via `llama-cpp-python`) must enforce strict JSON schema grammar constraints during generation. This eliminates the need for the model to learn JSON syntax, dedicating all parameters to security reasoning. Real and working today in `slm_training/app.py` and `LocalSlmBackend` (§3.4.2).
+- **Few-Shot Prompting (MVP approach):** Instead of immediate fine-tuning, the SLM uses a tightly constrained system prompt with curated examples of telemetry-to-JSON routing. This allows off-the-shelf sub-1B instruct models (Qwen2.5-0.5B today) to function out of the box.
+- **Task-Specific Fine-Tuning (Future Optimization, needs community resources):** For production deployment, the model can be hyper-specialized on the Shield Event schema and Action Broker JSON outputs. `slm_training/train.py` implements this (QLoRA), but requires an NVIDIA GPU this development environment doesn't have — no fine-tune has been run yet. See README.md's "Community: help build Tier 2" for what contribution is needed.
+- **Vocabulary Pruning:** Unused tokens (e.g., conversational text, formatting) should be mathematically pruned from the model weights to physically reduce the binary size and memory footprint. `[PLANNED]` — not implemented.
+
+### 3.4.2 SlmBackend Contract (normative)
+
+`shield/agent_core/slm_backend.py` defines the Tier-2 interface, matching `PolicyEngine.evaluate()`'s
+exact signature so a backend is interchangeable at the call site:
+
+```python
+class SlmBackend(Protocol):
+    def evaluate(self, event: NormalizedEvent, ctx: EvaluationContext) -> PolicyDecision: ...
+```
+
+Two implementations exist:
+
+- **`SimulatedSlmBackend`** — deterministic, keyword-pattern-based, explicitly labeled synthetic
+  in every decision's `reason` field. Exists so the Tier-2 escalation path is testable in CI
+  without a model file. Not a stand-in for real semantic judgment; it is a testing tool.
+- **`LocalSlmBackend`** — thin wrapper around real grammar-constrained Qwen2.5-0.5B inference
+  (same system prompt and JSON schema as `slm_training/app.py`'s demo, reimplemented rather than
+  imported to avoid that module's import-time side effects — root requirement, real eBPF sensor
+  load, Flask app construction). Optional dependency (`llama-cpp-python` + a local model file);
+  raises `RuntimeError` with an actionable message if either is missing, rather than silently
+  falling back to another tier.
+
+`EventRouter` accepts an optional `slm_backend: SlmBackend | None = None`. `None` (the CLI default,
+`--slm-backend none`) preserves pre-2026-08-12 behavior exactly — the Tier-2 code path is never
+entered. A backend raising an exception must never take down the router; the router falls back to
+Tier 1's original decision and logs the failure loudly.
+
+### 3.4.3 Community Dependency (explicit, not implied)
+
+Shield does not build a production-grade Tier-2 model from scratch, and this specification does
+not claim it will. The plan is to use an appropriate off-the-shelf/community small language model
+(Qwen2.5-0.5B is the current MVP choice, not a permanent commitment) and rely on community
+contribution for the resource-intensive parts: synthetic (or appropriately licensed real) training
+data at meaningfully greater diversity than the current ~950-row template-generated set, and
+GPU/inference compute to actually run `slm_training/train.py` and iterate. Tier 3 (§3.4, cloud A2A
+escalation) is entirely `[PLANNED]` and has no code; it is out of scope until Tier 2 has enough
+real-world signal to define what "ambiguous" means in practice.
 
 ## 4. Event Model
 
@@ -202,9 +263,23 @@ The local event log is JSONL used by shield status and shield events. It records
 
 ## 7. Policy Engine Specification
 
+### 7.0 Current Evaluation Path (corrected 2026-08-12)
+
+`shield/policy_engine/engine.py`'s `PolicyEngine.evaluate()` delegates rule evaluation to a local
+OPA (Open Policy Agent) REST server (default `http://localhost:8181`, package path
+`/v1/data/shield/policy`), not an in-process JSON-bundle matcher — this changed 2026-08-07
+(commit `f86c0f0`) and is the tested, intended current behavior (`tests/test_policy_engine.py`
+mocks the OPA call directly). §7.1–§7.3 below describe the **rule schema and condition/action
+vocabulary** — this remains the authoring format JSON bundles use and the shape a Rego policy
+must implement — but the JSON bundle's parsed `rules` content is **not itself consulted** by
+`evaluate()` today; only `policy_version`/`policy_hash` metadata is. Only `policies/rego/smb.rego`
+exists as a real Rego translation of a default pack; `professional-services.json` and
+`regulated.json` have none yet. If OPA is unreachable, `evaluate()` fails closed (`deny`) — never
+a silent allow, matching `bcc_middleware`'s own documented posture in `integrity-core`.
+
 ### 7.1 Rule Model
 
-Rules are JSON records parsed into PolicyRule: rule_id, name, version, scope, conditions, actions, and optional ais_impact hint. The policy engine evaluates rules in list order. First match wins.
+Rules are JSON records parsed into PolicyRule: rule_id, name, version, scope, conditions, actions, and optional ais_impact hint. The policy engine evaluates rules in list order. First match wins. (Applies to the Rego translation's authored behavior — see §7.0 for what's actually consulted at runtime today.)
 
 ### 7.2 Condition Groups
 
@@ -347,6 +422,9 @@ Current test families are listed in [README.md](README.md). New modules must add
 
 ## 16. Roadmap
 
+Goals and milestones framed for compliance/audit use (finance, healthcare verticals) are in
+README.md's "Goals and Milestones" section; this roadmap is the implementation-phase breakdown.
+
 ### Phase 1: Linux Enforcement Baseline
 
 - Complete process execution sensor.
@@ -362,6 +440,15 @@ Current test families are listed in [README.md](README.md). New modules must add
 - Verify audit-log query for exported Shield events.
 - Re-run resource budget with registered DID and clean exporter queue.
 - Add evidence-export examples once integrity-core reporting surface is ready.
+
+### Phase 2.5: Policy Engine Completeness
+
+- Write Rego translations for `professional-services.json` and `regulated.json` (only `smb.json`
+  has one, see §7.0).
+- Document or script a way to run the OPA sidecar alongside `shield run` rather than requiring a
+  manually-started process.
+- Grow the Tier-2 SFT dataset and run a real fine-tune, with community help (§3.4.3) — needs GPU/
+  inference compute this project does not have alone.
 
 ### Phase 3: Policy Distribution And Update Safety
 

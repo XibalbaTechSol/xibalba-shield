@@ -1,7 +1,8 @@
 """
 Event router — the coordination piece of Agent Core (spec §4.2): subscribes to a sensor's
-event stream, routes each event through the Policy Engine, immediately acts on a `contain`
-decision via the Action Broker (real OS-level process freeze — this is the "antivirus-speed"
+event stream, routes each event through the Policy Engine (Tier 1), optionally re-evaluates
+`escalate` decisions through a Tier-2 SLM backend (`slm_backend.py` — off by default, see
+`--slm-backend` in cli.py), immediately acts on a `contain` decision via the Action Broker (real OS-level process freeze — this is the "antivirus-speed"
 enforcement step, and it runs before anything else in handle() so it's never delayed by a
 network call), and — for AgentEvent instances specifically — additionally through the
 Guardrail Hooks, before emitting an OpenTelemetry span and (when an exporter is configured)
@@ -38,6 +39,7 @@ from ..policy_engine.engine import EvaluationContext, PolicyEngine
 from .action_broker import ActionBroker
 from .eventlog import EventLog
 from .registry import AgentRegistry, DeviceContext
+from .slm_backend import SlmBackend
 
 logger = logging.getLogger("shield.agent_core.router")
 tracer = get_tracer("xibalba-shield")
@@ -68,6 +70,7 @@ class EventRouter:
         action_broker: ActionBroker | None = None,
         guardrail_hooks: Iterable[Callable[[AgentEvent, PolicyDecision], None]] = (),
         event_log: EventLog | None = None,
+        slm_backend: SlmBackend | None = None,
     ) -> None:
         self.device = device
         self.registry = registry
@@ -76,6 +79,7 @@ class EventRouter:
         self.action_broker = action_broker
         self.guardrail_hooks = list(guardrail_hooks)
         self.event_log = event_log
+        self.slm_backend = slm_backend
 
     def _context(self) -> EvaluationContext:
         return EvaluationContext(
@@ -93,6 +97,28 @@ class EventRouter:
             self.registry.touch(event.agent.agent_id)
 
         decision = self.policy_engine.evaluate(event, self._context())
+
+        # Tier-2 escalation: only for events Tier 1 (the deterministic PolicyEngine) already
+        # flagged `escalate` -- an SLM backend is never the first evaluator an event sees, and
+        # `slm_backend=None` (the default) makes this block a no-op, so existing behavior is
+        # unchanged unless an operator explicitly opts in via `shield run --slm-backend ...`.
+        # A revised `contain` from Tier 2 still flows through the real ActionBroker below, same
+        # as a Tier-1 `contain` would -- the SLM never contains a process itself.
+        if self.slm_backend is not None and decision.decision.action == "escalate":
+            try:
+                tier1_decision = decision
+                decision = self.slm_backend.evaluate(event, self._context())
+                logger.info(
+                    "Tier-2 SLM revised decision for %s: tier1=%s -> tier2=%s (%s)",
+                    tier1_decision.event_ref.event_id, tier1_decision.decision.action,
+                    decision.decision.action, decision.rule.rule_id,
+                )
+            except Exception:  # noqa: BLE001
+                # A broken/unavailable Tier-2 backend must never take down the router or
+                # silently mask the Tier-1 decision -- fall back to what Tier 1 already decided.
+                logger.exception(
+                    "Tier-2 SLM backend raised; keeping Tier-1 decision %s", decision.event_ref.event_id
+                )
 
         # Real-time containment first, before anything else -- this is the antivirus-speed
         # step. Freeze-only (no timeout_seconds): ActionBroker.contain() with a timeout BLOCKS

@@ -33,8 +33,12 @@ shield/
 │                        # runs after containment, never before)
 ├── sensors/            # Sensor interface (base.py) + dev_generator.py (real, synthetic) +
 │                        # ebpf/ (process/file verified historically; TCP blocked — read ebpf/README.md)
-├── policy_engine/      # Table-driven rule evaluator — spec §4.3, §7 — condition groups:
-│                        # process/agent/file/flow/context/activity
+├── policy_engine/      # Delegates evaluation to a local OPA sidecar (since 2026-08-07,
+│                        # commit f86c0f0) — spec §4.3, §7 — condition groups:
+│                        # process/agent/file/flow/context/activity, authored as Rego.
+│                        # Only policies/rego/smb.rego exists; professional-services.json
+│                        # and regulated.json have no Rego translation yet. JSON rule
+│                        # bundles are still used for version/hash pinning, not decisions.
 ├── guardrail_hooks/     # all 6 hook points, all real — spec §4.4
 ├── integrity_exporter/  # Wraps integrity-sdk: real BCC signing + telemetry — spec §4.5
 ├── schemas/             # Event classes (§5) + policy rule shape (§7), canonical, no renaming
@@ -54,7 +58,7 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest        # 103 passed, 7 skipped in the current root-free suite
+.venv/bin/python -m pytest        # 118 passed, 9 skipped in the current root-free suite
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
 shield status                    # local decision-log summary
 shield events --recent 20        # recent policy decisions

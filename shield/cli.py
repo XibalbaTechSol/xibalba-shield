@@ -348,6 +348,11 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
     p_run.add_argument("--no-containment", action="store_true",
                        help="observe/decide/log/export only -- never actually freeze a process")
+    p_run.add_argument("--slm-backend", choices=("none", "simulated", "local"), default="none",
+                       help="Tier-2 escalation backend for Tier-1 'escalate' decisions: 'none' "
+                            "(default, unchanged behavior), 'simulated' (deterministic, synthetic "
+                            "pattern match -- no model required), 'local' (real Qwen2.5-0.5B "
+                            "inference, requires llama-cpp-python + slm_training/models/)")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,
                        help="HMAC key file for tamper-evident decision log entries")
     p_run.add_argument("--max-events", type=int, default=None,

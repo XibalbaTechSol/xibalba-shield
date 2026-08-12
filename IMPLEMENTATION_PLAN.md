@@ -57,7 +57,8 @@ flush to a possibly slow or unreachable `bcc_middleware`.
 - [x] Linux process-exec eBPF sensor is live-verified.
 - [x] Linux file-write eBPF sensor is live-verified.
 - [x] Comprehensive SPECIFICATION.md exists in this repo.
-- [x] Root-free test suite passes: 103 passed, 7 skipped.
+- [x] Root-free test suite passes: 118 passed, 9 skipped (2026-08-12; was 103/7 before the
+      ActionBroker-wiring tests landed).
 - [x] Local policy bundles produce operator-visible policy version/hash in decisions.
 - [x] File-write sensitive-path glob filtering is wired from device config.
 - [x] Linux systemd service packaging and operator runbook exist.
@@ -148,11 +149,43 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 
 ### Hybrid Cascading Architecture (A2A)
 
-- [x] Integrate local Xibalba SLM inference engine (e.g. `llama.cpp`) for Tier 2 evaluation (MVP deployed via Qwen 0.5B).
-- [x] Implement Action Broker to terminate suspicious processes using process group signals (`os.killpg`).
-- [ ] Transition Action Broker from SIGKILL to cgroups/SIGSTOP for freezing processes during evaluation.
-- [x] Implement Chain of Thought (CoT) structured JSON grammar to improve zero-shot Tier 2 accuracy.
-- [x] Generate Supervised Fine-Tuning (SFT) dataset for Tier 2 model optimization.
+Corrected 2026-08-12: the items below were marked `[x]` in a way that overstated integration.
+`slm_training/` is real, running code, but it is a **standalone demo** — nothing under `shield/`
+imports `llama_cpp`, `qwen`, or `slm_training` (confirmed by grep), and `slm_training/app.py`
+does its own `os.killpg(..., SIGKILL)` containment directly against the eBPF sensor, bypassing
+`agent_core/action_broker.py`'s real `ActionBroker` (SIGSTOP/SIGCONT/cgroup-freeze) entirely. As
+of this session, `shield/agent_core/slm_backend.py` provides the actual enforcement-path
+integration point: an `SlmBackend` protocol, a `SimulatedSlmBackend` (deterministic, explicitly
+labeled synthetic), and a `LocalSlmBackend` (thin wrapper around the Qwen demo's inference, not
+its containment logic — decisions still route through the real `ActionBroker`), wireable via
+`shield run --slm-backend {none,simulated,local}` (default `none`, unchanged behavior).
+
+- [~] Local Xibalba SLM inference engine exists and runs (`slm_training/app.py`, `llama.cpp`
+      via `llama-cpp-python`, MVP model Qwen2.5-0.5B-Instruct-Q4_K_M) — **not yet wired** into
+      `shield/`'s enforcement path as this repo's own Tier-2 authority; `LocalSlmBackend`
+      (`shield/agent_core/slm_backend.py`) now provides that wiring for inference, still routing
+      containment through the real `ActionBroker`, not the demo's own SIGKILL path.
+- [x] Real OS-level `ActionBroker` (SIGSTOP/SIGCONT, cgroup v2 freeze, SIGKILL only from an
+      explicit timeout escalation) exists and is wired into `shield run`'s live loop as of
+      2026-08-12 — see `agent_core/action_broker.py` and the "Closed gap — 2026-08-12" entry
+      above. The demo's separate `os.killpg`-based containment in `slm_training/app.py` is not
+      this and is not used by `shield run`.
+- [~] Chain of Thought (CoT) structured JSON grammar exists and works
+      (`slm_training/app.py`'s `response_format` JSON-schema-constrained generation) but only
+      inside the standalone demo — real, not a placeholder, just not yet the production Tier-2
+      path.
+- [~] A Supervised Fine-Tuning (SFT) dataset generator exists
+      (`slm_training/generate_dataset.py`, ~950 templated rows from 10 malicious/8 benign
+      command patterns), but it's small and template-based, not the "1,000+ examples, production-
+      ready" bar `slm_training/README.md` itself names. `slm_training/train.py`'s QLoRA fine-tune
+      script is documented as unrunnable on this machine (needs an NVIDIA GPU) — no evidence a
+      fine-tune has actually been run. **Scaling this (more diverse synthetic data, GPU/inference
+      compute to actually run training) is an open community contribution area** — see README's
+      "Community: help build Tier 2" section.
+- [ ] Two different base models are referenced inconsistently: `models/Llama-3.2-1B-Instruct-
+      Q4_K_M.gguf` (named in `slm_training/README.md`'s narrative) vs. the model actually wired
+      into `slm_training/app.py` (Qwen2.5-0.5B). Resolve which is canonical before further Tier-2
+      work — not resolved this session, flagged rather than silently picked.
 - [ ] Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud escalations.
 - [ ] Implement Tier 3 Cloud Frontier fallback for ambiguous/low-confidence SLM decisions.
 - [ ] Add cloud-fallback latency and decision metrics to burn-in reporting.
@@ -188,6 +221,33 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 - [x] Local logs are inspectable and export failures are visible.
 - [ ] Exporter uses a registered DID and produces queryable Integrity-backed evidence.
 - [x] README, SPECIFICATION, SECURITY, and implementation docstrings agree on local tamper evidence versus OS-level hardening boundaries.
+
+## Known open items — not closed this session (2026-08-12)
+
+Real gaps, honestly listed as open rather than implied closed. Each is either not this
+repository's decision to make, or needs a resource this session doesn't have:
+
+- **`INTEGRITY_CORE_PAT` GitHub secret does not exist.** Owned by the user — it's a fine-grained
+  PAT for `integrity-mvp`'s dashboard wiki-sync workflow to check out the private `integrity-core`
+  repo, unrelated to this repo's own `sync-wiki.yml` (which needs only the default `GITHUB_TOKEN`).
+- **`audit/harness-loop-2026-07-30` (in `integrity-core`) is not landed into `main`.** A timing
+  decision for the user, not a code gap.
+- **ZK verifier test coverage in `integrity-core`** (`UltraPlonkVerifier.sol` has zero tests
+  exercising it with a real proof) — a different repository's gap, tracked there.
+- **Windows/macOS native sensors** — interface-boundary stubs only; needs those target platforms
+  to implement and verify against.
+- **Root-gated eBPF test coverage (TCP-connect)** — needs root on the target kernel to verify;
+  cannot be closed from this environment.
+- **GitHub Actions "Read and write permissions" for the new `sync-wiki.yml` workflow** — a repo
+  Settings toggle needed for the default `GITHUB_TOKEN` to push to the wiki repo; the user needs
+  to confirm this is set for both `xibalba-shield` and `xibalba-cortex` (see `.github/workflows/
+  sync-wiki.yml`'s own comment for the exact setting).
+- **OPA sidecar and Rego policy completeness** (§7.0 of `SPECIFICATION.md`) — `professional-
+  services.json` and `regulated.json` have no Rego translation yet, and nothing automatically
+  starts the OPA server `shield run` depends on. Real, open, not silently worked around.
+- **Tier-2 SLM training compute** — no fine-tune has been run (`slm_training/train.py` needs an
+  NVIDIA GPU this environment doesn't have); this is the explicit community-contribution ask in
+  README.md's "Community: help build Tier 2" section, not a solo TODO.
 
 ## Update Rule
 

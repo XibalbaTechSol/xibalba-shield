@@ -1,0 +1,61 @@
+name: Sync GitHub Wiki
+
+# Publishes the separate <repo>.wiki.git repo (the rendered GitHub Wiki) as a
+# downstream mirror of docs/wiki/, the only canonical authoring source. Direct
+# edits in GitHub Wiki are overwritten on the next publication.
+# Runs scripts/sync_wiki.py, which flattens docs/wiki/'s concepts/entities/
+# subdirectories into a single directory -- GitHub Wiki only generates a
+# rendered page URL for files at the wiki repo's root; anything in a
+# subdirectory 302-redirects to raw, unrendered markdown text instead.
+#
+# One-time repo setup required:
+#   1. The wiki must have at least one page already (GitHub only creates the
+#      <repo>.wiki.git remote once a human has saved a page through the UI once).
+#   2. Settings -> Actions -> General -> Workflow permissions ->
+#      "Read and write permissions" must be enabled for the default
+#      GITHUB_TOKEN to be able to push to the wiki repo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/wiki/**"
+      - "scripts/sync_wiki.py"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync-wiki:
+    name: Publish canonical docs/wiki/ to the wiki repo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      - name: Checkout wiki repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: .wiki-checkout
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify canonical article tables of contents
+        run: python3 scripts/wiki_toc.py --check
+
+      - name: Run sync
+        run: python3 scripts/sync_wiki.py "${{ github.workspace }}/.wiki-checkout"
+
+      - name: Commit and push if changed
+        working-directory: .wiki-checkout
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No wiki changes to sync."
+            exit 0
+          fi
+          git add -A
+          git commit -m "Sync from docs/wiki/ @ ${{ github.sha }}"
+          git push origin HEAD:master

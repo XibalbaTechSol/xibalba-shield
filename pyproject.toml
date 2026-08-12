@@ -20,8 +20,10 @@ classifiers = [
 dependencies = [
     # One-way dependency on integrity-sdk (protocol spec §14.1), imported the same way any
     # third-party agent runtime would use it -- no privileged API, no special-cased access.
-    # Git dependency until integrity-sdk is published to PyPI. Pinned to a reviewed commit
-    # instead of tracking a moving branch so installs are reproducible.
+    # Currently a local filesystem path dependency (sibling checkout), not a git/PyPI pin --
+    # reproducible only on a machine with integrity-core checked out at this exact relative
+    # path. Move to a git-commit pin or a published PyPI release before this is installed
+    # anywhere other than this development environment.
     "integrity-sdk @ file:///home/xibalba/Projects/integrity-core/integrity-sdk",
     "mlflow>=3.15.1",
 ]
