@@ -12,7 +12,7 @@ This repository is the **immune system** in a four-project ecosystem designed as
 
 | Repository | Analogy | Role |
 |---|---|---|
-| `xibalba-graph-memory` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
+| `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
 | `INTEGRITY-LATEST` | 🦴 The Unifying Backend | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts |
 | `integrity-mvp` | 👁️ The Human Control Center | Operator dashboard — visualizes health, surfaces evidence, enables human intervention |
@@ -26,7 +26,7 @@ This repository is the **immune system** in a four-project ecosystem designed as
 flowchart LR
     Agent["🤖 Agent"] -->|"System calls &<br/>tool execution"| Immune["🛡️ xibalba-shield<br/>(This repo)"]
     Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 INTEGRITY-LATEST<br/>(BCC → Oracle → Chain)"]
-    Brain["🧠 xibalba-graph-memory"] -->|"Session Merkle roots"| Backbone
+    Brain["🧠 xibalba-cortex"] -->|"Session Merkle roots"| Backbone
     Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-mvp<br/>(Shield page)"]
     Eyes -->|"Operator interventions<br/>& policy updates"| Agent
 ```
