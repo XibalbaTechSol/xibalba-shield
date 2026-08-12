@@ -108,7 +108,7 @@ Preflight the live Integrity registration/readback environment:
 ```bash
 .venv/bin/python scripts/did_env_preflight.py
 RPC_URL=http://127.0.0.1:8545 \
-DEPLOYMENTS_FILE=/home/xibalba/Projects/INTEGRITY-LATEST/deployments.local.json \
+DEPLOYMENTS_FILE=/home/xibalba/Projects/integrity-core/deployments.local.json \
 .venv/bin/python scripts/verify_oracle_registration.py
 ```
 

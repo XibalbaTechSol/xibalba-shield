@@ -23,8 +23,8 @@ The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/202
 | [README.md](README.md) | Current implementation status, verification evidence, commands, and plan. |
 | [SECURITY.md](SECURITY.md) | Implemented security posture, threat model, disclosure handling, and current limitations. |
 | [shield/sensors/ebpf/README.md](shield/sensors/ebpf/README.md) | Linux eBPF verification record and TCP-connect blocker details. |
-| INTEGRITY-LATEST spec/integrity-protocol-v0.4.md | Protocol primitives consumed by Shield: DID, BCC, telemetry, AIS, Merkle anchoring, delegation, and evidence exports. |
-| INTEGRITY-LATEST spec/xibalba-shield-v1.md | Protocol-facing companion boundary for Shield. |
+| integrity-core spec/integrity-protocol-v0.4.md | Protocol primitives consumed by Shield: DID, BCC, telemetry, AIS, Merkle anchoring, delegation, and evidence exports. |
+| integrity-core spec/xibalba-shield-v1.md | Protocol-facing companion boundary for Shield. |
 
 ### 1.2 Product Scope
 
@@ -51,13 +51,13 @@ This repository is the immune system in a four-project ecosystem designed as a l
 
 - **🧠 The Brain** (`xibalba-cortex`): The agent's cognitive store — memories, context, reasoning provenance, session Merkle roots.
 - **🛡️ The Immune System** (`xibalba-shield`, this repo): Endpoint enforcement, kernel sensing, policy gating, semantic guardrails. Detects threats and produces verifiable evidence.
-- **🦴 The Unifying Backend** (`INTEGRITY-LATEST`): The protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts, ZK circuits.
+- **🦴 The Unifying Backend** (`integrity-core`): The protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts, ZK circuits.
 - **👁️ The Human Control Center** (`integrity-mvp`): Operator dashboard — visualizes health, surfaces evidence, enables human intervention.
 
 ```mermaid
 flowchart LR
     Agent["🤖 Agent"] -->|"System calls"| Immune["🛡️ This Repo"]
-    Immune -->|"Signed BCC + telemetry"| Backbone["🦴 INTEGRITY-LATEST"]
+    Immune -->|"Signed BCC + telemetry"| Backbone["🦴 integrity-core"]
     Brain["🧠 xibalba-cortex"] -->|"Session roots"| Backbone
     Backbone -->|"AIS, evidence"| Eyes["👁️ integrity-mvp"]
     Eyes -->|"Policy updates"| Agent
@@ -65,7 +65,7 @@ flowchart LR
 
 ### 2.1 Dependency Direction
 
-The dependency graph is one-way: xibalba-shield depends on INTEGRITY-LATEST public interfaces. INTEGRITY-LATEST must never import Shield code or rely on Shield for correctness. A Shield sensor failure must not alter AIS computation, BCC canonicalization, Merkle batching, chain schemas, or protocol anchoring.
+The dependency graph is one-way: xibalba-shield depends on integrity-core public interfaces. integrity-core must never import Shield code or rely on Shield for correctness. A Shield sensor failure must not alter AIS computation, BCC canonicalization, Merkle batching, chain schemas, or protocol anchoring.
 
 ### 2.2 Evidence Flow
 
@@ -74,7 +74,7 @@ The dependency graph is one-way: xibalba-shield depends on INTEGRITY-LATEST publ
 3. Policy Engine evaluates ordered rules.
 4. Event Router records a local PolicyDecision.
 5. Integrity Exporter signs a BCC commitment using integrity-sdk.
-6. The commitment and telemetry are submitted to INTEGRITY-LATEST services.
+6. The commitment and telemetry are submitted to integrity-core services.
 7. Integrity services score, anchor, and expose evidence through their own surfaces.
 
 ### 2.3 Enforcement Boundary
@@ -361,7 +361,7 @@ Current test families are listed in [README.md](README.md). New modules must add
 - Verify agent lookup/readback for Shield exporter identity.
 - Verify audit-log query for exported Shield events.
 - Re-run resource budget with registered DID and clean exporter queue.
-- Add evidence-export examples once INTEGRITY-LATEST reporting surface is ready.
+- Add evidence-export examples once integrity-core reporting surface is ready.
 
 ### Phase 3: Policy Distribution And Update Safety
 

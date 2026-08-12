@@ -1,7 +1,7 @@
 # Security Posture & Threat Model
 
 This document translates `spec/xibalba-shield-v1.md` §6 (Privacy and HIPAA Posture) and §13
-(What This Product Is Not) — both design-intent documents in the parent `integrity-latest`
+(What This Product Is Not) — both design-intent documents in the parent `integrity-core`
 repo — into a statement of what **this repo's code, as it exists today**, actually enforces.
 Where the two disagree, this file is describing implementation reality; the spec is describing
 design intent. Neither replaces the other.
@@ -81,7 +81,7 @@ the log remains plain diagnostic JSONL for backward compatibility.
 
 **Cryptographic tamper-evidence exists only for decisions that successfully reach
 `bcc_middleware`** via the exporter (BCC-signed commitment, Merkle-anchored — see README and
-`integrity-latest`'s own `docs/INTERFACE_CONTRACT.md`). A locally HMAC-chained decision is
+`integrity-core`'s own `docs/INTERFACE_CONTRACT.md`). A locally HMAC-chained decision is
 tamper-evident only as long as the key and log are protected by the host. It is useful for
 pilot operations, not a replacement for off-device evidence.
 

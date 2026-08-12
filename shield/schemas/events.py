@@ -1,5 +1,5 @@
 """
-Canonical event shapes — spec/xibalba-shield-v1.md §5, in the parent `integrity-latest` repo.
+Canonical event shapes — spec/xibalba-shield-v1.md §5, in the parent `integrity-core` repo.
 
 OCSF-style JSON, chosen there for SIEM/SOAR portability. These are the canonical shapes; per
 that spec, a package implementing them MUST NOT rename fields — the same discipline

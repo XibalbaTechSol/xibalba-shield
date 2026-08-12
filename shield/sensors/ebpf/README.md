@@ -1,6 +1,6 @@
 # Linux eBPF sensors — 2 of 3 VERIFIED, 1 BLOCKED
 
-Per `spec/xibalba-shield-v1.md` §4.1 in the parent `integrity-latest` repo: eBPF programs on
+Per `spec/xibalba-shield-v1.md` §4.1 in the parent `integrity-core` repo: eBPF programs on
 `process_exec`/`process_exit` tracepoints, file open/write hooks on sensitive paths, and
 TCP-connect/DNS hooks, pushing compact records to user space via a ring buffer.
 

@@ -14,24 +14,24 @@ This repository is the **immune system** in a four-project ecosystem designed as
 |---|---|---|
 | `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
-| `INTEGRITY-LATEST` | 🦴 The Unifying Backend | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts |
+| `integrity-core` | 🦴 The Unifying Backend | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts |
 | `integrity-mvp` | 👁️ The Human Control Center | Operator dashboard — visualizes health, surfaces evidence, enables human intervention |
 
 **How the Immune System connects:**
 - **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
-- **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to INTEGRITY-LATEST's BCC middleware and Oracle.
+- **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to integrity-core's BCC middleware and Oracle, running alongside an independent OpenTelemetry span for every decision.
 - **Outbound (to Control Center):** `integrity-mvp` surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
 
 ```mermaid
 flowchart LR
     Agent["🤖 Agent"] -->|"System calls &<br/>tool execution"| Immune["🛡️ xibalba-shield<br/>(This repo)"]
-    Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 INTEGRITY-LATEST<br/>(BCC → Oracle → Chain)"]
+    Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 integrity-core<br/>(BCC → Oracle → Chain)"]
     Brain["🧠 xibalba-cortex"] -->|"Session Merkle roots"| Backbone
     Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-mvp<br/>(Shield page)"]
     Eyes -->|"Operator interventions<br/>& policy updates"| Agent
 ```
 
-See [`INTEGRITY-LATEST/docs/architecture/ecosystem-dependencies.md`](https://github.com/XibalbaTechSol/integrity-latest/blob/main/docs/architecture/ecosystem-dependencies.md) for the canonical ownership boundaries.
+See [`integrity-core/docs/architecture/ecosystem-dependencies.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/architecture/ecosystem-dependencies.md) for the canonical ownership boundaries.
 
 ## What Shield Protects
 
@@ -77,7 +77,7 @@ Kernel and endpoint sensors  --->  Agent Core  --->  Policy Engine
                            DID + signed BCC commitment + telemetry
                                       |
                                       v
-                           INTEGRITY-LATEST
+                           integrity-core
                            Oracle, BCC middleware, evidence, AIS
 ```
 
@@ -93,6 +93,10 @@ resumable `SIGSTOP`/`SIGCONT` for ordinary process containment, supports explici
 freezing for containerized agents, and only sends `SIGKILL` from an explicit timeout escalation.
 The broker does not make policy decisions; callers must supply the already-authorized action.
 The verification record is [`docs/audits/2026-08-07-action-broker.md`](docs/audits/2026-08-07-action-broker.md).
+Wired into the live enforcement loop as of 2026-08-12: `agent_core/router.py`'s `handle()` calls
+`ActionBroker.contain()` as its very first step for any `contain` decision on a process-related
+event — before any network call, so containment speed is never affected by evidence-export
+latency. `shield run` constructs a real broker by default (`--no-containment` opts out).
 
 ## The Xibalba Agent: Hybrid Cascading Architecture (A2A)
 
@@ -132,7 +136,7 @@ Legend: real and tested means there is code and a test or live verification path
 | Guardrail hooks | Real and tested | All six hook points exist: ingress, retrieval/context, model routing, output, tool execution, post-action verification. |
 | CLI | Real and tested | `shield status`, `shield events`, `shield validate`, `shield run`, `shield fetch-policy`, `shield verify-log`, `shield siem-export`. |
 | Config, policy distribution, and hot reload | Real and tested | Local JSON parsing, tenant HTTP policy fetch, atomic replace, policy version/hash, trusted policy hash pinning. |
-| Integrity exporter | Real, live path previously verified | Uses `integrity-sdk` DID, BCC signing, and telemetry. Registration/readback scripts exist; live validation needs funded RPC/oracle credentials. |
+| Integrity exporter | Real, live path — restored 2026-08-12 after a 2026-08-07 regression | Uses `integrity-sdk` DID, BCC signing, and telemetry, running alongside (not instead of) the OTel span in `agent_core/router.py`. Registration/readback scripts exist; live validation needs funded RPC/oracle credentials. |
 | Dev sensor | Real and synthetic | Explicitly test/demo-only; never claimed as endpoint telemetry. |
 | Linux process eBPF | Real, historically live-verified | Observed a real spawned subprocess `execve`. |
 | Linux file-write eBPF | Real, historically live-verified | Observed a real write-mode `openat`; supports userspace sensitive-path filtering. |
@@ -383,7 +387,7 @@ It is not a semantic content scanner and does not read prompt text, output text,
 
 ## Integrity Evidence
 
-Shield consumes INTEGRITY-LATEST; it does not duplicate it.
+Shield consumes integrity-core; it does not duplicate it.
 
 The exporter:
 
@@ -483,7 +487,7 @@ python3 scripts/e2e_validate.py
 With live `bcc_middleware`:
 
 ```bash
-cd /home/xibalba/Projects/INTEGRITY-LATEST
+cd /home/xibalba/Projects/integrity-core
 docker compose up -d --wait postgres redis opa oracle-backend bcc-middleware
 cd /home/xibalba/Projects/xibalba-shield
 python3 scripts/e2e_validate.py --bcc-url http://localhost:8000
@@ -511,7 +515,7 @@ python3 scripts/pilot_gate_report.py \
 
 No local script can close root-only, live RPC/oracle, native Windows/macOS, OS hardening, signed installer, or multi-day workload gates without those real target artifacts. Missing artifacts report `BLOCKED`, not pass.
 
-Known e2e caveat in this workspace: the current global Python environment has an editable `integrity_sdk` from `/home/xibalba/Projects/INTEGRITY/integrity-sdk`, not this repo's pinned `INTEGRITY-LATEST` dependency. Live exporter validation should be run from a clean virtual environment installed with `uv pip install -e ".[dev]" --python .venv/bin/python`.
+Known e2e caveat in this workspace: the current global Python environment has an editable `integrity_sdk` from `/home/xibalba/Projects/INTEGRITY/integrity-sdk`, not this repo's pinned `integrity-core` dependency. Live exporter validation should be run from a clean virtual environment installed with `uv pip install -e ".[dev]" --python .venv/bin/python`.
 
 ## Security Posture
 
@@ -555,3 +559,20 @@ Highest-priority gaps:
 ## License
 
 MIT. See `LICENSE`.
+
+## Assets
+
+The following visual assets have been generated for branding and website deployment, located in the `assets/` directory:
+
+| Asset | File | Description |
+|-------|------|-------------|
+| **Color Logo** | `assets/xibalba_shield_logo_color.jpg` | Primary full-color shield logo |
+| **B&W Logo** | `assets/xibalba_shield_logo_bw.jpg` | Black & white line-art logo |
+| **Transparent Logo** | `assets/logo_transparent.png` | Color logo with transparent background |
+| **Swirl Icon** | `assets/xibalba_swirl_logo.png` | Standalone cropped swirl icon |
+| **Open Graph Image** | `assets/og_image.jpg` | 1200x630 social share preview card |
+| **Apple Touch Icon** | `assets/apple_touch_icon.png` | 180x180 iOS home screen icon |
+| **Color Banner** | `assets/banner_color.jpg` | 1920x1080 16:9 color website banner |
+| **B&W Banner** | `assets/banner_bw.jpg` | 1920x1080 16:9 B&W website banner |
+| **Color Favicons** | `assets/favicon_color.ico` / `.png` | Standard browser favicons |
+| **B&W Favicons** | `assets/favicon_bw.ico` / `.png` | Black & white browser favicons |

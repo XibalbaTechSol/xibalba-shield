@@ -102,11 +102,18 @@ def test_run_dev_sensor_processes_real_events_end_to_end(tmp_path, capsys):
 
 
 def test_events_prints_export_status(tmp_path, capsys):
+    """With --no-exporter (no bcc_middleware dependency, deterministic for a unit test),
+    only the OTel span attempts export -- no Integrity Exporter ran at all, so the CLI
+    must print "telemetry_only", not "ok" (no real commitment was submitted) and not
+    "failed" (nothing actually failed -- it was never configured to run). A real "ok" or
+    "failed" requires a real bcc_middleware and is covered by
+    tests/test_integrity_exporter.py (skipif-guarded) and tests/test_agent_core.py's
+    router-level stub-exporter tests instead."""
     log_path = tmp_path / "decisions.jsonl"
     code = main([
         "--log-path", str(log_path),
         "run", "--sensor", "dev", "--device-id", "test-dev",
-        "--max-events", "1", "--dev-interval", "0",
+        "--max-events", "1", "--dev-interval", "0", "--no-exporter",
     ])
     assert code == 0
     capsys.readouterr()
@@ -114,7 +121,7 @@ def test_events_prints_export_status(tmp_path, capsys):
     code = main(["--log-path", str(log_path), "events", "--recent", "1"])
 
     assert code == 0
-    assert "export=ok" in capsys.readouterr().out
+    assert "export=telemetry_only" in capsys.readouterr().out
 
 
 def test_verify_log_command_detects_tamper_evident_log(tmp_path, capsys):

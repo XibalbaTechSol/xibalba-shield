@@ -16,29 +16,30 @@ This plan merges README.md, SPECIFICATION.md, SECURITY.md, archived HANDOFF.md, 
 | SECURITY.md | Implemented threat model, security posture, and limitations. |
 | docs/archive/2026-08-06/HANDOFF.md | Historical operational handoff record. |
 | shield/sensors/ebpf/README.md | eBPF verification and blocker record. |
-| INTEGRITY-LATEST protocol specs | DID, BCC, telemetry, AIS, Merkle anchoring, delegation, and evidence export semantics. |
+| integrity-core protocol specs | DID, BCC, telemetry, AIS, Merkle anchoring, delegation, and evidence export semantics. |
 
 ## Audit checkpoint — 2026-08-06
 
 Current observed status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite reports 103 tests passed and 7 skipped. The audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect still needs root live verification. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
 
-## Known gap — 2026-08-12: BCC signing/submission path removed, not replaced
+## Closed gap — 2026-08-12: BCC signing/submission path restored
 
-An uncommitted working-tree change (present since at least 2026-08-07, found while stabilizing
-this repo ahead of a cross-repo rename pass) deleted `shield/integrity_exporter/` (the module
-that called `integrity_sdk.bcc.build_bcc_commitment` and submitted signed decisions to
+A 2026-08-07 uncommitted working-tree change had deleted `shield/integrity_exporter/` (the
+module that called `integrity_sdk.bcc.build_bcc_commitment` and submitted signed decisions to
 `bcc_middleware`'s `/v1/bcc/intercept`) and replaced it with unconditional OpenTelemetry spans
-in `agent_core/router.py` via `integrity_sdk.telemetry.tracing.get_tracer()`. Verified directly,
-not assumed: no file under `shield/` calls `build_bcc_commitment` anymore, and `bcc_middleware`
-has no endpoint that ingests incoming OTel spans (its own OTel usage only wraps its *own*
-`/v1/bcc/intercept` pipeline in a span, it does not receive spans from callers). **The net
-effect: Shield currently has no path to a signed BCC commitment at all** — this is a real
-regression from the "Closed" item below, not a planned-but-unbuilt gap. Tracked here per user
-decision (2026-08-12) to continue other stabilization/rename work rather than redesign BCC
-submission immediately. The open design question, when this is picked back up: should Shield
-call `build_bcc_commitment` directly again (reverting the OTel direction), or should
-`bcc_middleware` gain a real OTLP ingestion endpoint that converts incoming spans into signed
-commitments (continuing the OTel direction)?
+in `agent_core/router.py`, leaving Shield with no path to a signed BCC commitment at all — a real
+regression, first documented here the same day it was found (2026-08-12), then resolved the same
+day. Resolution: restored `shield/integrity_exporter/` from git history (`f86c0f0^`), re-added an
+optional `exporter` param to `EventRouter.__init__`, and wired the previously-dead
+`--bcc-middleware-url`/`--oracle-url`/`--agent-label`/`--no-exporter` CLI flags in `cli.py`'s
+`run` subcommand to construct it. The OTel span and the Integrity Exporter now run as two
+independent, separately best-effort export paths in `router.py`'s `handle()` — restoring the
+exporter did not remove the OTel span, matching the ecosystem's prior resolution of this same
+fork (`integrity-core/PRODUCTION_GAPS.md` §15). One deliberate deviation from the pre-deletion
+version: `IntegrityExporter` now constructs its `IntegrityClient` with `background_flush=True`
+(the SDK's own default) instead of the original `background_flush=False`, since Shield's
+decisions fire on a real-time enforcement path that must not block on a synchronous telemetry
+flush to a possibly slow or unreachable `bcc_middleware`.
 
 ## Closed
 
@@ -46,8 +47,8 @@ commitments (continuing the OTel direction)?
 - [x] Policy rule schema exists.
 - [x] Policy Engine is table-driven, first-match, local/offline, and tested.
 - [x] Agent Core exists: DeviceContext, AgentRegistry, EventRouter, EventLog.
-- [~] Integrity Exporter uses real integrity-sdk BCC signing and telemetry submission. **Regressed
-  2026-08-07 (uncommitted) — see "Known gap" above; not currently true.**
+- [x] Integrity Exporter uses real integrity-sdk BCC signing and telemetry submission. Regressed
+  2026-08-07, restored 2026-08-12 — see "Closed gap" above.
 - [x] Exporter has historically documented live-stack proof against bcc_middleware with real verification token/batch index; current audit did not reproduce the live exporter path.
 - [x] All six guardrail hooks exist and are tested.
 - [x] CLI supports shield status, shield events, shield validate, and shield run.
@@ -66,6 +67,16 @@ commitments (continuing the OTel direction)?
 - [x] Signed policy bundle format is documented; local trusted-policy-hash enforcement exists.
 - [x] Local decision logs include export status and CLI events output surfaces export failures.
 - [x] Pilot acceptance metrics are defined.
+- [x] `shield run` actually enforces `contain` decisions via `agent_core/action_broker.py`'s
+  real OS-signal containment (SIGSTOP), not just logging/exporting them. Added 2026-08-12:
+  previously `ActionBroker` existed and was tested in isolation, but nothing in the live
+  code path — not even the guardrail hooks — ever called it, so `contain` decisions had no
+  real-world effect. `EventRouter` now takes an optional `action_broker` param and calls
+  `action_broker.contain(pid)` (freeze-only, no timeout) as the very first step in
+  `handle()`, before any network call, for process-related events. `shield run` constructs
+  a real `ActionBroker` by default; `--no-containment` opts out (observe/log/export only).
+  Verified against a real spawned process (`sleep 30`): went from `R (running)` to
+  `T (stopped)` via genuine SIGSTOP through the full router pipeline, then resumed cleanly.
 
 ## Planned And Todo
 
@@ -119,7 +130,7 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 
 ### Documentation And CI Reconciliation
 
-- [ ] Reconcile the INTEGRITY-LATEST protocol-facing Shield spec status so normative design and observed implementation are not conflated.
+- [ ] Reconcile the integrity-core protocol-facing Shield spec status so normative design and observed implementation are not conflated.
 - [x] Resolve the specification wording inconsistency between five and six guardrail hooks in repo-local SPECIFICATION/README; six hook points are authoritative.
 - [x] Update stale README, archived HANDOFF, sensor-base, CLAUDE, and generated package metadata counts/status text; no tracked egg-info metadata remains.
 - [x] Pin the `integrity-sdk` dependency to a reviewed release or commit.
@@ -158,17 +169,21 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 
 - [ ] TCP-connect sensor root verification is blocked by missing sudo/root in this environment.
 - [ ] Windows/macOS sensors are blocked on access to target platforms for implementation and verification.
-- [ ] Compliance reporting polish is blocked on INTEGRITY-LATEST evidence export maturity.
+- [ ] Compliance reporting polish is blocked on integrity-core evidence export maturity.
 - [ ] Hosted tenant policy API service is outside this repo; client is implemented and tested with a real HTTP server.
 
 - [ ] Current live eBPF/exporter re-verification is blocked until the audit environment has root capability and a live Integrity stack; `scripts/pilot_gate_report.py` records this as blocked until real artifacts are supplied.
-- [ ] Real BCC signing/submission is blocked on a design decision — see "Known gap — 2026-08-12" above — before it can be re-verified or re-closed.
+- [ ] Real BCC signing/submission is restored (see "Closed gap — 2026-08-12" above) but not yet
+  live-verified against a running `bcc_middleware` in this environment — same root cause as the
+  eBPF re-verification item above (needs a live stack, not blocked on a design decision anymore).
 
 ## Acceptance Criteria
 
 - [ ] Linux process and file sensors are verified on pilot kernels.
 - [ ] TCP-connect is either verified or explicitly removed from pilot claims.
 - [x] shield run operates as a managed/supervised process.
+- [x] `contain` decisions produce real OS-level containment (SIGSTOP via ActionBroker), not
+  only a logged/exported decision — see "Closed" above.
 - [ ] Policy validation and hot reload work under pilot conditions.
 - [x] Local logs are inspectable and export failures are visible.
 - [ ] Exporter uses a registered DID and produces queryable Integrity-backed evidence.

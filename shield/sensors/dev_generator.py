@@ -6,7 +6,7 @@ end before a real Linux eBPF sensor exists (see sensors/ebpf/README.md for that 
 event this produces is synthetic and clearly labeled: `process.exe_path` etc. are fabricated
 strings, never real observations of this machine. Do not point this at production policy
 decisions and mistake its output for real telemetry — that would be exactly the kind of
-silent-mock claim this project's parent repo (`integrity-latest`) has a ground rule against.
+silent-mock claim this project's parent repo (`integrity-core`) has a ground rule against.
 """
 
 from __future__ import annotations

@@ -14,6 +14,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .agent_core.action_broker import ActionBroker
 from .agent_core.eventlog import EventLog
 from .agent_core.registry import AgentRegistry, DeviceContext
 from .agent_core.router import EventRouter
@@ -81,9 +82,16 @@ def _events(args: argparse.Namespace) -> int:
         decision = row.get("decision", {})
         rule = row.get("rule", {})
         export = row.get("export", {})
-        export_status = "not_attempted"
-        if export.get("attempted"):
-            export_status = "ok" if export.get("decision_exported") else "failed"
+        # authorized is None whenever no Integrity Exporter ran at all (no exporter
+        # configured, e.g. --no-exporter) -- distinct from a real exporter having run and
+        # failed (authorized False). Conflating the two as "failed" misreports a
+        # deliberately telemetry-only run as a broken evidence submission.
+        if not export.get("attempted"):
+            export_status = "not_attempted"
+        elif export.get("authorized") is None:
+            export_status = "telemetry_only" if export.get("event_exported") else "failed"
+        else:
+            export_status = "ok" if export.get("authorized") else "failed"
         print(
             f"{row.get('time', '?')}  {row.get('event_ref', {}).get('class', '?'):16} "
             f"action={decision.get('action', '?'):9} rule={rule.get('rule_id', '?')} "
@@ -183,8 +191,29 @@ def _run(args: argparse.Namespace) -> int:
                            device_role=device_config.device_role)
     registry = AgentRegistry()
     event_log = EventLog(args.log_path, integrity_key_path=args.log_integrity_key)
+
+    # Build a real Integrity Exporter unless the operator explicitly opted out with
+    # --no-exporter. Imported lazily so commands that don't run the enforcement loop
+    # (status/events/validate/etc.) never pull in integrity-sdk's heavier dependencies.
+    exporter = None
+    if not args.no_exporter:
+        from .integrity_exporter import IntegrityExporter
+
+        exporter = IntegrityExporter(
+            bcc_middleware_url=args.bcc_middleware_url,
+            oracle_url=args.oracle_url,
+            agent_label=args.agent_label,
+        )
+
+    # Real OS-level containment, on by default -- this is what makes a "contain" decision
+    # actually do something (freeze the offending process) instead of only being logged and
+    # exported as evidence after the fact. --no-containment exists for the same reason
+    # --no-exporter does: local-only observation/dev use without taking real enforcement
+    # action on this machine.
+    action_broker = None if args.no_containment else ActionBroker()
+
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
-                         event_log=event_log)
+                         exporter=exporter, action_broker=action_broker, event_log=event_log)
 
     try:
         sensor = _make_sensor(
@@ -302,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
     p_siem.add_argument("--timeout", type=float, default=10.0, help="webhook timeout in seconds")
     p_siem.set_defaults(func=_siem_export)
 
-    p_run = sub.add_parser("run", help="run the real enforcement loop: sensor -> policy engine -> exporter")
+    p_run = sub.add_parser("run", help="run the real enforcement loop: sensor -> policy engine -> containment -> exporter")
     p_run.add_argument("--sensor", choices=_SENSOR_CHOICES, required=True,
                        help="process-exec/file-write/tcp-connect need root (real eBPF); dev needs neither (synthetic)")
     p_run.add_argument("--dev-interval", type=float, default=1.0,
@@ -317,6 +346,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--oracle-url", default=None)
     p_run.add_argument("--agent-label", default="xibalba-shield")
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
+    p_run.add_argument("--no-containment", action="store_true",
+                       help="observe/decide/log/export only -- never actually freeze a process")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,
                        help="HMAC key file for tamper-evident decision log entries")
     p_run.add_argument("--max-events", type=int, default=None,
