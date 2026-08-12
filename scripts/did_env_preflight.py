@@ -12,8 +12,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SDK = Path("/home/xibalba/Projects/INTEGRITY-LATEST/integrity-sdk")
-DEFAULT_DEPLOYMENTS = Path("/home/xibalba/Projects/INTEGRITY-LATEST/deployments.local.json")
+DEFAULT_SDK = Path("/home/xibalba/Projects/integrity-core/integrity-sdk")
+DEFAULT_DEPLOYMENTS = Path("/home/xibalba/Projects/integrity-core/deployments.local.json")
 
 
 def _sdk_path() -> Path | None:

@@ -22,7 +22,7 @@ dependencies = [
     # third-party agent runtime would use it -- no privileged API, no special-cased access.
     # Git dependency until integrity-sdk is published to PyPI. Pinned to a reviewed commit
     # instead of tracking a moving branch so installs are reproducible.
-    "integrity-sdk @ file:///home/xibalba/Projects/INTEGRITY-LATEST/integrity-sdk",
+    "integrity-sdk @ file:///home/xibalba/Projects/integrity-core/integrity-sdk",
     "mlflow>=3.15.1",
 ]
 

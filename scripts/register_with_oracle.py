@@ -41,7 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 SDK_HINTS = [
     Path(os.getenv("INTEGRITY_SDK_PATH", "")) if os.getenv("INTEGRITY_SDK_PATH") else None,
-    Path("/home/xibalba/Projects/INTEGRITY-LATEST/integrity-sdk"),
+    Path("/home/xibalba/Projects/integrity-core/integrity-sdk"),
 ]
 for sdk_path in SDK_HINTS:
     if sdk_path and (sdk_path / "integrity_sdk" / "registration.py").exists():
@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rpc-url", default=os.getenv("RPC_URL", "http://localhost:8545"))
     parser.add_argument(
         "--deployments-file",
-        default=os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/INTEGRITY-LATEST/deployments.local.json"),
+        default=os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/integrity-core/deployments.local.json"),
     )
     parser.add_argument("--oracle-url", default=os.getenv("ORACLE_URL", "http://oracle-backend:8080"))
     parser.add_argument(

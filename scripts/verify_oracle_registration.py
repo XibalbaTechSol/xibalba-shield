@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 SDK_HINTS = [
     Path(os.getenv("INTEGRITY_SDK_PATH", "")) if os.getenv("INTEGRITY_SDK_PATH") else None,
-    Path("/home/xibalba/Projects/INTEGRITY-LATEST/integrity-sdk"),
+    Path("/home/xibalba/Projects/integrity-core/integrity-sdk"),
 ]
 for sdk_path in SDK_HINTS:
     if sdk_path and (sdk_path / "integrity_sdk" / "chain.py").exists():
@@ -44,7 +44,7 @@ def _rpc_reachable(url: str) -> bool:
 
 def main() -> int:
     rpc_url = os.getenv("RPC_URL", "http://localhost:8545")
-    deployments_file = os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/INTEGRITY-LATEST/deployments.local.json")
+    deployments_file = os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/integrity-core/deployments.local.json")
     if not _rpc_reachable(rpc_url):
         print(f"RPC {rpc_url} is unreachable", file=sys.stderr)
         return 1
