@@ -14,6 +14,8 @@ import os
 
 from shield.config import PolicyHotReloader
 from shield.policy_engine import PolicyEngine
+from shield.policy_engine.engine import EvaluationContext
+from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
 
 
 def _write_rules(path, rule_ids: list[str]):
@@ -90,6 +92,45 @@ def test_malformed_edit_keeps_last_known_good_rules(tmp_path):
     reloaded = reloader.check_and_reload()
 
     assert reloaded is False
+
+
+def test_malformed_edit_preserves_prior_decision_behavior(tmp_path):
+    """The safety property is enforcement, not just rule-list preservation."""
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps({
+        "rules": [
+            {
+                "rule_id": "block-python",
+                "name": "Block python",
+                "version": "1.0.0",
+                "conditions": [{"type": "process", "match": {"name": ["python"]}}],
+                "actions": [{"type": "contain", "message": "Blocked."}],
+            }
+        ]
+    }))
+
+    engine = PolicyEngine(rules=[])
+    reloader = PolicyHotReloader(engine, path)
+    reloader.check_and_reload()
+
+    event = ProcessActivity(
+        device_id="dev-1",
+        process=ProcessInfo(pid=1, name="python", exe_path="/usr/bin/python"),
+        activity=Activity(type="launch"),
+    )
+    ctx = EvaluationContext(tenant_id="tenant-xyz", device_role="clinical_desktop", device_id="dev-1")
+    before = engine.evaluate(event, ctx)
+    assert before.decision.action == "contain"
+
+    path.write_text("{not valid json")
+    _bump_mtime(path, 5)
+
+    reloaded = reloader.check_and_reload()
+
+    assert reloaded is False
+    after = engine.evaluate(event, ctx)
+    assert after.decision.action == before.decision.action
+    assert after.rule.rule_id == before.rule.rule_id
 
 
 def test_missing_file_keeps_last_known_good_rules(tmp_path):
