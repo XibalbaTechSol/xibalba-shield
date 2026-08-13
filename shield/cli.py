@@ -174,7 +174,7 @@ def _run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-    policy_engine = PolicyEngine(policy_version=policy_version, policy_hash=policy_hash)
+    policy_engine = PolicyEngine(opa_url=args.opa_url, policy_version=policy_version, policy_hash=policy_hash)
     if args.rules is not None:
         # PolicyHotReloader has no public "seed with an already-loaded rule set" API, so
         # its own first check_and_reload() will re-parse args.rules once more and find it
@@ -344,6 +344,11 @@ def main(argv: list[str] | None = None) -> int:
                        help="policy rules file; hot-reloaded on change if given")
     p_run.add_argument("--bcc-middleware-url", default="http://localhost:8000")
     p_run.add_argument("--oracle-url", default=None)
+    p_run.add_argument("--opa-url", default="http://localhost:8181",
+                        help="local OPA sidecar the policy engine evaluates rules against "
+                             "(PolicyEngine's own default — was previously hardcoded and "
+                             "unconfigurable, breaking any deployment where OPA isn't reachable "
+                             "at localhost, e.g. a container where it's a separate service)")
     p_run.add_argument("--agent-label", default="xibalba-shield")
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
     p_run.add_argument("--no-containment", action="store_true",

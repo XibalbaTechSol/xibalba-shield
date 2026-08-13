@@ -103,6 +103,10 @@ Goal: demonstrate Xibalba Shield as a real tenant security platform under the Xi
 - [x] Burn-in view: event rate, CPU/RAM, deny/escalate volume, export reliability, false-positive review placeholders.
 - [x] Demo controls: seed synthetic shadow-agent, sensitive-write, PHI-context, network, exporter-status, metrics, and SIEM config scenarios with clear demo labeling.
 - [ ] Add full policy editor, staged rollout controls, and richer dashboard filters.
+- [x] Add typed detection-quality metric ingestion for Shield ADR, blocking false-positive rate,
+  precision, mean time to contain, label source, and Integrity receipt/readback status.
+- [x] Add Integrity-backed detection-quality reports that reproduce Shield ADR from signed
+  decisions and labels rather than local counters alone.
 
 MVP rule: the backend and page may display synthetic demo events only when they are labeled synthetic. Customer-facing claims must be based on real agent runs, real policy evaluation, and real export/readback status.
 
@@ -120,6 +124,9 @@ MVP rule: the backend and page may display synthetic demo events only when they 
 - [x] Add explicit DID registration readback script.
 - [ ] Execute DID readback against live funded RPC/oracle environment.
 - [ ] Verify exported Shield decisions are visible through the intended evidence/audit surface.
+- [x] Verify Shield ADR and companion detection-quality metrics are reproducible through the
+  intended Integrity evidence/audit surface. Closed locally with a 2026-08-13 live smoke:
+  BCC `/v1/bcc/verify_token` and Oracle `/v1/audit-log` both confirmed the ADR-counted sample.
 - [ ] Re-run resource measurement with a registered DID and clean exporter queue.
 
 ### Policy Distribution And Updates
@@ -189,6 +196,8 @@ its containment logic — decisions still route through the real `ActionBroker`)
 - [ ] Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud escalations.
 - [ ] Implement Tier 3 Cloud Frontier fallback for ambiguous/low-confidence SLM decisions.
 - [ ] Add cloud-fallback latency and decision metrics to burn-in reporting.
+- [x] Add detection-quality metrics to burn-in reporting: Shield ADR, precision, blocking
+  false-positive rate, mean time to contain, and label provenance.
 
 ### Platform Expansion
 
@@ -203,6 +212,9 @@ its containment logic — decisions still route through the real `ActionBroker`)
 - [ ] TCP-connect sensor root verification is blocked by missing sudo/root in this environment.
 - [ ] Windows/macOS sensors are blocked on access to target platforms for implementation and verification.
 - [ ] Compliance reporting polish is blocked on integrity-core evidence export maturity.
+- [x] Detection-quality reporting is no longer blocked on Shield-side live Integrity readback:
+  the backend report verifies BCC tokens and optional Oracle audit-log rows. Full oracle-signed
+  evidence export remains an `integrity-core` Phase C concern, not a Shield backend blocker.
 - [ ] Hosted tenant policy API service is outside this repo; client is implemented and tested with a real HTTP server.
 
 - [ ] Current live eBPF/exporter re-verification is blocked until the audit environment has root capability and a live Integrity stack; `scripts/pilot_gate_report.py` records this as blocked until real artifacts are supplied.

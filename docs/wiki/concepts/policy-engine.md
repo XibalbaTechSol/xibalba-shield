@@ -100,16 +100,11 @@ schema validation (`shield validate`), and hash pinning** — never consulted by
 `PolicyRule` list at all; `shield/cli.py`'s `run` command constructs it with only
 `policy_version=`/`policy_hash=` strings.
 
-**Partially closed, 2026-08-12: one Rego policy exists, but only for one of three default packs.**
-`policies/rego/smb.rego` (package `shield.policy`, matching `opa_package_path`'s default
-`/v1/data/shield/policy` exactly) is a real, hand-translated Rego equivalent of `smb.json`'s
-three rules — start it with `opa run --server --addr localhost:8181 policies/rego/smb.rego` and
-`shield run --rules policies/defaults/smb.json` will actually enforce that pack's content.
-`professional-services.json` and `regulated.json` have **no Rego translation yet** — running
-`shield run` with either of those `--rules` today still enforces nothing from their content until
-a matching Rego policy exists and is loaded into OPA. Nothing in this repo's Quickstart starts
-OPA automatically — an operator (or CI) must run it as a separate step, or every event fails
-closed as `deny`.
+**Partially closed, 2026-08-13: all three default packs now have Rego translations.**
+`policies/rego/smb.rego`, `professional-services.rego`, and `regulated.rego` are interpreter-backed
+translations under the shared `shield.policy` package. SMB precedence and absent-agent registration
+handling are regression-tested. Each vertical must still be loaded as an isolated OPA profile;
+loading all three together would create duplicate default-rule conflicts.
 
 ## Documented drift vs. README.md and CLAUDE.md — now corrected
 

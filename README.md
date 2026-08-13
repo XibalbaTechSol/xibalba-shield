@@ -331,11 +331,17 @@ no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
   still enforced for **version/hash pinning and hot-reload trust** (`trusted_policy_hashes`), but
   its `rules` array is **no longer the decision source**. The actual decision logic lives in Rego
   policy loaded into OPA.
-- Only one JSON policy pack has a matching Rego translation today: `policies/rego/smb.rego`
-  (package `shield.policy`, hand-ported from `smb.json`'s three rules). `professional-services.json`
-  and `regulated.json` have **no Rego equivalent yet** — running `shield run --rules
-  policies/defaults/regulated.json` today enforces nothing from that file's rule content until a
-  matching Rego policy exists and is loaded into OPA.
+- Only one JSON policy pack was originally translated to Rego. The repository now contains
+  translations for all three default packs:
+  - `policies/rego/smb.rego`
+  - `policies/rego/professional-services.rego`
+  - `policies/rego/regulated.rego`
+  These translations preserve ordered first-match behavior with explicit precedence guards.
+  The SMB registration rule treats a missing registration-map key as unregistered, matching the
+  live `PolicyEngine` input contract.
+- The translations are independently checkable, but the runtime still requires deliberate
+  profile selection: loading multiple verticals into the same `shield.policy` package creates
+  duplicate defaults. `shield run` also still requires a manually started OPA sidecar.
 
 To actually exercise policy decisions locally:
 
@@ -459,6 +465,8 @@ POST /api/shield/policies/{tenant_id}/{device_id}
 GET  /api/shield/policies/{tenant_id}/{device_id}
 POST /api/shield/decisions
 POST /api/shield/metrics
+POST /api/shield/detection-quality
+POST /api/shield/detection-quality/report
 POST /api/shield/exporter-status
 GET  /api/shield/exporter-status?tenant_id=...
 POST /api/shield/integrations
@@ -501,6 +509,36 @@ The exporter:
 5. Records export status locally so operators can see evidence gaps.
 
 Local enforcement still happens if export fails. A local JSONL decision log is useful operational evidence, but it is not cryptographic proof until accepted and anchored through Integrity Protocol.
+
+## Integrity-Backed Detection Metrics
+
+Shield should also use Integrity Protocol for verifiable detection-quality measurement. The
+metric layer must stay downstream of enforcement: Shield detects, denies, contains, escalates,
+logs, and exports; Integrity aggregates signed evidence and labels into reproducible metrics.
+
+The primary v1 metric is **Shield ADR**: Attack Detection Rate.
+
+```text
+Shield ADR = true_positive_security_decisions / labeled_malicious_events
+```
+
+A `true_positive_security_decision` is a labeled malicious event where Shield returned `deny`,
+`contain`, or a justified `escalate`. Companion metrics are blocking false-positive rate,
+precision, mean time to contain, and evidence export success. Every customer-facing metric must
+be reproducible from event ID, device/tenant ID, policy version/hash, decision action, rule ID,
+export status, Integrity receipt when available, and an explicit label source such as operator
+review, benchmark harness, red-team run, or synthetic fixture.
+
+Synthetic ADR is useful for demos and CI, but it is not production detection performance. Pilot
+claims require real pilot-window labels or a documented benchmark/red-team corpus. Shield still
+does not compute AIS; Integrity Oracle owns authoritative scoring.
+
+`POST /api/shield/detection-quality/report` recomputes the latest tenant metrics from stored
+labels and verifies Integrity evidence before treating ADR as receipt-backed. It calls
+`bcc_middleware`'s `/v1/bcc/verify_token` for each counted receipt and, when `oracle_url` is
+provided, checks `/v1/audit-log` for the BCC intercept audit row. A live smoke on 2026-08-13
+verified one Shield ADR sample against `http://127.0.0.1:8000` and Oracle audit readback at
+`http://127.0.0.1:8080`.
 
 Run one-time registration and readback when the Integrity chain/oracle environment is available:
 
@@ -593,7 +631,7 @@ Helper scripts:
 
 - `scripts/install_linux_agent.sh`: installs the package and systemd unit.
 - `scripts/update_policy_bundle.sh`: fetches a tenant policy, validates it, and reloads/restarts the service.
-- `scripts/burn_in.py`: records root-free throughput, CPU/RSS, decision mix, and the fact that false-positive rates require operator-labeled pilot data.
+- `scripts/burn_in.py`: records root-free throughput, CPU/RSS, decision mix, false-positive review stats, and optional Shield ADR/precision/time-to-contain from labeled event JSONL.
 
 ## E2E Validation
 
@@ -663,15 +701,18 @@ healthcare):
   Integrity Protocol, giving a compliance reviewer a cryptographically-backed decision trail, not
   just a local log file. Built (`IntegrityExporter`), registration/live-anchoring still pending
   funded oracle credentials.
+- **Verifiable detection quality** — Shield ADR, false-positive rate, precision, mean time to
+  contain, and export success should be computed from labeled Shield evidence accepted by
+  Integrity, not asserted from local counters alone.
 - **No silent gaps** — every unbuilt or partially-built piece is marked as such in this README's
   status table, never implied complete. This is a deliberate product commitment, not just a
   documentation habit: a compliance/audit buyer needs to know exactly what's enforced today.
 
 Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full ledger):
 
-1. **Policy Model completeness** — Rego translations for `professional-services.json` and
-   `regulated.json` (only `smb.json` has one today), and a documented/scripted way to run OPA
-   alongside `shield run` instead of requiring a manually-started sidecar.
+1. **Policy Model completeness** — Rego translations for the three default JSON policy packs now
+   exist and have interpreter-backed regression coverage. The remaining integration work is a
+   documented/scripted OPA profile-selection and startup path alongside `shield run`.
 2. **Tier-2 SLM, from demo to backbone** — grow past the current small template-generated
    dataset with community help (see "Community: help build Tier 2" above), and evaluate real
    fine-tuned model quality against real endpoint telemetry.
@@ -682,6 +723,10 @@ Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full
 5. **Compliance-specific packaging** — a documented mapping from Shield's decision/evidence model
    to specific finance (e.g. SOC 2, data-handling controls) and healthcare (HIPAA) audit
    requirements. Not started; requires domain expertise this repo doesn't claim to have alone.
+6. **Detection-quality reporting** — typed metric ingestion and receipt-verified reporting now
+   exist for Shield ADR and companion metrics. The report verifies BCC middleware tokens and
+   optional Oracle audit-log readback; broader oracle-signed compliance exports remain an
+   `integrity-core` Phase C concern.
 
 ## Documentation Map
 
@@ -701,9 +746,9 @@ Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full
 
 Highest-priority gaps:
 
-- Write Rego translations for `professional-services.json` and `regulated.json` (only `smb.json`
-  has one, `policies/rego/smb.rego`), and document/script a way to run OPA alongside `shield run`
-  rather than requiring a manually-started sidecar (see "Policy Model" above).
+- Rego translations for all three default packs now exist in `policies/rego/` and are covered by
+  interpreter-backed tests. The remaining policy-model gap is deliberate OPA profile selection
+  and startup integration; the sidecar is still not started automatically by `shield run`.
 - Run root live verification for TCP-connect eBPF on the target kernel and archive `scripts/verify_tcp_connect_root.py` JSON output.
 - Register the Shield exporter DID with Integrity Oracle and archive live `GET /v1/agent/{did}` or registry readback evidence.
 - Verify exported Shield decisions through the intended Integrity evidence/audit surface.

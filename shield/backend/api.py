@@ -10,7 +10,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
+import urllib.error
+import urllib.request
 
 from ..config import ConfigError
 from .store import ShieldStore
@@ -82,6 +84,14 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"integrations": store.list_integrations(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/detection-quality":
+                if not self._require_admin():
+                    return
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None:
+                    return
+                self._send_json({"detection_quality": store.list_detection_quality(tenant_id=tenant_id)})
+                return
             self._send_error(HTTPStatus.NOT_FOUND, "not found")
 
         def do_POST(self) -> None:
@@ -128,6 +138,27 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 self._send_json(result, status=HTTPStatus.CREATED)
                 return
 
+            if parsed.path == "/api/shield/detection-quality/report":
+                if not self._require_admin():
+                    return
+                try:
+                    tenant_id = str(body["tenant_id"])
+                    bcc_middleware_url = str(body["bcc_middleware_url"])
+                    oracle_url = str(body.get("oracle_url", "")) or None
+                    report = _detection_quality_report(
+                        store.list_detection_quality(tenant_id=tenant_id),
+                        bcc_middleware_url=bcc_middleware_url,
+                        oracle_url=oracle_url,
+                    )
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"missing field {exc}")
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(report)
+                return
+
             if parsed.path == "/api/shield/integrations":
                 if not self._require_admin():
                     return
@@ -155,7 +186,12 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 self._send_json({"policy_version": bundle.version, "policy_hash": bundle.hash, "rules": len(bundle.rules)})
                 return
 
-            if parsed.path in ("/api/shield/decisions", "/api/shield/metrics", "/api/shield/exporter-status"):
+            if parsed.path in (
+                "/api/shield/decisions",
+                "/api/shield/metrics",
+                "/api/shield/detection-quality",
+                "/api/shield/exporter-status",
+            ):
                 tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
                 device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
                 if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
@@ -169,10 +205,16 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                         metrics = body.get("metrics", body)
                         row_id = store.record_metrics(tenant_id=tenant_id, device_id=device_id, metrics=metrics)
                         self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
+                    elif parsed.path == "/api/shield/detection-quality":
+                        quality = body.get("detection_quality", body)
+                        row_id = store.record_detection_quality(tenant_id=tenant_id, device_id=device_id, quality=quality)
+                        self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
                     else:
                         status_doc = body.get("status", body)
                         store.upsert_exporter_status(tenant_id=tenant_id, device_id=device_id, status=status_doc)
                         self._send_json({"ok": True})
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                 except KeyError as exc:
                     self._send_error(HTTPStatus.NOT_FOUND, str(exc))
                 return
@@ -291,6 +333,48 @@ def _seed_demo(store: ShieldStore, body: dict[str, Any], *, base_url: str) -> di
             "synthetic": True,
         },
     )
+    store.record_detection_quality(
+        tenant_id=tenant_id,
+        device_id=device_id,
+        quality={
+            "synthetic": True,
+            "samples": [
+                {
+                    "event_id": "demo-shadow-agent",
+                    "label": "malicious",
+                    "label_source": "synthetic_fixture",
+                    "decision_action": "deny",
+                    "rule_id": "demo-deny-shadow-agent",
+                    "policy_hash": bundle.hash,
+                    "export_attempted": True,
+                    "export_success": True,
+                    "integrity_receipt": "synthetic-demo-receipt",
+                },
+                {
+                    "event_id": "demo-phi-context",
+                    "label": "malicious",
+                    "label_source": "synthetic_fixture",
+                    "decision_action": "deny",
+                    "rule_id": "demo-deny-phi-context",
+                    "policy_hash": bundle.hash,
+                    "export_attempted": True,
+                    "export_success": True,
+                    "integrity_receipt": "synthetic-demo-receipt",
+                },
+                {
+                    "event_id": "demo-network-allow",
+                    "label": "benign",
+                    "label_source": "synthetic_fixture",
+                    "decision_action": "allow",
+                    "rule_id": "_no_match",
+                    "policy_hash": bundle.hash,
+                    "export_attempted": True,
+                    "export_success": True,
+                    "integrity_receipt": "synthetic-demo-receipt",
+                },
+            ],
+        },
+    )
     store.upsert_exporter_status(
         tenant_id=tenant_id,
         device_id=device_id,
@@ -352,6 +436,134 @@ def _demo_decisions(device_id: str) -> list[dict[str, Any]]:
             "decision": {"action": "allow", "severity": "low", "reason": "Synthetic benign network flow allowed."},
         },
     ]
+
+
+_SECURITY_ACTIONS = {"deny", "contain", "escalate"}
+_BLOCKING_ACTIONS = {"deny", "contain"}
+
+
+def _detection_quality_report(
+    rows: list[dict[str, Any]], *, bcc_middleware_url: str, oracle_url: str | None = None
+) -> dict[str, Any]:
+    if not rows:
+        raise ValueError("no detection-quality samples recorded for tenant")
+    latest = rows[0]
+    quality = latest["quality"]
+    samples = quality.get("samples", [])
+    verified_samples = []
+    for sample in samples:
+        checked = dict(sample)
+        checked["receipt_verified"] = _verify_detection_quality_receipt(sample, bcc_middleware_url=bcc_middleware_url)
+        checked["oracle_audit_readback"] = (
+            _verify_oracle_audit_readback(sample, oracle_url=oracle_url) if oracle_url else None
+        )
+        verified_samples.append(checked)
+    receipt_backed_samples = [sample for sample in verified_samples if sample["receipt_verified"]]
+    receipt_backed_aggregate = _aggregate_detection_quality_samples(receipt_backed_samples)
+    counted_security_decisions = [
+        sample
+        for sample in verified_samples
+        if sample.get("label") == "malicious" and sample.get("decision_action") in _SECURITY_ACTIONS
+    ]
+    unverified_counted_security_decisions = [sample for sample in counted_security_decisions if not sample["receipt_verified"]]
+    return {
+        "schema": "shield.detection_quality_report.v1",
+        "source_received_at": latest.get("received_at"),
+        "raw_aggregate": quality.get("aggregate"),
+        "receipt_backed_aggregate": receipt_backed_aggregate,
+        "samples": verified_samples,
+        "all_adr_counted_security_decisions_have_verified_receipts": not unverified_counted_security_decisions,
+        "all_adr_counted_security_decisions_have_oracle_audit_readback": (
+            None
+            if oracle_url is None
+            else all(sample.get("oracle_audit_readback") for sample in counted_security_decisions)
+        ),
+        "unverified_adr_counted_event_ids": [sample["event_id"] for sample in unverified_counted_security_decisions],
+    }
+
+
+def _verify_detection_quality_receipt(sample: dict[str, Any], *, bcc_middleware_url: str) -> bool:
+    token = sample.get("verification_token")
+    agent_id = sample.get("agent_id")
+    nonce = sample.get("nonce")
+    intended_state_hash = sample.get("intended_state_hash")
+    if not token or not agent_id or nonce is None or not intended_state_hash:
+        return False
+    payload = json.dumps(
+        {
+            "token": token,
+            "agent_id": agent_id,
+            "nonce": nonce,
+            "intended_state_hash": intended_state_hash,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{bcc_middleware_url.rstrip('/')}/v1/bcc/verify_token",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.HTTPError, json.JSONDecodeError):
+        return False
+    return bool(result.get("valid"))
+
+
+def _verify_oracle_audit_readback(sample: dict[str, Any], *, oracle_url: str | None) -> bool:
+    if not oracle_url or not sample.get("agent_id"):
+        return False
+    query = urlencode({"agent_id": str(sample["agent_id"]), "limit": "25"})
+    request = urllib.request.Request(
+        f"{oracle_url.rstrip('/')}/v1/audit-log?{query}",
+        method="GET",
+        headers={"Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.HTTPError, json.JSONDecodeError):
+        return False
+    if not isinstance(rows, list):
+        return False
+    batch_index = sample.get("batch_index")
+    return any(
+        row.get("source") == "bcc_middleware"
+        and row.get("event_type") == "bcc_intercept"
+        and row.get("decision") == "allow"
+        and (batch_index is None or str(batch_index) in str(row.get("detail", "")))
+        for row in rows
+        if isinstance(row, dict)
+    )
+
+
+def _aggregate_detection_quality_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    malicious = [sample for sample in samples if sample.get("label") == "malicious"]
+    benign = [sample for sample in samples if sample.get("label") == "benign"]
+    true_positive = [sample for sample in malicious if sample.get("decision_action") in _SECURITY_ACTIONS]
+    security_decisions = [sample for sample in samples if sample.get("decision_action") in _SECURITY_ACTIONS]
+    blocking_false_positive = [sample for sample in benign if sample.get("decision_action") in _BLOCKING_ACTIONS]
+    export_attempted = [sample for sample in samples if sample.get("export_attempted")]
+    export_success = [sample for sample in export_attempted if sample.get("export_success")]
+    return {
+        "sample_count": len(samples),
+        "labeled_malicious_events": len(malicious),
+        "true_positive_security_decisions": len(true_positive),
+        "shield_adr": _rate(len(true_positive), len(malicious)),
+        "labeled_benign_events": len(benign),
+        "benign_events_blocked_or_contained": len(blocking_false_positive),
+        "blocking_false_positive_rate": _rate(len(blocking_false_positive), len(benign)),
+        "all_deny_contain_escalate_decisions": len(security_decisions),
+        "precision": _rate(len(true_positive), len(security_decisions)),
+        "export_attempted_decisions": len(export_attempted),
+        "successful_exports": len(export_success),
+        "evidence_export_success": _rate(len(export_success), len(export_attempted)),
+    }
+
+
+def _rate(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 6) if denominator else None
 
 
 def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "") -> ThreadingHTTPServer:
@@ -514,6 +726,10 @@ def _console_html() -> str:
       <h2>Latest Burn-In Metrics</h2>
       <div class="panel"><code id="metrics">No metrics yet.</code></div>
     </section>
+    <section>
+      <h2>Detection Quality</h2>
+      <div class="panel"><code id="detectionQuality">No detection-quality samples yet.</code></div>
+    </section>
   </main>
   <script>
     let summaryData = null;
@@ -545,6 +761,7 @@ def _console_html() -> str:
         return `<tr><td><span class="pill ${escapeHtml(action)}">${escapeHtml(action)}</span>${synthetic}</td><td>${escapeHtml((d.rule || {}).rule_id || '')}</td><td>${escapeHtml((d.event_ref || {}).class || d.class || '')}</td><td>${exp.decision_exported ? 'ok' : 'gap'}</td></tr>`;
       }).join('');
       document.getElementById('metrics').textContent = data.latest_metrics ? JSON.stringify(data.latest_metrics, null, 2) : 'No metrics yet.';
+      document.getElementById('detectionQuality').textContent = data.latest_detection_quality ? JSON.stringify(data.latest_detection_quality.aggregate, null, 2) : 'No detection-quality samples yet.';
       summaryData = data;
       buildGraph(data);
       drawGraph();
@@ -603,6 +820,11 @@ def _console_html() -> str:
       if (data.latest_metrics) {
         nodes.push({ id: 'metrics:latest', label: 'burn-in metrics', type: 'metrics', x: 430, y: 82, z: -16 });
         devices.forEach(device => edges.push({ from: `device:${device.device_id}`, to: 'metrics:latest', type: 'metrics' }));
+      }
+      if (data.latest_detection_quality) {
+        const adr = data.latest_detection_quality.aggregate && data.latest_detection_quality.aggregate.shield_adr;
+        nodes.push({ id: 'quality:latest', label: `Shield ADR ${adr === null || adr === undefined ? 'n/a' : adr}`, type: 'metrics', x: 520, y: 28, z: 34 });
+        devices.forEach(device => edges.push({ from: `device:${device.device_id}`, to: 'quality:latest', type: 'metrics' }));
       }
       (data.integrations || []).slice(0, 4).forEach((integration, index) => {
         const nodeId = `integration:${integration.integration_id}`;

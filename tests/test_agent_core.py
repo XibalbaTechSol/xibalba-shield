@@ -139,7 +139,14 @@ def test_router_reports_real_exporter_result_when_configured():
             pass
 
         def export_decision(self, decision):
-            return {"authorized": True}
+            return {
+                "authorized": True,
+                "verification_token": "token-1",
+                "batch_index": 3,
+                "agent_id": "did:integrity:test",
+                "nonce": 7,
+                "intended_state_hash": "0x" + "a" * 64,
+            }
 
     router = _router(exporter=_StubExporter())
     decision = router.handle(AgentEvent(
@@ -151,6 +158,11 @@ def test_router_reports_real_exporter_result_when_configured():
     assert decision.export.event_exported is True
     assert decision.export.decision_exported is True
     assert decision.export.authorized is True
+    assert decision.export.verification_token == "token-1"
+    assert decision.export.batch_index == 3
+    assert decision.export.agent_id == "did:integrity:test"
+    assert decision.export.nonce == 7
+    assert decision.export.intended_state_hash == "0x" + "a" * 64
 
 
 def test_exporter_failure_does_not_suppress_telemetry_export():

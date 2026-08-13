@@ -4,7 +4,7 @@ import json
 import threading
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from shield.backend.api import make_handler
 from shield.backend.store import ShieldStore
@@ -144,6 +144,241 @@ def test_backend_ingests_authenticated_decisions_and_metrics_for_dashboard(tmp_p
         assert summary["decisions_by_action"] == {"deny": 1}
         assert summary["latest_decisions"][0]["decision"]["synthetic"] is True
         assert summary["latest_metrics"]["events_per_sec"] == 42
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_ingests_detection_quality_and_exposes_summary(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-1"},
+        )
+        token = enrolled["device_token"]
+
+        status, result = _request(
+            f"{base}/api/shield/detection-quality",
+            method="POST",
+            token=token,
+            body={
+                "tenant_id": "tenant-a",
+                "device_id": "dev-1",
+                "detection_quality": {
+                    "samples": [
+                        {
+                            "event_id": "evt-mal-1",
+                            "label": "malicious",
+                            "label_source": "red_team",
+                            "decision_action": "contain",
+                            "first_observed_timestamp": "2026-08-13T10:00:00Z",
+                            "containment_timestamp": "2026-08-13T10:00:03Z",
+                            "export_attempted": True,
+                            "export_success": True,
+                        },
+                        {
+                            "event_id": "evt-mal-2",
+                            "label": "malicious",
+                            "label_source": "red_team",
+                            "decision_action": "allow",
+                            "export_attempted": True,
+                            "export_success": False,
+                        },
+                        {
+                            "event_id": "evt-benign-1",
+                            "label": "benign",
+                            "label_source": "operator_review",
+                            "decision_action": "deny",
+                            "export_attempted": True,
+                            "export_success": True,
+                        },
+                    ]
+                },
+            },
+        )
+        assert status == 201
+        assert result["id"] == 1
+
+        _status, listed = _request(f"{base}/api/shield/detection-quality?tenant_id=tenant-a")
+        quality = listed["detection_quality"][0]["quality"]
+        assert quality["aggregate"]["shield_adr"] == 0.5
+        assert quality["aggregate"]["precision"] == 0.5
+        assert quality["aggregate"]["blocking_false_positive_rate"] == 1.0
+        assert quality["aggregate"]["mean_time_to_contain_sec"] == 3.0
+        assert quality["aggregate"]["evidence_export_success"] == 0.666667
+
+        _status, summary = _request(f"{base}/api/shield/dashboard-summary?tenant_id=tenant-a")
+        assert summary["latest_detection_quality"]["aggregate"]["shield_adr"] == 0.5
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_detection_quality_report_verifies_integrity_receipts(tmp_path):
+    class VerifyHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.startswith("/v1/audit-log"):
+                raw = json.dumps(
+                    [
+                        {
+                            "id": "audit-1",
+                            "agent_id": "did:integrity:test",
+                            "source": "bcc_middleware",
+                            "event_type": "bcc_intercept",
+                            "decision": "allow",
+                            "detail": "admitted to merkle batch index 0",
+                            "created_at": "2026-08-13T10:00:00Z",
+                        }
+                    ]
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            valid = (
+                self.path == "/v1/bcc/verify_token"
+                and body.get("token") == "valid-token"
+                and body.get("agent_id") == "did:integrity:test"
+                and body.get("nonce") == 1
+                and body.get("intended_state_hash") == "0x" + "a" * 64
+            )
+            raw = json.dumps({"valid": valid}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, _format, *_args):
+            pass
+
+    verify_server = ThreadingHTTPServer(("127.0.0.1", 0), VerifyHandler)
+    verify_thread = threading.Thread(target=verify_server.serve_forever, daemon=True)
+    verify_thread.start()
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-1"},
+        )
+        token = enrolled["device_token"]
+        _request(
+            f"{base}/api/shield/detection-quality",
+            method="POST",
+            token=token,
+            body={
+                "tenant_id": "tenant-a",
+                "device_id": "dev-1",
+                "detection_quality": {
+                    "samples": [
+                        {
+                            "event_id": "evt-valid",
+                            "label": "malicious",
+                            "label_source": "red_team",
+                            "decision_action": "deny",
+                            "export_attempted": True,
+                            "export_success": True,
+                            "verification_token": "valid-token",
+                            "batch_index": 0,
+                            "agent_id": "did:integrity:test",
+                            "nonce": 1,
+                            "intended_state_hash": "0x" + "a" * 64,
+                        },
+                        {
+                            "event_id": "evt-invalid",
+                            "label": "malicious",
+                            "label_source": "red_team",
+                            "decision_action": "contain",
+                            "export_attempted": True,
+                            "export_success": True,
+                            "verification_token": "invalid-token",
+                            "batch_index": 1,
+                            "agent_id": "did:integrity:test",
+                            "nonce": 2,
+                            "intended_state_hash": "0x" + "b" * 64,
+                        },
+                        {
+                            "event_id": "evt-benign",
+                            "label": "benign",
+                            "label_source": "operator_review",
+                            "decision_action": "allow",
+                            "export_attempted": True,
+                            "export_success": True,
+                            "verification_token": "valid-token",
+                            "batch_index": 0,
+                            "agent_id": "did:integrity:test",
+                            "nonce": 1,
+                            "intended_state_hash": "0x" + "a" * 64,
+                        },
+                    ]
+                },
+            },
+        )
+
+        status, report = _request(
+            f"{base}/api/shield/detection-quality/report",
+            method="POST",
+            body={
+                "tenant_id": "tenant-a",
+                "bcc_middleware_url": f"http://127.0.0.1:{verify_server.server_port}",
+                "oracle_url": f"http://127.0.0.1:{verify_server.server_port}",
+            },
+        )
+
+        assert status == 200
+        assert report["raw_aggregate"]["shield_adr"] == 1.0
+        assert report["receipt_backed_aggregate"]["shield_adr"] == 1.0
+        assert report["receipt_backed_aggregate"]["labeled_malicious_events"] == 1
+        assert report["all_adr_counted_security_decisions_have_verified_receipts"] is False
+        assert report["all_adr_counted_security_decisions_have_oracle_audit_readback"] is False
+        assert report["unverified_adr_counted_event_ids"] == ["evt-invalid"]
+        receipt_by_event = {sample["event_id"]: sample["receipt_verified"] for sample in report["samples"]}
+        assert receipt_by_event == {"evt-valid": True, "evt-invalid": False, "evt-benign": True}
+        audit_by_event = {sample["event_id"]: sample["oracle_audit_readback"] for sample in report["samples"]}
+        assert audit_by_event == {"evt-valid": True, "evt-invalid": False, "evt-benign": True}
+    finally:
+        server.shutdown()
+        store.close()
+        verify_server.shutdown()
+
+
+def test_backend_rejects_malformed_detection_quality(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-1"},
+        )
+        request = urllib.request.Request(
+            f"{base}/api/shield/detection-quality",
+            data=json.dumps(
+                {
+                    "tenant_id": "tenant-a",
+                    "device_id": "dev-1",
+                    "detection_quality": {"samples": [{"event_id": "evt-1", "label": "malicious"}]},
+                }
+            ).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {enrolled['device_token']}"},
+        )
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 400
+        else:
+            raise AssertionError("expected malformed detection-quality rejection")
     finally:
         server.shutdown()
         store.close()

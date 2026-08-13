@@ -8,6 +8,7 @@ import secrets
 import sqlite3
 import tempfile
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -97,6 +98,20 @@ class ShieldStore:
                 tenant_id TEXT NOT NULL,
                 device_id TEXT NOT NULL,
                 metrics_json TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS detection_quality (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                quality_json TEXT NOT NULL,
+                shield_adr REAL,
+                precision REAL,
+                blocking_false_positive_rate REAL,
+                mean_time_to_contain_sec REAL,
+                synthetic INTEGER NOT NULL DEFAULT 0,
                 received_at TEXT NOT NULL,
                 FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
             );
@@ -271,6 +286,49 @@ class ShieldStore:
             self._touch_device(tenant_id, device_id)
         return int(cursor.lastrowid)
 
+    def record_detection_quality(self, *, tenant_id: str, device_id: str, quality: dict[str, Any]) -> int:
+        self._require_device(tenant_id, device_id)
+        normalized = _normalize_detection_quality(quality)
+        aggregate = normalized["aggregate"]
+        with self._conn:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO detection_quality
+                    (tenant_id, device_id, quality_json, shield_adr, precision, blocking_false_positive_rate,
+                     mean_time_to_contain_sec, synthetic, received_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    device_id,
+                    json.dumps(normalized, sort_keys=True),
+                    aggregate["shield_adr"],
+                    aggregate["precision"],
+                    aggregate["blocking_false_positive_rate"],
+                    aggregate["mean_time_to_contain_sec"],
+                    int(bool(normalized.get("synthetic"))),
+                    _now(),
+                ),
+            )
+            self._touch_device(tenant_id, device_id)
+        return int(cursor.lastrowid)
+
+    def list_detection_quality(self, *, tenant_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT device_id, quality_json, received_at
+            FROM detection_quality
+            WHERE tenant_id=?
+            ORDER BY id DESC
+            LIMIT 25
+            """,
+            (tenant_id,),
+        ).fetchall()
+        return [
+            {"device_id": row["device_id"], "quality": json.loads(row["quality_json"]), "received_at": row["received_at"]}
+            for row in rows
+        ]
+
     def upsert_exporter_status(self, *, tenant_id: str, device_id: str, status: dict[str, Any]) -> None:
         self._require_device(tenant_id, device_id)
         with self._conn:
@@ -370,6 +428,16 @@ class ShieldStore:
             """,
             (tenant_id,),
         ).fetchone()
+        quality_row = self._conn.execute(
+            """
+            SELECT quality_json, received_at
+            FROM detection_quality
+            WHERE tenant_id=?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (tenant_id,),
+        ).fetchone()
         return {
             "tenant_id": tenant_id,
             "device_count": len(devices),
@@ -380,6 +448,7 @@ class ShieldStore:
                 for row in latest_rows
             ],
             "latest_metrics": json.loads(metrics_row["metrics_json"]) if metrics_row else None,
+            "latest_detection_quality": json.loads(quality_row["quality_json"]) if quality_row else None,
             "exporter_status": self.list_exporter_status(tenant_id=tenant_id),
             "integrations": self.list_integrations(tenant_id=tenant_id),
         }
@@ -398,3 +467,118 @@ class ShieldStore:
     def _validate_id(label: str, value: str) -> None:
         if not value or any(ch in value for ch in "/?#"):
             raise ConfigError(f"{label} must be non-empty and must not contain '/', '?', or '#'")
+
+
+_DETECTION_LABELS = {"malicious", "benign", "ambiguous", "synthetic"}
+_SECURITY_ACTIONS = {"deny", "contain", "escalate"}
+_BLOCKING_ACTIONS = {"deny", "contain"}
+
+
+def _normalize_detection_quality(doc: dict[str, Any]) -> dict[str, Any]:
+    samples = doc.get("samples")
+    if not isinstance(samples, list) or not samples:
+        raise ValueError("detection quality requires a non-empty samples list")
+
+    normalized_samples = [_normalize_detection_quality_sample(sample) for sample in samples]
+    aggregate = _detection_quality_aggregate(normalized_samples)
+    synthetic = bool(doc.get("synthetic")) or any(sample["label"] == "synthetic" for sample in normalized_samples)
+    return {
+        "schema": "shield.detection_quality.v1",
+        "synthetic": synthetic,
+        "aggregate": aggregate,
+        "samples": normalized_samples,
+    }
+
+
+def _normalize_detection_quality_sample(sample: Any) -> dict[str, Any]:
+    if not isinstance(sample, dict):
+        raise ValueError("each detection quality sample must be an object")
+    event_id = str(sample.get("event_id", "")).strip()
+    label = str(sample.get("label", "")).strip().lower()
+    label_source = str(sample.get("label_source", "")).strip()
+    action = str(sample.get("decision_action", sample.get("action", ""))).strip().lower()
+    if not event_id:
+        raise ValueError("detection quality sample missing event_id")
+    if label not in _DETECTION_LABELS:
+        raise ValueError(f"detection quality sample {event_id} has invalid label {label!r}")
+    if not label_source:
+        raise ValueError(f"detection quality sample {event_id} missing label_source")
+    if not action:
+        raise ValueError(f"detection quality sample {event_id} missing decision_action")
+
+    receipt = sample.get("integrity_receipt") if isinstance(sample.get("integrity_receipt"), dict) else {}
+    normalized = {
+        "event_id": event_id,
+        "label": label,
+        "label_source": label_source,
+        "decision_action": action,
+        "policy_hash": sample.get("policy_hash"),
+        "rule_id": sample.get("rule_id"),
+        "export_attempted": bool(sample.get("export_attempted", sample.get("exported", False))),
+        "export_success": bool(sample.get("export_success", sample.get("decision_exported", False))),
+        "integrity_receipt": sample.get("integrity_receipt"),
+        "verification_token": sample.get("verification_token", receipt.get("verification_token")),
+        "batch_index": sample.get("batch_index", receipt.get("batch_index")),
+        "agent_id": sample.get("agent_id", receipt.get("agent_id")),
+        "nonce": sample.get("nonce", receipt.get("nonce")),
+        "intended_state_hash": sample.get("intended_state_hash", receipt.get("intended_state_hash")),
+        "first_observed_timestamp": sample.get("first_observed_timestamp"),
+        "containment_timestamp": sample.get("containment_timestamp"),
+    }
+    return normalized
+
+
+def _detection_quality_aggregate(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    malicious = [sample for sample in samples if sample["label"] == "malicious"]
+    benign = [sample for sample in samples if sample["label"] == "benign"]
+    true_positive = [sample for sample in malicious if sample["decision_action"] in _SECURITY_ACTIONS]
+    security_decisions = [sample for sample in samples if sample["decision_action"] in _SECURITY_ACTIONS]
+    blocking_false_positive = [sample for sample in benign if sample["decision_action"] in _BLOCKING_ACTIONS]
+    export_attempted = [sample for sample in samples if sample["export_attempted"]]
+    export_success = [sample for sample in export_attempted if sample["export_success"]]
+    contain_latencies = [
+        latency
+        for sample in true_positive
+        if sample["decision_action"] == "contain"
+        for latency in [_seconds_between(sample.get("first_observed_timestamp"), sample.get("containment_timestamp"))]
+        if latency is not None
+    ]
+    return {
+        "sample_count": len(samples),
+        "labeled_malicious_events": len(malicious),
+        "true_positive_security_decisions": len(true_positive),
+        "shield_adr": _rate(len(true_positive), len(malicious)),
+        "labeled_benign_events": len(benign),
+        "benign_events_blocked_or_contained": len(blocking_false_positive),
+        "blocking_false_positive_rate": _rate(len(blocking_false_positive), len(benign)),
+        "all_deny_contain_escalate_decisions": len(security_decisions),
+        "precision": _rate(len(true_positive), len(security_decisions)),
+        "mean_time_to_contain_sec": round(sum(contain_latencies) / len(contain_latencies), 6) if contain_latencies else None,
+        "export_attempted_decisions": len(export_attempted),
+        "successful_exports": len(export_success),
+        "evidence_export_success": _rate(len(export_success), len(export_attempted)),
+    }
+
+
+def _rate(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 6) if denominator else None
+
+
+def _seconds_between(start: Any, end: Any) -> float | None:
+    if not start or not end:
+        return None
+    try:
+        start_dt = _parse_timestamp(str(start))
+        end_dt = _parse_timestamp(str(end))
+    except ValueError:
+        return None
+    return max(0.0, (end_dt - start_dt).total_seconds())
+
+
+def _parse_timestamp(value: str) -> datetime:
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed

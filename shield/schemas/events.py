@@ -209,6 +209,11 @@ class ExportStatus:
     decision_exported: bool = False
     authorized: bool | None = None
     reason: str = ""
+    verification_token: str | None = None
+    batch_index: int | None = None
+    agent_id: str | None = None
+    nonce: int | None = None
+    intended_state_hash: str | None = None
 
 
 @dataclass

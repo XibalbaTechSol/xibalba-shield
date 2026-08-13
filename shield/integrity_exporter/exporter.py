@@ -93,7 +93,12 @@ class IntegrityExporter:
             keypair=self.keypair,
         )
         try:
-            return bcc.submit_commitment(commitment, self.bcc_middleware_url)
+            result = bcc.submit_commitment(commitment, self.bcc_middleware_url)
+            if isinstance(result, dict):
+                result.setdefault("agent_id", commitment["agent_id"])
+                result.setdefault("nonce", commitment["nonce"])
+                result.setdefault("intended_state_hash", commitment["intended_state_hash"])
+            return result
         except Exception as exc:  # noqa: BLE001
             # Evidence export is best-effort by design (spec §4.5 doesn't require it to
             # block enforcement) — a real decision was already made and acted on upstream;

@@ -1,7 +1,28 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-08-13] update | Rego policy bundle coverage
+
+- Added interpreter-backed Rego translations for the professional-services and regulated default
+  policy bundles and corrected SMB first-match precedence plus absent-registration handling.
+- Focused verification: 7 Shield policy tests passed; individual Rego files passed `opa check`.
+- The local runtime still requires an OPA sidecar and deliberate vertical/profile selection; those
+  deployment/runtime gaps remain open.
+
+
 > Chronological record of wiki actions. Append-only — never edit past entries.
 > Actions: ingest, create, update, lint, query, archive
+
+## [2026-08-13] update | Detection quality metrics
+
+- Created `concepts/shield-detection-quality-metrics.md` to define Shield ADR, false-positive
+  rate, precision, mean time to contain, and evidence export success as labeled-evidence metrics.
+- Updated the wiki home, index, and Integrity Exporter page to make the boundary explicit:
+  Shield emits/verifies local evidence; Integrity aggregates and reports detection quality;
+  Shield does not compute AIS.
+- Added backend ingestion and burn-in aggregation for typed detection-quality samples.
+- Added receipt-verified detection-quality reporting and ran a live local smoke against BCC
+  `/v1/bcc/verify_token` plus Oracle `/v1/audit-log`; full oracle-signed evidence export remains
+  an `integrity-core` Phase C item.
 
 ## [2026-08-12] create | Initial Shield wiki
 

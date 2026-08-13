@@ -168,6 +168,11 @@ class EventRouter:
         event_exported = False
         decision_exported = False
         authorized: bool | None = None
+        verification_token: str | None = None
+        batch_index: int | None = None
+        agent_id: str | None = None
+        nonce: int | None = None
+        intended_state_hash: str | None = None
         reasons: list[str] = []
 
         try:
@@ -192,6 +197,11 @@ class EventRouter:
                 result = self.exporter.export_decision(decision)
                 export_attempted = True
                 authorized = result.get("authorized") if isinstance(result, dict) else None
+                verification_token = result.get("verification_token") if isinstance(result, dict) else None
+                batch_index = result.get("batch_index") if isinstance(result, dict) else None
+                agent_id = result.get("agent_id") if isinstance(result, dict) else None
+                nonce = result.get("nonce") if isinstance(result, dict) else None
+                intended_state_hash = result.get("intended_state_hash") if isinstance(result, dict) else None
                 decision_exported = authorized is True
                 if not decision_exported:
                     reasons.append(str(result.get("reason", "")) if isinstance(result, dict) else "")
@@ -210,6 +220,11 @@ class EventRouter:
             decision_exported=decision_exported,
             authorized=authorized,
             reason="; ".join(r for r in reasons if r),
+            verification_token=verification_token,
+            batch_index=batch_index,
+            agent_id=agent_id,
+            nonce=nonce,
+            intended_state_hash=intended_state_hash,
         )
 
         if self.event_log is not None:

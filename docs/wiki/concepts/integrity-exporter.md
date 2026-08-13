@@ -15,6 +15,7 @@ source_files:
 ## Table of contents
 
 - [Overview](#overview)
+- [Detection quality evidence](#detection-quality-evidence)
 - [What it does on construction](#what-it-does-on-construction)
 - [Two export methods, two different Integrity Protocol endpoints](#two-export-methods-two-different-integrity-protocol-endpoints)
 - [Restored 2026-08-12](#restored-2026-08-12)
@@ -28,6 +29,15 @@ source_files:
 existing primitives with no privileged shortcut. It does not compute AIS — that remains
 `integrity-oracle`'s scoring-core's job in the parent repo — and has no code path that bypasses
 that rule.
+
+## Detection quality evidence
+
+The exporter is also the right bridge for Shield detection-quality metrics. Shield should emit
+signed decisions, event telemetry, policy hashes, export status, and operator or benchmark
+labels; Integrity should aggregate those records into reproducible metrics such as
+[Shield ADR](shield-detection-quality-metrics.md), false-positive rate, precision, mean time to
+contain, and export success. Shield still does not compute AIS or any authoritative security
+score locally.
 
 ## What it does on construction
 
@@ -93,3 +103,5 @@ is allowed. This is the load-bearing fact behind
 - [Policy Engine](policy-engine.md) — produces the decisions this module exports
 - [Compliance Evidence Trail](../queries/compliance-evidence-trail.md) — what this evidence is
   and isn't sufficient for
+- [Shield Detection Quality Metrics](shield-detection-quality-metrics.md) — how labeled Shield
+  evidence supports ADR and false-positive measurement

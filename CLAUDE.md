@@ -36,9 +36,10 @@ shield/
 ├── policy_engine/      # Delegates evaluation to a local OPA sidecar (since 2026-08-07,
 │                        # commit f86c0f0) — spec §4.3, §7 — condition groups:
 │                        # process/agent/file/flow/context/activity, authored as Rego.
-│                        # Only policies/rego/smb.rego exists; professional-services.json
-│                        # and regulated.json have no Rego translation yet. JSON rule
-│                        # bundles are still used for version/hash pinning, not decisions.
+│                        # Rego translations for smb, professional-services, and regulated
+│                        # packs exist under policies/rego/. Each vertical must be loaded in
+│                        # an isolated OPA package/profile; JSON bundles remain used for
+│                        # version/hash pinning, not direct decisions.
 ├── guardrail_hooks/     # all 6 hook points, all real — spec §4.4
 ├── integrity_exporter/  # Wraps integrity-sdk: real BCC signing + telemetry — spec §4.5
 ├── schemas/             # Event classes (§5) + policy rule shape (§7), canonical, no renaming

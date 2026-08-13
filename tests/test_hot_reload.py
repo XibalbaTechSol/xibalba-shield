@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 import os
+from unittest.mock import patch, AsyncMock
+
+from integrity_sdk.policy.opa_client import OPADecision
 
 from shield.config import PolicyHotReloader
 from shield.policy_engine import PolicyEngine
@@ -94,22 +97,36 @@ def test_malformed_edit_keeps_last_known_good_rules(tmp_path):
     assert reloaded is False
 
 
-def test_malformed_edit_preserves_prior_decision_behavior(tmp_path):
-    """The safety property is enforcement, not just rule-list preservation."""
-    path = tmp_path / "rules.json"
-    path.write_text(json.dumps({
-        "rules": [
-            {
-                "rule_id": "block-python",
-                "name": "Block python",
-                "version": "1.0.0",
-                "conditions": [{"type": "process", "match": {"name": ["python"]}}],
-                "actions": [{"type": "contain", "message": "Blocked."}],
-            }
-        ]
-    }))
+@patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock)
+def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_path):
+    """The safety property is enforcement, not just rule-list preservation.
 
-    engine = PolicyEngine(rules=[])
+    Rewritten post-OPA-delegation (2026-08-07, commit f86c0f0): `PolicyEngine` no longer
+    takes a `rules=` list or matches JSON conditions/actions itself -- actual rule matching
+    is OPA's job now (see policy_engine/engine.py, test_policy_engine.py's own
+    `@patch(...opa_evaluate...)` pattern, which this mirrors). What `PolicyHotReloader`
+    still controls on `PolicyEngine` is exactly `policy_version`/`policy_hash` (see
+    config/hot_reload.py) -- those are what must stay pinned to the last-known-good bundle
+    across a malformed edit, echoed unchanged in every decision OPA produces in the
+    meantime. `test_malformed_edit_keeps_last_known_good_rules` above already proves
+    `reloaded is False`; this test proves the consequence that matters -- a live decision's
+    `policy.version`/`policy.hash` fields don't silently change underneath a bad edit.
+    """
+    mock_evaluate.return_value = OPADecision(
+        allow=False,
+        raw_result={
+            "action": "contain",
+            "message": "Blocked.",
+            "rule_id": "block-python",
+            "name": "Block python",
+            "version": "1.0.0",
+        },
+    )
+
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["block-python"])
+
+    engine = PolicyEngine()
     reloader = PolicyHotReloader(engine, path)
     reloader.check_and_reload()
 
@@ -121,13 +138,17 @@ def test_malformed_edit_preserves_prior_decision_behavior(tmp_path):
     ctx = EvaluationContext(tenant_id="tenant-xyz", device_role="clinical_desktop", device_id="dev-1")
     before = engine.evaluate(event, ctx)
     assert before.decision.action == "contain"
+    assert before.policy.version == "v-1"
 
     path.write_text("{not valid json")
     _bump_mtime(path, 5)
 
     reloaded = reloader.check_and_reload()
-
     assert reloaded is False
+
+    after = engine.evaluate(event, ctx)
+    assert after.decision.action == "contain"
+    assert after.policy.version == "v-1"  # unchanged by the malformed edit, not blanked/bumped
     after = engine.evaluate(event, ctx)
     assert after.decision.action == before.decision.action
     assert after.rule.rule_id == before.rule.rule_id

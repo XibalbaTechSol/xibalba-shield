@@ -197,6 +197,59 @@ def test_tcp_connect_root_verifier_reports_blocked_without_root():
 
 
 
+def test_burn_in_detection_quality_stats_from_labeled_events(tmp_path):
+    from scripts.burn_in import _load_detection_quality_stats
+
+    labels = tmp_path / "detection-quality.jsonl"
+    labels.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "event_id": "evt-mal-1",
+                        "label": "malicious",
+                        "label_source": "red_team",
+                        "decision_action": "contain",
+                        "first_observed_timestamp": "2026-08-13T10:00:00Z",
+                        "containment_timestamp": "2026-08-13T10:00:02Z",
+                        "export_attempted": True,
+                        "export_success": True,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "event_id": "evt-mal-2",
+                        "label": "malicious",
+                        "label_source": "red_team",
+                        "decision_action": "allow",
+                        "export_attempted": True,
+                        "export_success": False,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "event_id": "evt-benign-1",
+                        "label": "benign",
+                        "label_source": "operator_review",
+                        "decision_action": "deny",
+                        "export_attempted": True,
+                        "export_success": True,
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+
+    stats = _load_detection_quality_stats(labels)
+
+    assert stats["shield_adr"] == 0.5
+    assert stats["precision"] == 0.5
+    assert stats["blocking_false_positive_rate"] == 1.0
+    assert stats["mean_time_to_contain_sec"] == 2.0
+    assert stats["evidence_export_success"] == 0.666667
+
+
 def test_pilot_gate_report_blocks_without_external_artifacts():
     proc = subprocess.run(
         [sys.executable, "scripts/pilot_gate_report.py", "--json"],

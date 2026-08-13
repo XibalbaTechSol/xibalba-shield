@@ -374,6 +374,30 @@ The backend MVP is a tenant control plane for demos and pilots. It must not beco
 
 The backend stores tenant/device state, policy bundles, decision summaries, metrics, exporter status, and SIEM/SOAR integration config in SQLite for the MVP. Production hosting may replace SQLite only if tenant isolation, device-token authentication, and policy-fetch compatibility are preserved.
 
+## 11.2 Detection Quality Metrics
+
+Shield must use Integrity Protocol for verifiable detection-quality measurement, not for inline
+attack detection. The local enforcement loop remains authoritative for endpoint decisions.
+Integrity receives signed decisions, event telemetry, policy hashes, export status, and explicit
+labels so downstream reports can reproduce quality metrics.
+
+The canonical v1 metric is Shield ADR: `true_positive_security_decisions /
+labeled_malicious_events`. A true positive is a labeled malicious event for which Shield returned
+`deny`, `contain`, or a justified `escalate`. Companion metrics are blocking false-positive rate,
+precision, mean time to contain, and evidence export success.
+
+Any customer-facing metric must identify event ID, device ID, tenant ID, policy version/hash,
+decision action, rule ID, export status, Integrity receipt when available, label, and label
+source. Synthetic labels are valid for CI and demos only; pilot claims require real pilot-window,
+benchmark, or red-team labels. Shield must not compute AIS or any authoritative security score
+locally; Integrity Oracle/reporting may derive rollups from Shield evidence.
+
+The Shield backend's detection-quality report must distinguish raw labeled metrics from
+receipt-backed metrics. Receipt-backed ADR requires BCC middleware `/v1/bcc/verify_token` success
+for each ADR-counted security decision. When an Oracle URL is supplied, the report also checks
+`/v1/audit-log` for BCC intercept audit readback, but the BCC verification token remains the
+cryptographic approval receipt.
+
 ## 12. Privacy, Data Minimization, And Regulated Environments
 
 Shield follows behavioral telemetry only.
@@ -415,6 +439,11 @@ In regulated environments, Shield must tag PHI-bearing resources by class and ac
 Shield does not own a separate compliance export path. Compliance reporting must compose through Integrity Protocol evidence exports so the customer sees one evidence chain instead of parallel logs.
 
 Minimum future report dimensions: device ID and tenant, agent/workload identity, policy version/hash, event class, action/decision, reason and severity, BCC commitment ID/token, anchor/receipt link when available, and export status/gaps.
+
+Compliance reports that claim detection quality must also include labeled-event denominators,
+label source, Shield ADR, blocking false-positive rate, precision, mean time to contain when
+containment is claimed, BCC verification-token proof status, optional Oracle audit-log readback,
+and enough Integrity receipt data to reproduce the metric from evidence.
 
 ## 15. Testing And Verification
 
