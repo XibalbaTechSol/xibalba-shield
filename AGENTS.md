@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`shield/` contains the Python package. Core routing and logs live in `agent_core/`, JSON config and policy distribution in `config/`, guardrail hooks in `guardrail_hooks/`, Integrity export code in `integrity_exporter/`, deterministic policy evaluation in `policy_engine/`, event/rule dataclasses in `schemas/`, Linux/dev sensors in `sensors/`, and SIEM/SOAR adapters in `integrations/`. `shield/cli.py` is the operator CLI. Tests are under `tests/`. Default policy bundles are in `policies/defaults/`; systemd assets are in `packaging/systemd/`; helper and validation scripts are in `scripts/`; design/runbook/audit docs are in `docs/`.
+`shield/` contains the Python package. Core routing and logs live in `agent_core/`, JSON config and policy distribution in `config/`, guardrail hooks in `guardrail_hooks/`, Integrity export code in `integrity_exporter/`, deterministic policy evaluation (Tier 1 of the Hybrid Cascading Architecture) in `policy_engine/`, the local-OPA-profile smoke-run driver behind `shield local-run` in `opa_local.py`, the local SLM backend (Tier 2 of the cascade) in `slm_backend.py`, event/rule dataclasses in `schemas/`, Linux/dev sensors in `sensors/`, the FastAPI-style backend API (separate `shield-backend` CLI entry) in `backend/`, and SIEM/SOAR adapters in `integrations/`. `shield/cli.py` is the operator CLI. Tests are under `tests/`. Default policy bundles are in `policies/defaults/` (JSON + Rego translations under `policies/rego/`); the Tier-2 SLM training pipeline (QLoRA fine-tuning) is in `slm_training/`; systemd assets are in `packaging/systemd/`; helper and validation scripts are in `scripts/`; design/runbook/audit docs and the wiki are in `docs/`.
 
 ## Build, Test, and Development Commands
 
@@ -14,7 +14,7 @@ uv pip install -e ".[dev]" --python .venv/bin/python
 .venv/bin/python -m pytest
 ```
 
-`python3 scripts/e2e_validate.py` runs the root-free suite, validates default policy packs, exercises the dev sensor loop, checks BTF availability, and reports root/live checks as `SKIP` when unavailable. Run `shield validate --rules policies/defaults/smb.json` before changing policy JSON. Use `shield run --sensor dev --device-id dev-1 --no-exporter --max-events 12` for a local synthetic loop.
+`python3 scripts/e2e_validate.py` runs the root-free suite, validates default policy packs, exercises the dev sensor loop, checks BTF availability, and reports root/live checks as `SKIP` when unavailable. Run `shield validate --rules policies/defaults/smb.json` before changing policy JSON. Use `shield run --sensor dev --device-id dev-1 --no-exporter --max-events 12` for a local synthetic loop. Use `shield local-run --profile {smb,professional-services,regulated}` for a supervised local OPA profile smoke run (Rego bundle allowlisting + SHA-256 identity binding). `shield-backend` starts the backend API as a separate process.
 
 ## Coding Style & Naming Conventions
 
