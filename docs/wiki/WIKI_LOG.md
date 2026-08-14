@@ -8,6 +8,14 @@
 - The local runtime still requires an OPA sidecar and deliberate vertical/profile selection; those
   deployment/runtime gaps remain open.
 
+## [2026-08-13] update | Supervised local OPA profile runner
+
+- Added `shield/opa_local.py` and the explicit `shield local-run --profile {smb|professional-services|regulated}` smoke command.
+- The launcher selects exactly one allowlisted Rego bundle, binds to a dedicated loopback port, performs a profile-specific rule probe, detects early OPA exit, and terminates the child process on exit.
+- The selected Rego file's SHA-256 hash is carried into Shield policy metadata and printed at startup.
+- Verification: 32 focused tests passed; each Rego file passed independent `opa check`; real `local-run --profile smb --max-events 1` processed 1 event and exited successfully.
+- This is local smoke/runtime hardening, not production supervision, deployment readiness, Windows lifecycle proof, or live Integrity export. The existing local exporter attempts reported HTTP 404 because no compatible local Oracle endpoint was running; export was disabled for the smoke command.
+
 
 > Chronological record of wiki actions. Append-only — never edit past entries.
 > Actions: ingest, create, update, lint, query, archive

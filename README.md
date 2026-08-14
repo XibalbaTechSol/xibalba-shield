@@ -20,7 +20,14 @@ ecosystem; it is not a description of a dependency Shield needs in order to work
 Full technical detail lives in the [wiki](../../wiki) (`docs/wiki/` in this repository) and
 [`SPECIFICATION.md`](SPECIFICATION.md).
 
-## Ecosystem Role: 🛡️ The Immune System
+## Local supervised OPA profile smoke runs
+
+For a local, sidecar-free smoke loop, use `shield local-run --profile smb` (or
+`professional-services` or `regulated`). The command chooses exactly one allowlisted Rego bundle,
+performs a profile-specific readiness rule evaluation, binds the selected file's SHA-256 identity into
+policy metadata, and cleans up the OPA child process. This is local smoke/runtime hardening only; it
+does not claim production supervision, deployment readiness, Windows lifecycle coverage, or live
+Integrity export.
 
 This repository is the **immune system** in a three-repository ecosystem designed as a living
 organism. (`integrity-dashboard` — the operator presentation layer, previously developed as a

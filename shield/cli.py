@@ -11,6 +11,7 @@ was built to eventually be part of.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -156,8 +157,8 @@ def _run(args: argparse.Namespace) -> int:
                                      bcc_middleware_url=args.bcc_middleware_url)
 
     rules = []
-    policy_version = ""
-    policy_hash = ""
+    policy_version = getattr(args, "policy_version", "")
+    policy_hash = getattr(args, "policy_hash", "")
     reloader = None
     if args.rules is not None:
         try:
@@ -294,6 +295,26 @@ def _siem_export(args: argparse.Namespace) -> int:
     return 0 if result.failed == 0 else 1
 
 
+def _local_run(args: argparse.Namespace) -> int:
+    from .opa_local import selected_profile_metadata, supervised_opa
+
+    with supervised_opa(args.profile, opa_binary=args.opa_binary, timeout=args.opa_timeout) as opa_url:
+        args.opa_url = opa_url
+        args.policy_version, args.policy_hash = selected_profile_metadata(args.profile)
+        args.device_config = None
+        args.rules = None
+        args.tenant_id = ""
+        args.device_role = ""
+        args.bcc_middleware_url = "http://localhost:8000"
+        args.oracle_url = None
+        args.agent_label = "xibalba-shield-local"
+        args.no_exporter = True
+        args.no_containment = True
+        args.log_integrity_key = None
+        args.slm_backend = "none"
+        return _run(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shield")
     parser.add_argument(
@@ -363,6 +384,17 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--max-events", type=int, default=None,
                        help="stop after this many events (default: run forever, until Ctrl+C)")
     p_run.set_defaults(func=_run)
+
+    p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")
+    p_local.add_argument("--profile", choices=("smb", "professional-services", "regulated"), required=True)
+    p_local.add_argument("--sensor", choices=_SENSOR_CHOICES, default="dev")
+    p_local.add_argument("--device-id", default="local-smoke")
+    p_local.add_argument("--dev-interval", type=float, default=0.0)
+    p_local.add_argument("--opa-binary", default="opa")
+    p_local.add_argument("--opa-timeout", type=float, default=5.0)
+    p_local.add_argument("--max-events", type=int, default=1)
+    p_local.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH)
+    p_local.set_defaults(func=_local_run)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -18,7 +18,7 @@ source_files:
 
 - [Overview](#overview)
 - [What evaluate() actually does](#what-evaluate-actually-does)
-- [The JSON policy-rule schema is real, but is not what the engine evaluates](#the-json-policy-rule-schema-is-real-but-is-not-what-the-engine-evaluates)
+- [Local profile-supervised OPA smoke runs](#local-profile-supervised-opa-smoke-runs)
 - [Documented drift vs. README.md and CLAUDE.md — now corrected](#documented-drift-vs-readme-md-and-claude-md-now-corrected)
 - [Interface shape reused by Tier 2](#interface-shape-reused-by-tier-2)
 - [Related pages](#related-pages)
@@ -76,7 +76,20 @@ This means "local/offline, zero cloud round-trip" still holds — OPA runs as a 
 a cloud service — but "no network dependency" does not: every event denies if the local OPA
 process is down or unreachable. That is a real operational fact for anyone running `shield run`.
 
-## The JSON policy-rule schema is real, but is not what the engine evaluates
+## Local profile-supervised OPA smoke runs
+
+For local smoke integration, `shield local-run --profile PROFILE` supports exactly three explicit
+profiles: `smb`, `professional-services`, and `regulated`. It starts exactly one corresponding Rego
+file from `policies/rego/`, binds OPA to a dedicated loopback port, waits for a profile-specific rule
+probe, and fails if OPA exits early or returns an incompatible policy shape. The selected Rego file's
+SHA-256 hash is carried into `PolicyRef` metadata and printed at startup. The child process is
+terminated and force-killed on context exit if necessary.
+
+This command is local runtime hardening and smoke integration, not production process supervision,
+Windows lifecycle proof, external Integrity export, or deployment readiness. The three shared-package
+Rego files must be checked and loaded individually; loading all three together creates duplicate-default
+conflicts under `shield.policy`.
+
 
 `shield/schemas/policy_rule.py` defines a real, still-used `PolicyRule` dataclass shape — ordered
 JSON rule bundles, condition groups `process`/`agent`/`file`/`flow`/`context`/`activity`, actions
