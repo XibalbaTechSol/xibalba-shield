@@ -24,9 +24,17 @@ per this repo's own README/CLAUDE.md):
         -e INTEGRITY_WALLET_PASSWORD=$INTEGRITY_WALLET_PASSWORD \\
         shield python scripts/register_with_oracle.py
 
-Re-running this script is safe: register_agent's own idempotency check (a live
-XibalbaAgentRegistry.resolveDID lookup) short-circuits to the existing on-chain registration
-instead of deploying a second SovereignAgent/StateAnchor pair for the same DID.
+Re-running this script is safe ONLY once a prior run has fully completed: register_agent's
+idempotency check is a live XibalbaAgentRegistry.resolveDID lookup, which only starts returning
+a hit after `registerPrimitives` (the final on-chain step) succeeds. Re-running after a run that
+failed partway (e.g. mid-way through deploy_sovereign_agent/deploy_state_anchor/
+grant_anchor_role/anchor_genesis_root) is NOT short-circuited -- resolve_did still finds
+nothing, so the script deploys a brand-new SovereignAgent/StateAnchor pair from scratch and
+orphans whatever the failed run already put on-chain (real testnet gas, real abandoned
+contracts, observed directly on 2026-08-14 while diagnosing a nonce race -- see
+PRODUCTION_GAPS.md). Check the failed run's own error message for any contract addresses it
+reports before retrying; there is currently no automated cleanup or resume-from-partial-state
+path for those orphans.
 """
 
 from __future__ import annotations

@@ -154,7 +154,15 @@ def _run(args: argparse.Namespace) -> int:
             return 2
         device_config = DeviceConfig(device_id=args.device_id, tenant_id=args.tenant_id or "",
                                      device_role=args.device_role or "",
-                                     bcc_middleware_url=args.bcc_middleware_url)
+                                     bcc_middleware_url=args.bcc_middleware_url or DeviceConfig.bcc_middleware_url)
+
+    # Exporter URLs: an explicit --bcc-middleware-url/--oracle-url flag always wins (this is
+    # what lets docker-compose's shield service point at container-network hostnames); absent
+    # that, fall back to the loaded device-config's URLs rather than silently ignoring them.
+    # Previously device_config.bcc_middleware_url/oracle_url were loaded but never read again
+    # after this point -- a `--device-config` file's URLs had no effect on the exporter at all.
+    bcc_middleware_url = args.bcc_middleware_url if args.bcc_middleware_url is not None else device_config.bcc_middleware_url
+    oracle_url = args.oracle_url if args.oracle_url is not None else device_config.oracle_url
 
     rules = []
     policy_version = getattr(args, "policy_version", "")
@@ -201,8 +209,8 @@ def _run(args: argparse.Namespace) -> int:
         from .integrity_exporter import IntegrityExporter
 
         exporter = IntegrityExporter(
-            bcc_middleware_url=args.bcc_middleware_url,
-            oracle_url=args.oracle_url,
+            bcc_middleware_url=bcc_middleware_url,
+            oracle_url=oracle_url,
             agent_label=args.agent_label,
         )
 
@@ -363,8 +371,12 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--device-role", default=None)
     p_run.add_argument("--rules", type=Path, default=None,
                        help="policy rules file; hot-reloaded on change if given")
-    p_run.add_argument("--bcc-middleware-url", default="http://localhost:8000")
-    p_run.add_argument("--oracle-url", default=None)
+    p_run.add_argument("--bcc-middleware-url", default=None,
+                       help="overrides --device-config's bcc_middleware_url if given; "
+                            f"falls back to {DeviceConfig.bcc_middleware_url!r} if neither is set")
+    p_run.add_argument("--oracle-url", default=None,
+                       help="overrides --device-config's oracle_url if given; "
+                            "falls back to integrity-sdk's own default if neither is set")
     p_run.add_argument("--opa-url", default="http://localhost:8181",
                         help="local OPA sidecar the policy engine evaluates rules against "
                              "(PolicyEngine's own default — was previously hardcoded and "
