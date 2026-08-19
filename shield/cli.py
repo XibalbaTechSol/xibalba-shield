@@ -212,6 +212,8 @@ def _run(args: argparse.Namespace) -> int:
             bcc_middleware_url=bcc_middleware_url,
             oracle_url=oracle_url,
             agent_label=args.agent_label,
+            chain_id=device_config.chain_id,
+            verifying_contract=device_config.verifying_contract,
         )
 
     # Real OS-level containment, on by default -- this is what makes a "contain" decision

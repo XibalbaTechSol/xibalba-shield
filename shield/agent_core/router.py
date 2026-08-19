@@ -108,6 +108,7 @@ class EventRouter:
             try:
                 tier1_decision = decision
                 decision = self.slm_backend.evaluate(event, self._context())
+                decision.decision.tier = "tier2" if decision.decision.action != "escalate" else "tier2_unresolved"
                 logger.info(
                     "Tier-2 SLM revised decision for %s: tier1=%s -> tier2=%s (%s)",
                     tier1_decision.event_ref.event_id, tier1_decision.decision.action,
@@ -119,6 +120,32 @@ class EventRouter:
                 logger.exception(
                     "Tier-2 SLM backend raised; keeping Tier-1 decision %s", decision.event_ref.event_id
                 )
+
+        # A2A escalation fallback (docs/design/2026-08-18-a2a-escalation-schema-proposal.md):
+        # if the decision is STILL `escalate` at this point -- either no Tier 2 was configured
+        # at all, or Tier 2 was consulted and remained genuinely uncertain -- there is no Tier 3
+        # to hand off to (none exists yet, deliberately deferred). Before this fallback existed,
+        # an unresolved `escalate` flowed straight through to containment-check (which only acts
+        # on `action == "contain"`, so it never fired) and out to export/logging exactly as any
+        # other decision would -- a real, silent no-decision outcome. Fail-closed, matching this
+        # repo's inherited posture from bcc_middleware ("any failure to positively confirm
+        # 'allowed' denies the request") and this router's own real-time enforcement stance:
+        # irreducible uncertainty about a potentially dangerous action is treated as dangerous,
+        # not waved through. `tier` is left as whichever tier actually produced the `escalate`
+        # verdict (tier1 if Tier 2 was never consulted, tier2 if it was and remained uncertain)
+        # -- this rewrites the ACTION, not the provenance of who asked for escalation.
+        if decision.decision.action == "escalate":
+            original_reason = decision.decision.reason
+            decision.decision.action = "contain"
+            decision.decision.reason = (
+                f"A2A_UNRESOLVED_ESCALATION: no Tier 3 configured, failing closed to contain "
+                f"(original: {original_reason})"
+            )
+            logger.warning(
+                "unresolved escalation for %s (tier=%s) -- no Tier 3 configured, "
+                "falling back to contain (fail-closed)",
+                decision.event_ref.event_id, decision.decision.tier,
+            )
 
         # Real-time containment first, before anything else -- this is the antivirus-speed
         # step. Freeze-only (no timeout_seconds): ActionBroker.contain() with a timeout BLOCKS

@@ -193,7 +193,12 @@ its containment logic — decisions still route through the real `ActionBroker`)
       Q4_K_M.gguf` (named in `slm_training/README.md`'s narrative) vs. the model actually wired
       into `slm_training/app.py` (Qwen2.5-0.5B). Resolve which is canonical before further Tier-2
       work — not resolved this session, flagged rather than silently picked.
-- [ ] Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud escalations.
+- [x] Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud
+  escalations. `EscalationRequest`/`EscalationResponse` (`shield/schemas/events.py`), plus a
+  `Decision.tier` provenance field and a real fail-closed fallback for an unresolved
+  `escalate` (`router.py`'s `handle()`) — see docs/design/2026-08-18-a2a-escalation-schema-
+  proposal.md. The schemas are defined but not yet consumed by any real Tier 3 — that
+  remains the next, separate checkbox below, unattempted here.
 - [ ] Implement Tier 3 Cloud Frontier fallback for ambiguous/low-confidence SLM decisions.
 - [ ] Add cloud-fallback latency and decision metrics to burn-in reporting.
 - [x] Add detection-quality metrics to burn-in reporting: Shield ADR, precision, blocking

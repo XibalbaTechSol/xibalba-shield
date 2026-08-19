@@ -103,6 +103,11 @@ class DeviceConfig:
     device_role: str = ""
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
+    # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
+    # every BCC commitment this device's exporter signs must now bind chain_id +
+    # verifying_contract. Defaults match Base Sepolia (CLAUDE.md's "Live deployment").
+    chain_id: int = 84532
+    verifying_contract: str = "0x72e21e44AdD6d6e7CAa02eaedF078630afC40819"
     tenant_policy_url: str = ""
     device_token: str = ""
     feature_flags: dict[str, bool] = field(default_factory=dict)
@@ -128,6 +133,8 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "device_role",
         "bcc_middleware_url",
         "oracle_url",
+        "chain_id",
+        "verifying_contract",
         "tenant_policy_url",
         "device_token",
         "feature_flags",
