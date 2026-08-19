@@ -166,14 +166,20 @@ def test_router_revises_escalate_decision_using_slm_backend():
     assert decision.rule.rule_id == "_simulated_slm"
 
 
-def test_router_keeps_tier1_decision_when_no_slm_backend_configured():
+def test_router_fails_closed_to_contain_when_no_slm_backend_configured():
+    """docs/design/2026-08-18-a2a-escalation-schema-proposal.md: Tier 1's `escalate` with no
+    Tier 2 configured (and no Tier 3 -- none exists) must not reach export as a bare,
+    unresolved `escalate` -- that was a real, silent no-decision outcome. Fails closed to
+    `contain` instead, tagged with the A2A_UNRESOLVED_ESCALATION reason."""
     engine = _force_action(PolicyEngine(), "escalate")
     router = _router(policy_engine=engine, slm_backend=None)
     decision = router.handle(_process_event("nc -lvnp 9999"))
-    assert decision.decision.action == "escalate"
+    assert decision.decision.action == "contain"
+    assert decision.decision.tier == "tier1"
+    assert "A2A_UNRESOLVED_ESCALATION" in decision.decision.reason
 
 
-def test_router_falls_back_to_tier1_decision_when_slm_backend_raises():
+def test_router_fails_closed_to_contain_when_slm_backend_raises():
     engine = _force_action(PolicyEngine(), "escalate")
 
     class _RaisingBackend:
@@ -184,5 +190,43 @@ def test_router_falls_back_to_tier1_decision_when_slm_backend_raises():
     decision = router.handle(_process_event("nc -lvnp 9999"))
 
     # A broken Tier-2 backend must never take down the router or silently vanish the
-    # Tier-1 decision it was supposed to refine.
-    assert decision.decision.action == "escalate"
+    # Tier-1 decision it was supposed to refine -- and the still-unresolved `escalate` that
+    # results must still fail closed to `contain`, not reach export unresolved.
+    assert decision.decision.action == "contain"
+    assert decision.decision.tier == "tier1"
+    assert "A2A_UNRESOLVED_ESCALATION" in decision.decision.reason
+
+
+def test_router_tags_tier2_on_slm_revised_decision():
+    engine = _force_action(PolicyEngine(), "escalate")
+    backend = SimulatedSlmBackend()
+
+    router = _router(policy_engine=engine, slm_backend=backend)
+    decision = router.handle(_process_event("nc -lvnp 9999"))
+
+    assert decision.decision.tier == "tier2"
+
+
+def test_router_fails_closed_when_tier2_itself_remains_uncertain():
+    """docs/design/2026-08-18-a2a-escalation-schema-proposal.md: Tier 2 consulted and STILL
+    uncertain (returns its own `escalate`, not an exception) -- the genuinely-uncertain case
+    the fallback exists for, distinct from Tier 2 being unavailable/broken."""
+    from shield.schemas.events import Decision as _Decision, EventRef as _EventRef, PolicyDecision as _PolicyDecision, RuleRef as _RuleRef
+
+    engine = _force_action(PolicyEngine(), "escalate")
+
+    class _StillUncertainBackend:
+        def evaluate(self, event, ctx):
+            return _PolicyDecision(
+                device_id=ctx.device_id,
+                event_ref=_EventRef(klass=event.klass, event_id="evt-tier2-uncertain"),
+                rule=_RuleRef(rule_id="_still_uncertain_slm", name="_still_uncertain_slm", version=""),
+                decision=_Decision(action="escalate", reason="Tier 2 remains uncertain", severity="medium"),
+            )
+
+    router = _router(policy_engine=engine, slm_backend=_StillUncertainBackend())
+    decision = router.handle(_process_event("nc -lvnp 9999"))
+
+    assert decision.decision.action == "contain"
+    assert decision.decision.tier == "tier2_unresolved"
+    assert "A2A_UNRESOLVED_ESCALATION" in decision.decision.reason

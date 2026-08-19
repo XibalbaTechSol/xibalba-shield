@@ -200,6 +200,14 @@ class Decision:
     action: Literal["allow", "deny", "contain", "log_only", "escalate"]
     reason: str = ""
     severity: Literal["low", "medium", "high", "critical"] = "low"
+    # docs/design/2026-08-18-a2a-escalation-schema-proposal.md: which tier actually produced
+    # this action, so an exported/audited/SIEM-consumed decision is self-describing rather
+    # than requiring log correlation to reconstruct whether Tier 1 resolved it, Tier 2 revised
+    # it, or Tier 2 was asked and remained unable to resolve it (see `router.py`'s handle()).
+    # Default "tier1" matches existing behavior for any pre-existing Decision(...) call site
+    # that doesn't set this explicitly -- Tier 1 is the first (and, until now, often only)
+    # evaluator every event sees.
+    tier: Literal["tier1", "tier2", "tier2_unresolved"] = "tier1"
 
 
 @dataclass
@@ -249,6 +257,35 @@ class PolicyDecision:
         if self.export.attempted or self.export.reason:
             out["export"] = vars(self.export)
         return out
+
+
+@dataclass
+class EscalationRequest:
+    """docs/design/2026-08-18-a2a-escalation-schema-proposal.md — what a Tier-2-still-
+    uncertain event carries if/when it escalates to a future Tier 3. Carries the FULL
+    decision trail (Tier 1's original decision, Tier 2's revision), not just the final
+    outcome — an auditor or a future cloud model needs to see what already ran and what
+    each tier concluded, not just "still escalate"."""
+
+    event: Any  # NormalizedEvent (Any to avoid a forward-reference cycle with events below)
+    tier1_decision: Decision
+    tier2_decision: Decision
+    reason: str = ""
+    time: str = field(default_factory=_now_iso)
+
+
+@dataclass
+class EscalationResponse:
+    """Mirrors PolicyDecision's decision-bearing shape closely enough that a future Tier-3
+    backend can be a drop-in `evaluate()`-shaped call, the same convention
+    `shield/agent_core/slm_backend.py`'s `SlmBackend` protocol already establishes for Tier 2
+    (`evaluate(event, ctx) -> PolicyDecision`). Not yet produced by any real code — no Tier 3
+    exists (docs/design/2026-08-18-a2a-escalation-schema-proposal.md's explicit deferral) —
+    this shape exists so a future Tier3Backend has a real contract to implement against."""
+
+    decision: Decision
+    reason: str = ""
+    time: str = field(default_factory=_now_iso)
 
 
 # §5.6 — security-event intent_type namespace. Extends BCC Commitment.intent_type the same
