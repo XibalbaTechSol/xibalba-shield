@@ -223,8 +223,17 @@ def _run(args: argparse.Namespace) -> int:
     # action on this machine.
     action_broker = None if args.no_containment else ActionBroker()
 
+    try:
+        from .agent_core.slm_backend import build_slm_backend
+
+        slm_backend = build_slm_backend(args.slm_backend)
+    except (RuntimeError, ValueError) as exc:
+        print(f"shield run: {exc}", file=sys.stderr)
+        return 1
+
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
-                         exporter=exporter, action_broker=action_broker, event_log=event_log)
+                         exporter=exporter, action_broker=action_broker, event_log=event_log,
+                         slm_backend=slm_backend)
 
     try:
         sensor = _make_sensor(

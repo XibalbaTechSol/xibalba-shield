@@ -221,7 +221,7 @@ Current root-free validation:
 
 ```text
 pytest -q
-118 passed, 9 skipped (2026-08-12)
+138 passed, 7 skipped (2026-08-20)
 Root-free tests currently pass locally; root/live-service tests skip unless their real dependencies exist.
 ```
 
@@ -413,12 +413,11 @@ Every evaluation produces a `PolicyDecision`, including default allow/no-match d
 Default packs live under `policies/defaults/`:
 
 - `smb.json`: shadow AI process paths, unregistered agent tools, sensitive writes. **Has a real
-  Rego translation** (`policies/rego/smb.rego`) — this is the only pack whose content currently
-  drives OPA decisions.
+  Rego translation** (`policies/rego/smb.rego`) for selected-profile OPA evaluation.
 - `professional-services.json`: unregistered agents, unapproved model routing, client-data context.
-  **No Rego translation exists yet** — see "Policy Model" above.
+  **Has a real Rego translation** (`policies/rego/professional-services.rego`) for selected-profile OPA evaluation.
 - `regulated.json`: unregistered agents, PHI-class context, high-risk output, regulated sensitive writes.
-  **No Rego translation exists yet** — see "Policy Model" above.
+  **Has a real Rego translation** (`policies/rego/regulated.rego`) for selected-profile OPA evaluation.
 
 Validate them:
 
@@ -718,8 +717,9 @@ healthcare):
 Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full ledger):
 
 1. **Policy Model completeness** — Rego translations for the three default JSON policy packs now
-   exist and have interpreter-backed regression coverage. The remaining integration work is a
-   documented/scripted OPA profile-selection and startup path alongside `shield run`.
+   exist and have interpreter-backed regression coverage. `shield local-run --profile ...`
+   provides a supervised selected-profile smoke path; plain `shield run` still expects an
+   operator-managed local OPA sidecar.
 2. **Tier-2 SLM, from demo to backbone** — grow past the current small template-generated
    dataset with community help (see "Community: help build Tier 2" above), and evaluate real
    fine-tuned model quality against real endpoint telemetry.
@@ -754,8 +754,9 @@ Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full
 Highest-priority gaps:
 
 - Rego translations for all three default packs now exist in `policies/rego/` and are covered by
-  interpreter-backed tests. The remaining policy-model gap is deliberate OPA profile selection
-  and startup integration; the sidecar is still not started automatically by `shield run`.
+  interpreter-backed tests. `shield local-run --profile {smb,professional-services,regulated}`
+  starts exactly one supervised local OPA profile; plain `shield run` still expects an
+  operator-managed OPA sidecar.
 - Run root live verification for TCP-connect eBPF on the target kernel and archive `scripts/verify_tcp_connect_root.py` JSON output.
 - Register the Shield exporter DID with Integrity Oracle and archive live `GET /v1/agent/{did}` or registry readback evidence.
 - Verify exported Shield decisions through the intended Integrity evidence/audit surface.

@@ -1,5 +1,12 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-08-20] update | CLI Tier-2 backend wiring
+
+- Wired `shield run --slm-backend {none,simulated,local}` through the live CLI runtime into
+  `EventRouter`, matching the existing router-level Tier-2 contract.
+- Added CLI regression coverage proving `--slm-backend simulated` revises a Tier-1 `escalate`
+  decision and records `tier2` provenance. The simulated backend remains explicitly synthetic.
+
 ## [2026-08-13] update | Rego policy bundle coverage
 
 - Added interpreter-backed Rego translations for the professional-services and regulated default

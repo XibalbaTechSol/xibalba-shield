@@ -86,7 +86,7 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest        # 135 passed, 9 skipped in the current root-free suite
+.venv/bin/python -m pytest        # 138 passed, 7 skipped in the current root-free suite
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
 shield status                    # local decision-log summary
 shield events --recent 20        # recent policy decisions
