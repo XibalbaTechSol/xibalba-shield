@@ -40,6 +40,8 @@ fourth sibling repository; the table below reflects that.)
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
 | `integrity-core` | 🦴 The Unifying Backend (+ 👁️ Control Center) | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts — plus `integrity-dashboard/`, the operator presentation layer that visualizes health and surfaces evidence |
 
+Integrity Protocol is specified in [`XibalbaTechSol/integrity-core`](https://github.com/XibalbaTechSol/integrity-core) [`docs/SPEC.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/SPEC.md). This repository does not define protocol invariants. Shield is a producer of signed evidence and a local enforcement agent.
+
 **How the Immune System connects:**
 - **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
 - **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to integrity-core's BCC middleware and Oracle, running alongside an independent OpenTelemetry span for every decision.
