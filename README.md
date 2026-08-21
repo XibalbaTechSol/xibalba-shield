@@ -40,6 +40,8 @@ fourth sibling repository; the table below reflects that.)
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
 | `integrity-core` | 🦴 The Unifying Backend (+ 👁️ Control Center) | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts — plus `integrity-dashboard/`, the operator presentation layer that visualizes health and surfaces evidence |
 
+Integrity Protocol is specified in [`XibalbaTechSol/integrity-core`](https://github.com/XibalbaTechSol/integrity-core) [`docs/SPEC.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/SPEC.md). This repository does not define protocol invariants. Shield is a producer of signed evidence and a local enforcement agent.
+
 **How the Immune System connects:**
 - **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
 - **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to integrity-core's BCC middleware and Oracle, running alongside an independent OpenTelemetry span for every decision.
@@ -221,7 +223,7 @@ Current root-free validation:
 
 ```text
 pytest -q
-138 passed, 7 skipped (2026-08-20)
+138 passed, 9 skipped (2026-08-21)
 Root-free tests currently pass locally; root/live-service tests skip unless their real dependencies exist.
 ```
 
@@ -333,7 +335,7 @@ no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
 - **A local OPA server must be running** (default `http://localhost:8181`, package path
   `/v1/data/shield/policy`) for `shield run` to evaluate anything but a hardcoded fail-closed
   `deny`. Nothing in this repo's Quickstart currently starts one — this is a real, open gap (see
-  IMPLEMENTATION_PLAN.md), not something to work around silently.
+  `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`), not something to work around silently.
 - The JSON policy bundle passed to `--rules` (`smb.json` etc., schema below) is still real and
   still enforced for **version/hash pinning and hot-reload trust** (`trusted_policy_hashes`), but
   its `rules` array is **no longer the decision source**. The actual decision logic lives in Rego
@@ -714,7 +716,7 @@ healthcare):
   status table, never implied complete. This is a deliberate product commitment, not just a
   documentation habit: a compliance/audit buyer needs to know exactly what's enforced today.
 
-Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full ledger):
+Milestones, roughly in priority order (see `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` for the archived ledger):
 
 1. **Policy Model completeness** — Rego translations for the three default JSON policy packs now
    exist and have interpreter-backed regression coverage. `shield local-run --profile ...`
@@ -742,7 +744,7 @@ Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full
 | `SPECIFICATION.md` | Normative Shield product and implementation specification |
 | [Wiki](../../wiki) (`docs/wiki/`) | Architecture concept pages, ecosystem role, compliance evidence trail |
 | `SECURITY.md` | Threat model, security posture, limitations |
-| `IMPLEMENTATION_PLAN.md` | Living implementation ledger |
+| `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` | Archived implementation ledger |
 | `docs/audits/2026-08-06-status.md` | Current audit/status record |
 | `docs/design/signed-policy-bundles.md` | Signed policy bundle design and local hash-pin enforcement |
 | `docs/pilot-acceptance-metrics.md` | Pilot gates for resource use, false positives, export success, operator usability |

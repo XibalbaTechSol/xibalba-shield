@@ -21,7 +21,8 @@ turns evidence into a score (protocol spec §8.1's "sole computer" rule), and th
 code path that bypasses that.
 
 Restored 2026-08-12 after a 2026-08-07 refactor deleted this module in favor of OTel-only
-telemetry with no signed-commitment path (see xibalba-shield/IMPLEMENTATION_PLAN.md's former
+telemetry with no signed-commitment path (see
+xibalba-shield/docs/archive/2026-08/IMPLEMENTATION_PLAN.md's former
 "Known gap — 2026-08-12"). One deliberate change from the original: `IntegrityClient` is
 constructed with `background_flush=True` (the SDK's own default) instead of the original
 `background_flush=False`. Shield's decisions fire on a real-time enforcement path — a `contain`/

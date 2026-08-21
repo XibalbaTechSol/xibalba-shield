@@ -20,7 +20,7 @@ This plan merges README.md, SPECIFICATION.md, SECURITY.md, archived HANDOFF.md, 
 
 ## Audit checkpoint — 2026-08-06
 
-Current observed status started from [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite now reports 138 tests passed and 7 skipped (2026-08-20). The original audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect still needs root live verification. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
+Current observed status started from [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md). The root-free suite now reports 138 tests passed and 9 skipped (2026-08-21). The original audit freshly verified a synthetic no-exporter CLI path and local Docker/dev-mode execution; historical README/HANDOFF evidence records process-exec and file-write eBPF verification, while TCP-connect still needs root live verification. `[x]` entries below mean the scoped artifact or test exists, not that live production exporter identity, eBPF overhead, or pilot readiness has been reverified.
 
 ## Closed gap — 2026-08-12: BCC signing/submission path restored
 
@@ -57,7 +57,7 @@ flush to a possibly slow or unreachable `bcc_middleware`.
 - [x] Linux process-exec eBPF sensor is live-verified.
 - [x] Linux file-write eBPF sensor is live-verified.
 - [x] Comprehensive SPECIFICATION.md exists in this repo.
-- [x] Root-free test suite passes: 138 passed, 7 skipped (2026-08-20; was 118/9 before the
+- [x] Root-free test suite passes: 138 passed, 9 skipped (2026-08-21; was 118/9 before the
       Rego-profile and CLI Tier-2 wiring tests landed).
 - [x] Local policy bundles produce operator-visible policy version/hash in decisions.
 - [x] File-write sensitive-path glob filtering is wired from device config.
@@ -196,8 +196,9 @@ its containment logic — decisions still route through the real `ActionBroker`)
 - [x] Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud
   escalations. `EscalationRequest`/`EscalationResponse` (`shield/schemas/events.py`), plus a
   `Decision.tier` provenance field and a real fail-closed fallback for an unresolved
-  `escalate` (`router.py`'s `handle()`) — see docs/design/2026-08-18-a2a-escalation-schema-
-  proposal.md. The schemas are defined but not yet consumed by any real Tier 3 — that
+  `escalate` (`router.py`'s `handle()`) — see
+  `docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md`. The schemas are defined
+  but not yet consumed by any real Tier 3 — that
   remains the next, separate checkbox below, unattempted here.
 - [x] Wire `shield run --slm-backend {none,simulated,local}` into the live CLI runtime. The
   router-level Tier-2 path already existed; the CLI now constructs the selected backend and

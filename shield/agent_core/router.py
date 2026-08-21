@@ -20,7 +20,8 @@ submission measured at 200-700ms against a live bcc_middleware) and runs after c
 so evidence-export latency can never delay the actual protective action. The OTel span and the
 Integrity Exporter are themselves two independent, separately best-effort export paths —
 restored 2026-08-12 after a 2026-08-07 refactor replaced the exporter with OTel-only telemetry
-and left Shield with no path to a signed commitment (see xibalba-shield/IMPLEMENTATION_PLAN.md's
+and left Shield with no path to a signed commitment (see
+xibalba-shield/docs/archive/2026-08/IMPLEMENTATION_PLAN.md's
 former "Known gap — 2026-08-12"). They run in separate try/except blocks deliberately: a
 slow/unreachable bcc_middleware failing the exporter call must never suppress the OTel span, and
 a tracer/exporter-shim bug must never suppress the signed commitment attempt.
@@ -121,7 +122,7 @@ class EventRouter:
                     "Tier-2 SLM backend raised; keeping Tier-1 decision %s", decision.event_ref.event_id
                 )
 
-        # A2A escalation fallback (docs/design/2026-08-18-a2a-escalation-schema-proposal.md):
+        # A2A escalation fallback (docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md):
         # if the decision is STILL `escalate` at this point -- either no Tier 2 was configured
         # at all, or Tier 2 was consulted and remained genuinely uncertain -- there is no Tier 3
         # to hand off to (none exists yet, deliberately deferred). Before this fallback existed,

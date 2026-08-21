@@ -11,7 +11,7 @@ source_files:
   - shield/agent_core/router.py
   - shield/cli.py
   - slm_training/app.py
-  - IMPLEMENTATION_PLAN.md
+  - docs/archive/2026-08/IMPLEMENTATION_PLAN.md
 ---
 
 ## Table of contents
@@ -41,7 +41,7 @@ actual policy source is undefined in this repository today.
 ## Tier 2 — real inference code exists; two disconnected implementations, one now wired
 
 There are two distinct things people might mean by "Tier 2," and conflating them has previously
-overstated integration in this repo's own `IMPLEMENTATION_PLAN.md`:
+overstated integration in this repo's own `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`:
 
 **`slm_training/app.py`** — a real, working, standalone Flask demo. It loads Qwen2.5-0.5B via
 `llama_cpp.Llama`, requires root, imports the eBPF sensor directly
@@ -89,7 +89,7 @@ shield run --slm-backend {none,simulated,local}   # default: none
 ## Tier 3 — `[PLANNED]`, zero code
 
 There is no Agent-to-Agent (A2A) escalation schema and no cloud-frontier-model client anywhere
-in this repository. `IMPLEMENTATION_PLAN.md` lists both as open items: defining a structured A2A
+in this repository. `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` lists both as open items: defining a structured A2A
 communication schema for local-to-cloud escalations, and implementing the Tier 3 cloud fallback
 itself. Nothing at Tier 3 should be represented as built.
 
@@ -102,7 +102,7 @@ production-ready" bar `slm_training/README.md` itself names. `slm_training/train
 fine-tune script is documented as unrunnable on the development machine (needs an NVIDIA GPU);
 there is no evidence a fine-tune has actually been run. Scaling Tier 2 — more diverse synthetic
 data, and the GPU/inference compute to actually train and serve a better model — is an open
-community contribution area, not a solo roadmap item. `IMPLEMENTATION_PLAN.md` also flags an
+community contribution area, not a solo roadmap item. `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` also flags an
 unresolved inconsistency: its narrative names `Llama-3.2-1B-Instruct-Q4_K_M.gguf` as the target
 model in one place, while `slm_training/app.py` actually loads `qwen2.5-0.5b-instruct-q4_k_m.gguf`
 — not resolved as of this wiki pass, flagged rather than silently picked.

@@ -122,7 +122,7 @@ loading all three together would create duplicate default-rule conflicts.
 ## Documented drift vs. README.md and CLAUDE.md — now corrected
 
 `README.md`'s status table and "Policy Model" section, `CLAUDE.md`'s repository-layout comment,
-and `IMPLEMENTATION_PLAN.md`'s test-count entry were all corrected 2026-08-12 to describe this
+and `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`'s test-count entry were all corrected 2026-08-12 to describe this
 OPA-backed reality (they previously read "table-driven, first-match, local/offline," describing
 the pre-2026-08-07 in-process matcher). Git history shows the OPA migration landed in commit
 `f86c0f0` ("Replace integrity_exporter with OTel telemetry, move policy evaluation to OPA") and

@@ -200,7 +200,7 @@ class Decision:
     action: Literal["allow", "deny", "contain", "log_only", "escalate"]
     reason: str = ""
     severity: Literal["low", "medium", "high", "critical"] = "low"
-    # docs/design/2026-08-18-a2a-escalation-schema-proposal.md: which tier actually produced
+    # docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md: which tier actually produced
     # this action, so an exported/audited/SIEM-consumed decision is self-describing rather
     # than requiring log correlation to reconstruct whether Tier 1 resolved it, Tier 2 revised
     # it, or Tier 2 was asked and remained unable to resolve it (see `router.py`'s handle()).
@@ -261,7 +261,7 @@ class PolicyDecision:
 
 @dataclass
 class EscalationRequest:
-    """docs/design/2026-08-18-a2a-escalation-schema-proposal.md — what a Tier-2-still-
+    """docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md — what a Tier-2-still-
     uncertain event carries if/when it escalates to a future Tier 3. Carries the FULL
     decision trail (Tier 1's original decision, Tier 2's revision), not just the final
     outcome — an auditor or a future cloud model needs to see what already ran and what
@@ -280,7 +280,7 @@ class EscalationResponse:
     backend can be a drop-in `evaluate()`-shaped call, the same convention
     `shield/agent_core/slm_backend.py`'s `SlmBackend` protocol already establishes for Tier 2
     (`evaluate(event, ctx) -> PolicyDecision`). Not yet produced by any real code — no Tier 3
-    exists (docs/design/2026-08-18-a2a-escalation-schema-proposal.md's explicit deferral) —
+    exists (docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md's explicit deferral) —
     this shape exists so a future Tier3Backend has a real contract to implement against."""
 
     decision: Decision
