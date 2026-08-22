@@ -57,8 +57,10 @@ class SimulatedSlmBackend:
     """NOT a real model. A deterministic keyword-pattern mapper mirroring the labeled malicious/
     benign command patterns already used to generate `slm_training/generate_dataset.py`'s SFT
     dataset — the same oracle that dataset's labels came from, made callable instead of only
-    emitting static JSONL. This exists so the Tier-2 escalation path is exercisable in tests and
-    CI without a real model on disk.
+    emitting static JSONL. Unknown inputs stay `escalate` so they flow into the router's
+    unresolved-escalation fail-closed path rather than being silently downgraded to observation.
+    This exists so the Tier-2 escalation path is exercisable in tests and CI without a real model
+    on disk.
 
     Every decision this backend produces is labeled synthetic directly in its `reason` field, so
     it can never be read back as a real model verdict — mirrors `sensors/dev_generator.py`'s own
@@ -81,8 +83,8 @@ class SimulatedSlmBackend:
         event_id = f"evt-slm-sim-{uuid.uuid4().hex[:12]}"
         text = (_process_command_line(event) or "").lower()
 
-        action = "log_only"
-        reason = "no known synthetic pattern matched"
+        action = "escalate"
+        reason = "no known synthetic pattern matched; Tier 2 remains uncertain"
         for indicator in self._CONTAIN_INDICATORS:
             if indicator in text:
                 action, reason = "contain", f"matched known-malicious synthetic pattern: {indicator!r}"

@@ -63,7 +63,9 @@ enforcement path described elsewhere in this wiki.
   the labeled malicious/benign command indicators used to generate
   `slm_training/generate_dataset.py`'s training data. Every decision it returns has `[SIMULATED
   SLM — deterministic pattern match, not a real model]` prefixed onto its `reason` field, so it
-  can never be misread as a real model verdict.
+  can never be misread as a real model verdict. Inputs that match neither known-malicious nor
+  known-benign patterns remain `escalate`, so unresolved synthetic Tier-2 uncertainty reaches the
+  router's fail-closed fallback instead of being downgraded to observation.
 - `LocalSlmBackend` — a thin wrapper around real Qwen2.5-0.5B inference. It deliberately does
   *not* import `slm_training.app` (which has import-time side effects: starts a Flask app,
   requires root, calls `os._exit(1)` on failure) — it re-implements only the inference call
@@ -83,8 +85,9 @@ Wired via CLI:
 shield run --slm-backend {none,simulated,local}   # default: none
 ```
 
-`none` (the default) preserves prior behavior exactly — no Tier-2 call is ever made, and
-`escalate` decisions pass through unchanged.
+`none` (the default) preserves prior behavior exactly — no Tier-2 call is ever made. Any
+decision still marked `escalate` after the configured tiers run is treated as unresolved because
+Tier 3 is not implemented, so the router fails closed to `contain`.
 
 ## Tier 3 — `[PLANNED]`, zero code
 

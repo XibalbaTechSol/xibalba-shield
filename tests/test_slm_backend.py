@@ -86,11 +86,11 @@ def test_simulated_backend_allows_known_benign_pattern():
     assert "SIMULATED SLM" in decision.decision.reason
 
 
-def test_simulated_backend_logs_only_unknown_pattern():
+def test_simulated_backend_escalates_unknown_pattern():
     backend = SimulatedSlmBackend()
     event = _process_event("some-completely-unrecognized-binary --flag")
     decision = backend.evaluate(event, _ctx())
-    assert decision.decision.action == "log_only"
+    assert decision.decision.action == "escalate"
 
 
 def test_simulated_backend_never_mistaken_for_a_real_model():
@@ -164,6 +164,19 @@ def test_router_revises_escalate_decision_using_slm_backend():
 
     assert decision.decision.action == "contain"
     assert decision.rule.rule_id == "_simulated_slm"
+
+
+def test_router_fails_closed_when_simulated_slm_does_not_match_pattern():
+    engine = _force_action(PolicyEngine(), "escalate")
+    backend = SimulatedSlmBackend()
+
+    router = _router(policy_engine=engine, slm_backend=backend)
+    decision = router.handle(_process_event("some-completely-unrecognized-binary --flag"))
+
+    assert decision.decision.action == "contain"
+    assert decision.decision.tier == "tier2_unresolved"
+    assert decision.rule.rule_id == "_simulated_slm"
+    assert "A2A_UNRESOLVED_ESCALATION" in decision.decision.reason
 
 
 def test_router_fails_closed_to_contain_when_no_slm_backend_configured():

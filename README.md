@@ -183,9 +183,10 @@ You don't need a fine-tuned model to exercise the Tier-2 escalation path. `shiel
 
 `shield/agent_core/slm_backend.py` defines the `SlmBackend` interface both implementations
 satisfy — a Tier-2 backend is only ever consulted for events Tier 1 already decided `escalate`;
-`--slm-backend none` never calls it at all. A `contain` decision from either backend still routes
-through the real `ActionBroker` (SIGSTOP-based), never through `slm_training/app.py`'s own
-SIGKILL-only demo containment.
+`--slm-backend none` never calls it at all. Unknown synthetic patterns remain unresolved
+`escalate` decisions, which the router fails closed because Tier 3 is not implemented. A
+`contain` decision from either backend still routes through the real `ActionBroker`
+(SIGSTOP-based), never through `slm_training/app.py`'s own SIGKILL-only demo containment.
 
 For high-risk cases where contextual defense is necessary, the Action Broker pauses the suspicious local process while the SLM (or, once Tier 3 is built, a Cloud Agent via A2A) returns a structured decision. Bounded actions Shield can execute on a `contain` decision:
 - Terminating or pausing a process
