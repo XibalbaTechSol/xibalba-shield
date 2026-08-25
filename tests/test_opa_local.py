@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from shield.opa_local import PROFILES, selected_profile_metadata, supervised_opa, _query
+from shield.opa_local import PACKAGE_ROOT, PROFILES, selected_profile_metadata, supervised_opa, _query
 
 
 @pytest.mark.parametrize("profile", sorted(PROFILES))
@@ -12,6 +12,7 @@ def test_selected_profile_metadata_is_bound_to_rego_bytes(profile):
     version, digest = selected_profile_metadata(profile)
     assert version == "1.0.0"
     assert digest == f"sha256:{hashlib.sha256(PROFILES[profile].read_bytes()).hexdigest()}"
+    assert PROFILES[profile].is_relative_to(PACKAGE_ROOT)
 
 
 def test_unknown_profile_fails_closed():

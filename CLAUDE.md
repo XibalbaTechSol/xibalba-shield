@@ -48,7 +48,7 @@ shield/
 │                        # sidecar (since 2026-08-07, commit f86c0f0) — spec §4.3, §7 —
 │                        # condition groups: process/agent/file/flow/context/activity, authored
 │                        # as Rego. Rego translations for smb, professional-services, and
-│                        # regulated packs exist under policies/rego/. Each vertical must be
+│                        # regulated packs exist under shield/policies/rego/. Each vertical must be
 │                        # loaded in an isolated OPA package/profile; JSON bundles remain used
 │                        # for version/hash pinning, not direct decisions.
 ├── opa_local.py         # Drives `shield local-run` — a supervised local OPA profile smoke

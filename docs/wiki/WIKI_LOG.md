@@ -64,3 +64,15 @@
   documentation-vs-code drift rather than silently following the stale description.
 - Ran `python3 scripts/wiki_toc.py` to generate every page's `## Table of contents` block, then
   verified with `python3 scripts/wiki_toc.py --check`.
+
+## [2026-08-25] update | Packaged local OPA profile smoke path
+
+- Moved the three Rego profiles into `shield/policies/rego/` and declared them as package data so
+  `shield local-run` works from a built wheel outside a source checkout.
+- Hardened local supervision: Open Policy Agent (OPA) output no longer uses unread pipes, missing
+  binaries return a concise nonzero CLI result, and Continuous Integration pins OPA 1.18.2 with
+  SHA-256 checksum verification instead of downloading `latest` without integrity checking.
+- Verification: focused CLI/OPA tests `27 passed`; full root-free suite `139 passed, 10 skipped`;
+  all three Rego files passed `opa check`; all three JSON bundles passed `shield validate`; a wheel
+  built, installed under `/tmp`, and processed one real selected-profile event from outside the
+  repository. Skips remain the suite's explicit root/live-dependency checks.

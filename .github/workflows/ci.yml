@@ -14,13 +14,24 @@ jobs:
           python-version: "3.12"
       - name: Install OPA
         run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          curl --fail --location -o opa https://openpolicyagent.org/downloads/v1.18.2/opa_linux_amd64_static
+          echo "9903e5125ac281104f2c4b7371d10cc3b74a98933743fcbfc174f9bf0ab20de8  opa" | sha256sum --check -
           chmod +x opa
           sudo mv opa /usr/local/bin/opa
       - name: Install package
         run: python -m pip install -e ".[dev]"
       - name: Run root-free tests
         run: pytest -q
+      - name: Verify packaged local OPA profiles
+        run: |
+          python -m pip wheel --no-deps . --wheel-dir dist
+          wheel_paths=(dist/xibalba_shield-*.whl)
+          wheel_path="${wheel_paths[0]}"
+          test -f "$wheel_path"
+          rm -rf /tmp/shield-wheel-smoke
+          python -m pip install --no-deps --target /tmp/shield-wheel-smoke "$wheel_path"
+          cd /tmp
+          PYTHONPATH=/tmp/shield-wheel-smoke python -m shield.cli local-run --profile smb --opa-binary /usr/local/bin/opa --max-events 1 --dev-interval 0 --log-path /tmp/shield-wheel-smoke.jsonl
       - name: Validate default policy packs
         run: |
           shield validate --rules policies/defaults/smb.json

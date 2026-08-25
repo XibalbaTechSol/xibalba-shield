@@ -35,3 +35,6 @@ shield-backend = "shield.backend.api:main"
 
 [tool.setuptools.packages.find]
 include = ["shield*"]
+
+[tool.setuptools.package-data]
+shield = ["policies/rego/*.rego"]

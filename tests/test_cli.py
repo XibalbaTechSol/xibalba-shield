@@ -15,6 +15,20 @@ from shield.agent_core.eventlog import EventLog
 from shield.config import load_policy_bundle
 from shield.cli import main
 
+
+def test_local_run_reports_missing_opa_without_traceback(tmp_path, capsys):
+    result = main([
+        "local-run",
+        "--profile", "smb",
+        "--opa-binary", "/does/not/exist",
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+    ])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "unable to start selected OPA profile" in captured.err
+    assert "Traceback" not in captured.err
+
 import pytest
 from unittest.mock import AsyncMock, patch
 from integrity_sdk.policy.opa_client import OPADecision

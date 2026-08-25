@@ -275,7 +275,7 @@ mocks the OPA call directly). §7.1–§7.3 below describe the **rule schema and
 vocabulary** — this remains the authoring format JSON bundles use and the shape a Rego policy
 must implement — but the JSON bundle's parsed `rules` content is **not itself consulted** by
 `evaluate()` today; only `policy_version`/`policy_hash` metadata is. All three default packs have
-real Rego translations under `policies/rego/` and must be loaded as isolated selected profiles;
+real Rego translations under `shield/policies/rego/` and must be loaded as isolated selected profiles;
 `shield local-run --profile {smb,professional-services,regulated}` supervises that local smoke
 path. Plain `shield run` still expects an operator-managed local OPA sidecar. If OPA is
 unreachable, `evaluate()` fails closed (`deny`) — never a silent allow, matching

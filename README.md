@@ -270,18 +270,12 @@ python3 scripts/e2e_validate.py
 
 The harness always runs root-free tests, validates default policy packs, runs the dev sensor through the real router/policy/log path, checks kernel BTF layout when available, and reports root/live-stack checks as `SKIP` when their real dependencies are absent.
 
-Run a local Shield loop. **Without a running local OPA server, every event fails closed as
-`deny`** — see "Policy Model" below for why and how to actually exercise decisions:
+Run a local Shield smoke loop with one explicit, packaged Open Policy Agent (OPA) profile. This
+development command supervises OPA on loopback, binds the evaluated Rego bytes into decision
+metadata, disables containment and external export, and cleans up the child process:
 
 ```bash
-opa run --server --addr localhost:8181 policies/rego/smb.rego &   # required, see Policy Model
-.venv/bin/shield run \
-  --sensor dev \
-  --device-id dev-1 \
-  --rules policies/defaults/smb.json \
-  --no-exporter \
-  --max-events 12 \
-  --dev-interval 0
+.venv/bin/shield local-run --profile smb --max-events 12 --dev-interval 0
 ```
 
 Inspect local decisions:
@@ -333,19 +327,20 @@ to `shield/policy_engine/engine.py` moved rule *evaluation* from an in-process J
 first-match loop to a real OPA (Open Policy Agent) REST call (`hot_reload.py`'s own comment: "We
 no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
 
-- **A local OPA server must be running** (default `http://localhost:8181`, package path
-  `/v1/data/shield/policy`) for `shield run` to evaluate anything but a hardcoded fail-closed
-  `deny`. Nothing in this repo's Quickstart currently starts one — this is a real, open gap (see
-  `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`), not something to work around silently.
+- **Plain `shield run` still requires an operator-managed OPA server** (default
+  `http://localhost:8181`, package path `/v1/data/shield/policy`) and fails closed if it is
+  unavailable. For an explicit local smoke path, `shield local-run --profile PROFILE` starts one
+  packaged, allowlisted profile on loopback. It never auto-selects a profile, downloads OPA, or
+  silently replaces the production sidecar contract.
 - The JSON policy bundle passed to `--rules` (`smb.json` etc., schema below) is still real and
   still enforced for **version/hash pinning and hot-reload trust** (`trusted_policy_hashes`), but
   its `rules` array is **no longer the decision source**. The actual decision logic lives in Rego
   policy loaded into OPA.
 - Only one JSON policy pack was originally translated to Rego. The repository now contains
   translations for all three default packs:
-  - `policies/rego/smb.rego`
-  - `policies/rego/professional-services.rego`
-  - `policies/rego/regulated.rego`
+  - `shield/policies/rego/smb.rego`
+  - `shield/policies/rego/professional-services.rego`
+  - `shield/policies/rego/regulated.rego`
   These translations preserve ordered first-match behavior with explicit precedence guards.
   The SMB registration rule treats a missing registration-map key as unregistered, matching the
   live `PolicyEngine` input contract.
@@ -353,13 +348,10 @@ no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
   profile selection: loading multiple verticals into the same `shield.policy` package creates
   duplicate defaults. `shield run` also still requires a manually started OPA sidecar.
 
-To actually exercise policy decisions locally:
+To exercise one selected policy profile locally from a source checkout or installed wheel:
 
 ```bash
-opa run --server --addr localhost:8181 policies/rego/smb.rego
-# in another terminal:
-.venv/bin/shield run --sensor dev --device-id dev-1 --rules policies/defaults/smb.json \
-  --no-exporter --max-events 12 --dev-interval 0
+.venv/bin/shield local-run --profile smb --max-events 12 --dev-interval 0
 ```
 
 The JSON rule bundle format below documents the schema `load_policy_bundle` parses (for version/
@@ -416,11 +408,11 @@ Every evaluation produces a `PolicyDecision`, including default allow/no-match d
 Default packs live under `policies/defaults/`:
 
 - `smb.json`: shadow AI process paths, unregistered agent tools, sensitive writes. **Has a real
-  Rego translation** (`policies/rego/smb.rego`) for selected-profile OPA evaluation.
+  Rego translation** (`shield/policies/rego/smb.rego`) for selected-profile OPA evaluation.
 - `professional-services.json`: unregistered agents, unapproved model routing, client-data context.
-  **Has a real Rego translation** (`policies/rego/professional-services.rego`) for selected-profile OPA evaluation.
+  **Has a real Rego translation** (`shield/policies/rego/professional-services.rego`) for selected-profile OPA evaluation.
 - `regulated.json`: unregistered agents, PHI-class context, high-risk output, regulated sensitive writes.
-  **Has a real Rego translation** (`policies/rego/regulated.rego`) for selected-profile OPA evaluation.
+  **Has a real Rego translation** (`shield/policies/rego/regulated.rego`) for selected-profile OPA evaluation.
 
 Validate them:
 
@@ -756,7 +748,7 @@ Milestones, roughly in priority order (see `docs/archive/2026-08/IMPLEMENTATION_
 
 Highest-priority gaps:
 
-- Rego translations for all three default packs now exist in `policies/rego/` and are covered by
+- Rego translations for all three default packs now exist in `shield/policies/rego/` and are covered by
   interpreter-backed tests. `shield local-run --profile {smb,professional-services,regulated}`
   starts exactly one supervised local OPA profile; plain `shield run` still expects an
   operator-managed OPA sidecar.

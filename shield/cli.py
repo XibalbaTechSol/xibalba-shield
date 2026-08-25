@@ -317,21 +317,25 @@ def _siem_export(args: argparse.Namespace) -> int:
 def _local_run(args: argparse.Namespace) -> int:
     from .opa_local import selected_profile_metadata, supervised_opa
 
-    with supervised_opa(args.profile, opa_binary=args.opa_binary, timeout=args.opa_timeout) as opa_url:
-        args.opa_url = opa_url
-        args.policy_version, args.policy_hash = selected_profile_metadata(args.profile)
-        args.device_config = None
-        args.rules = None
-        args.tenant_id = ""
-        args.device_role = ""
-        args.bcc_middleware_url = "http://localhost:8000"
-        args.oracle_url = None
-        args.agent_label = "xibalba-shield-local"
-        args.no_exporter = True
-        args.no_containment = True
-        args.log_integrity_key = None
-        args.slm_backend = "none"
-        return _run(args)
+    try:
+        with supervised_opa(args.profile, opa_binary=args.opa_binary, timeout=args.opa_timeout) as opa_url:
+            args.opa_url = opa_url
+            args.policy_version, args.policy_hash = selected_profile_metadata(args.profile)
+            args.device_config = None
+            args.rules = None
+            args.tenant_id = ""
+            args.device_role = ""
+            args.bcc_middleware_url = "http://localhost:8000"
+            args.oracle_url = None
+            args.agent_label = "xibalba-shield-local"
+            args.no_exporter = True
+            args.no_containment = True
+            args.log_integrity_key = None
+            args.slm_backend = "none"
+            return _run(args)
+    except (FileNotFoundError, RuntimeError, TimeoutError, OSError) as exc:
+        print(f"shield local-run: unable to start selected OPA profile: {exc}", file=sys.stderr)
+        return 1
 
 
 def main(argv: list[str] | None = None) -> int:
