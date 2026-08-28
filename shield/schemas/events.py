@@ -260,6 +260,45 @@ class PolicyDecision:
 
 
 @dataclass
+class EnforcementOutcome:
+    """What actually happened when a PolicyDecision's chosen action was carried out --
+    distinct from PolicyDecision itself, which only records what was DECIDED.
+
+    Forward-link counterpart to PolicyDecision.event_ref: keyed by the same `event_id` that
+    decision already carries backward to its triggering event, so no new id scheme is needed
+    to join "this decision" to "what happened when we tried to enforce it".
+
+    Mirrors ActionBroker.contain()'s existing ActionResult (agent_core/action_broker.py) --
+    that data was already being computed, just logged and discarded by router.py's
+    EventRouter.handle() rather than persisted. This dataclass is the persisted shape of the
+    same information, not new data collection.
+    """
+
+    event_id: str
+    device_id: str
+    action: str
+    completed: bool
+    escalated: bool = False
+    error: str | None = None
+    agent_id: str | None = None
+    time: str = field(default_factory=_now_iso)
+    klass: str = field(default="enforcement_outcome", init=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "class": self.klass,
+            "time": self.time,
+            "event_id": self.event_id,
+            "device_id": self.device_id,
+            "agent_id": self.agent_id,
+            "action": self.action,
+            "completed": self.completed,
+            "escalated": self.escalated,
+            "error": self.error,
+        }
+
+
+@dataclass
 class EscalationRequest:
     """docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md — what a Tier-2-still-
     uncertain event carries if/when it escalates to a future Tier 3. Carries the FULL

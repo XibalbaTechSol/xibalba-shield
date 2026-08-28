@@ -92,6 +92,15 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"detection_quality": store.list_detection_quality(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/enforcement-outcomes":
+                if not self._require_admin():
+                    return
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None:
+                    return
+                device_id = query.get("device_id", [None])[0]
+                self._send_json({"enforcement_outcomes": store.list_enforcement_outcomes(tenant_id=tenant_id, device_id=device_id)})
+                return
             self._send_error(HTTPStatus.NOT_FOUND, "not found")
 
         def do_POST(self) -> None:
@@ -191,6 +200,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 "/api/shield/metrics",
                 "/api/shield/detection-quality",
                 "/api/shield/exporter-status",
+                "/api/shield/enforcement-outcomes",
             ):
                 tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
                 device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
@@ -208,6 +218,10 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     elif parsed.path == "/api/shield/detection-quality":
                         quality = body.get("detection_quality", body)
                         row_id = store.record_detection_quality(tenant_id=tenant_id, device_id=device_id, quality=quality)
+                        self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
+                    elif parsed.path == "/api/shield/enforcement-outcomes":
+                        outcome = body.get("outcome", body)
+                        row_id = store.record_enforcement_outcome(tenant_id=tenant_id, device_id=device_id, outcome=outcome)
                         self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
                     else:
                         status_doc = body.get("status", body)

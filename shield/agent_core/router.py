@@ -35,7 +35,7 @@ from typing import Callable, Iterable, Protocol
 
 from integrity_sdk.telemetry.tracing import get_tracer
 
-from ..schemas.events import AgentEvent, ExportStatus, NormalizedEvent, PolicyDecision
+from ..schemas.events import AgentEvent, EnforcementOutcome, ExportStatus, NormalizedEvent, PolicyDecision
 from ..policy_engine.engine import EvaluationContext, PolicyEngine
 from .action_broker import ActionBroker
 from .eventlog import EventLog
@@ -72,6 +72,7 @@ class EventRouter:
         guardrail_hooks: Iterable[Callable[[AgentEvent, PolicyDecision], None]] = (),
         event_log: EventLog | None = None,
         slm_backend: SlmBackend | None = None,
+        enforcement_outcome_sink: Callable[[EnforcementOutcome], None] | None = None,
     ) -> None:
         self.device = device
         self.registry = registry
@@ -81,6 +82,12 @@ class EventRouter:
         self.guardrail_hooks = list(guardrail_hooks)
         self.event_log = event_log
         self.slm_backend = slm_backend
+        # Optional, injectable, same pattern as `event_log`/`exporter` -- keeps this module's
+        # "no policy logic, no persistence of its own" stance (see module docstring) even
+        # though it now reports enforcement outcomes. A caller supplies where they go (e.g.
+        # shield/backend/store.py's enforcement_outcomes table); router.py never persists
+        # anything itself.
+        self.enforcement_outcome_sink = enforcement_outcome_sink
 
     def _context(self) -> EvaluationContext:
         return EvaluationContext(
@@ -89,6 +96,19 @@ class EventRouter:
             device_id=self.device.device_id,
             registered_agent_ids=self.registry.registered_ids(),
         )
+
+    def _report_enforcement_outcome(self, outcome: EnforcementOutcome) -> None:
+        """Best-effort only -- a sink failure (e.g. the backend store is down) must never
+        propagate out of handle() any more than a containment failure itself does. This is
+        its own separate try/except, deliberately not nested inside the containment
+        try/except above, so a persistence bug can never be mistaken for a containment bug
+        in the logs."""
+        if self.enforcement_outcome_sink is None:
+            return
+        try:
+            self.enforcement_outcome_sink(outcome)
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to persist enforcement outcome for %s", outcome.event_id)
 
     def handle(self, event: NormalizedEvent) -> PolicyDecision:
         """Process one normalized event end-to-end. Returns the PolicyDecision so callers
@@ -156,6 +176,7 @@ class EventRouter:
         # later, it needs its own background timer, not an inline call here.
         if self.action_broker is not None and decision.decision.action == "contain":
             pid = _pid_of(event)
+            agent_id = event.agent.agent_id if isinstance(event, AgentEvent) else None
             if pid is not None:
                 try:
                     result = self.action_broker.contain(pid)
@@ -163,18 +184,47 @@ class EventRouter:
                         "contained pid %s for decision on %s: %s (%s)",
                         pid, decision.event_ref.event_id, result.action, result.method,
                     )
-                except Exception:  # noqa: BLE001
+                    if self.enforcement_outcome_sink is not None:
+                        # getattr-defensive, not result.completed directly: ActionBroker's
+                        # real return type (ActionResult) always has these fields, but a
+                        # caller-supplied broker (tests, alternate implementations) may
+                        # return a narrower duck-typed object -- this must never turn a
+                        # genuinely successful containment into a misreported failure just
+                        # because persistence-shape introspection failed.
+                        self._report_enforcement_outcome(
+                            EnforcementOutcome(
+                                event_id=decision.event_ref.event_id, device_id=self.device.device_id,
+                                action=getattr(result, "action", "contain"),
+                                completed=getattr(result, "completed", True),
+                                escalated=getattr(result, "escalated", False),
+                                error=getattr(result, "error", None), agent_id=agent_id,
+                            )
+                        )
+                except Exception as exc:  # noqa: BLE001
                     # A failed containment attempt must never take down the router or block
                     # export/logging of the decision that was already made -- it's logged
                     # loudly (not silently swallowed) so a broken broker doesn't read as a
-                    # quiet no-op.
+                    # quiet no-op. Persisting the failure outcome shares the exact same
+                    # guarantee -- see _report_enforcement_outcome.
                     logger.exception(
                         "containment failed for pid %s on decision %s", pid, decision.event_ref.event_id
+                    )
+                    self._report_enforcement_outcome(
+                        EnforcementOutcome(
+                            event_id=decision.event_ref.event_id, device_id=self.device.device_id,
+                            action="contain", completed=False, error=str(exc), agent_id=agent_id,
+                        )
                     )
             else:
                 logger.warning(
                     "decision %s is 'contain' but event carries no pid to act on (class=%s)",
                     decision.event_ref.event_id, decision.event_ref.klass,
+                )
+                self._report_enforcement_outcome(
+                    EnforcementOutcome(
+                        event_id=decision.event_ref.event_id, device_id=self.device.device_id,
+                        action="contain", completed=False, error="no pid to act on", agent_id=agent_id,
+                    )
                 )
 
         if isinstance(event, AgentEvent):
