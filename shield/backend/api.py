@@ -20,9 +20,19 @@ from .store import ShieldStore
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
 
 
-def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = ""):
+def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*"):
     class ShieldBackendHandler(BaseHTTPRequestHandler):
         server_version = "XibalbaShieldBackend/0.1"
+
+        def do_OPTIONS(self) -> None:  # noqa: N802 -- CORS preflight, same convention as
+            # xibalba-cortex's local_api.py -- without this a browser-based caller (e.g. the
+            # dashboard's Guided System Test wizard) never even reaches a real endpoint; the
+            # preflight itself gets blocked first.
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.end_headers()
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -288,6 +298,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
             self.end_headers()
             self.wfile.write(raw)
 
@@ -580,9 +591,9 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 6) if denominator else None
 
 
-def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "") -> ThreadingHTTPServer:
+def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*") -> ThreadingHTTPServer:
     store = ShieldStore(db_path)
-    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url)
+    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin)
     server = ThreadingHTTPServer((host, port), handler)
     server.store = store  # type: ignore[attr-defined]
     return server
@@ -595,6 +606,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", "dev-shield-admin"))
     parser.add_argument("--public-base-url", default=os.getenv("SHIELD_PUBLIC_BASE_URL", ""))
+    parser.add_argument("--allowed-origin", default=os.getenv("SHIELD_BACKEND_ALLOWED_ORIGIN", "*"), help="CORS origin for browser callers (e.g. the dashboard)")
     args = parser.parse_args(argv)
 
     server = run_server(
@@ -602,6 +614,7 @@ def main(argv: list[str] | None = None) -> int:
         port=args.port,
         db_path=args.db_path,
         admin_token=args.admin_token,
+        allowed_origin=args.allowed_origin,
         public_base_url=args.public_base_url,
     )
     print(f"shield-backend listening on http://{args.host}:{server.server_port}")
