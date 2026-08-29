@@ -9,7 +9,7 @@ import pytest
 
 
 ROOT = Path(__file__).parents[1]
-POLICY_DIR = ROOT / "policies" / "rego"
+POLICY_DIR = ROOT / "shield" / "policies" / "rego"
 
 
 @pytest.fixture(scope="module")

@@ -15,9 +15,24 @@ from shield.agent_core.eventlog import EventLog
 from shield.config import load_policy_bundle
 from shield.cli import main
 
+
+def test_local_run_reports_missing_opa_without_traceback(tmp_path, capsys):
+    result = main([
+        "local-run",
+        "--profile", "smb",
+        "--opa-binary", "/does/not/exist",
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+    ])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "unable to start selected OPA profile" in captured.err
+    assert "Traceback" not in captured.err
+
 import pytest
 from unittest.mock import AsyncMock, patch
 from integrity_sdk.policy.opa_client import OPADecision
+from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
 
 @pytest.fixture(autouse=True)
 def mock_opa():
@@ -198,6 +213,46 @@ def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys, mock_opa):
     assert all(r["rule"]["rule_id"] == "deny-network" for r in network_rows)
     assert all(r["policy"]["version"] == "pilot-test" for r in network_rows)
     assert all(r["policy"]["hash"].startswith("sha256:") for r in network_rows)
+
+
+def test_run_wires_simulated_slm_backend_for_escalations(tmp_path, capsys, mock_opa):
+    mock_opa.return_value = OPADecision(
+        allow=False,
+        raw_result={
+            "action": "escalate",
+            "message": "Tier 1 needs semantic review",
+            "rule_id": "needs-tier2",
+            "name": "Needs Tier 2",
+            "version": "1.0.0",
+        },
+    )
+    log_path = tmp_path / "decisions.jsonl"
+    event = ProcessActivity(
+        device_id="test-dev",
+        process=ProcessInfo(
+            pid=4242,
+            name="nc",
+            exe_path="/usr/bin/nc",
+            cmdline="nc -lvnp 9999",
+        ),
+        activity=Activity(type="launch"),
+    )
+
+    with patch("shield.sensors.dev_generator.DevModeSensor.events", return_value=iter([event])):
+        code = main([
+            "--log-path", str(log_path),
+            "run", "--sensor", "dev", "--device-id", "test-dev",
+            "--max-events", "1", "--dev-interval", "0",
+            "--no-exporter", "--no-containment", "--slm-backend", "simulated",
+        ])
+
+    assert code == 0
+    capsys.readouterr()
+    row = EventLog(log_path).recent(1)[0]
+    assert row["decision"]["action"] == "contain"
+    assert row["decision"]["tier"] == "tier2"
+    assert row["rule"]["rule_id"] == "_simulated_slm"
+    assert "SIMULATED SLM" in row["decision"]["reason"]
 
 
 def test_run_requires_device_id_without_device_config(tmp_path, capsys):

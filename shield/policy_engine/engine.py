@@ -94,6 +94,7 @@ class PolicyEngine:
                 
             return PolicyDecision(
                 device_id=ctx.device_id,
+                invocation_id=getattr(event, "invocation_id", None) or str(uuid.uuid4()),
                 event_ref=EventRef(klass=event.klass, event_id=event_id),
                 rule=RuleRef(rule_id=rule_id, name=name, version=version),
                 policy=PolicyRef(version=self.policy_version, hash=self.policy_hash),
@@ -108,6 +109,7 @@ class PolicyEngine:
             # Fail closed as per spec
             return PolicyDecision(
                 device_id=ctx.device_id,
+                invocation_id=getattr(event, "invocation_id", None) or str(uuid.uuid4()),
                 event_ref=EventRef(klass=event.klass, event_id=event_id),
                 rule=RuleRef(rule_id="_opa_unavailable", name="OPA Unavailable", version="0"),
                 policy=PolicyRef(version=self.policy_version, hash=self.policy_hash),
@@ -117,4 +119,3 @@ class PolicyEngine:
                     severity="high",
                 ),
             )
-

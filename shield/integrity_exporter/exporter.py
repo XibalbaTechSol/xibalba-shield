@@ -21,7 +21,8 @@ turns evidence into a score (protocol spec §8.1's "sole computer" rule), and th
 code path that bypasses that.
 
 Restored 2026-08-12 after a 2026-08-07 refactor deleted this module in favor of OTel-only
-telemetry with no signed-commitment path (see xibalba-shield/IMPLEMENTATION_PLAN.md's former
+telemetry with no signed-commitment path (see
+xibalba-shield/docs/archive/2026-08/IMPLEMENTATION_PLAN.md's former
 "Known gap — 2026-08-12"). One deliberate change from the original: `IntegrityClient` is
 constructed with `background_flush=True` (the SDK's own default) instead of the original
 `background_flush=False`. Shield's decisions fire on a real-time enforcement path — a `contain`/
@@ -107,14 +108,25 @@ class IntegrityExporter:
             commitment_kwargs["chain_id"] = self.chain_id
         if "verifying_contract" in commitment_params:
             commitment_kwargs["verifying_contract"] = self.verifying_contract
+        if "invocation_id" in commitment_params:
+            # The pinned SDK remains backward compatible during the cross-repository rollout.
+            # Once its pin includes invocation-id v1 this value is signed into the commitment.
+            commitment_kwargs["invocation_id"] = decision.invocation_id
 
         commitment = bcc.build_bcc_commitment(**commitment_kwargs)
         try:
             result = bcc.submit_commitment(commitment, self.bcc_middleware_url)
             if isinstance(result, dict):
+                returned_invocation_id = result.get("invocation_id")
+                if returned_invocation_id not in (None, decision.invocation_id):
+                    raise RuntimeError(
+                        "BCC response invocation_id does not match the signed commitment"
+                    )
                 result.setdefault("agent_id", commitment["agent_id"])
                 result.setdefault("nonce", commitment["nonce"])
                 result.setdefault("intended_state_hash", commitment["intended_state_hash"])
+                result.setdefault("invocation_id", decision.invocation_id)
+                result.setdefault("invocation_id_signed", "invocation_id" in commitment)
             return result
         except Exception as exc:  # noqa: BLE001
             # Evidence export is best-effort by design (spec §4.5 doesn't require it to
@@ -122,7 +134,12 @@ class IntegrityExporter:
             # losing the evidence submission must not be silently invisible, so it's logged
             # loudly rather than swallowed.
             logger.warning("BCC submission failed for decision %s: %r", decision.event_ref.event_id, exc)
-            return {"authorized": False, "reason": f"submission failed: {exc}"}
+            return {
+                "authorized": False,
+                "reason": f"submission failed: {exc}",
+                "invocation_id": decision.invocation_id,
+                "invocation_id_signed": False,
+            }
 
     def export_event(self, event: NormalizedEvent) -> None:
         self._telemetry_client.log_telemetry({"shield_event": event.to_dict()})

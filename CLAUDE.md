@@ -28,7 +28,7 @@ full product narrative; this file is the working-code map.
 
 Full technical specification: `spec/xibalba-shield-v1.md` in `integrity-core` (cross-repo
 protocol-level spec — read it there, this file assumes it) and this repo's own
-`SPECIFICATION.md` / `IMPLEMENTATION_PLAN.md` for Shield-specific design and status.
+`SPECIFICATION.md` / `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` for Shield-specific design and status.
 
 ## Repository layout
 
@@ -48,7 +48,7 @@ shield/
 │                        # sidecar (since 2026-08-07, commit f86c0f0) — spec §4.3, §7 —
 │                        # condition groups: process/agent/file/flow/context/activity, authored
 │                        # as Rego. Rego translations for smb, professional-services, and
-│                        # regulated packs exist under policies/rego/. Each vertical must be
+│                        # regulated packs exist under shield/policies/rego/. Each vertical must be
 │                        # loaded in an isolated OPA package/profile; JSON bundles remain used
 │                        # for version/hash pinning, not direct decisions.
 ├── opa_local.py         # Drives `shield local-run` — a supervised local OPA profile smoke
@@ -86,7 +86,7 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest        # 135 passed, 9 skipped in the current root-free suite
+.venv/bin/python -m pytest        # 138 passed, 9 skipped in the current root-free suite
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
 shield status                    # local decision-log summary
 shield events --recent 20        # recent policy decisions
@@ -126,7 +126,7 @@ endpoint security.
   repo's `integrity_exporter` must never invent its own commitment fields; it calls
   `integrity_sdk.bcc.build_bcc_commitment` and nothing else builds one. A 2026-08-07 refactor
   briefly deleted this module in favor of OTel-only telemetry, leaving Shield with no path to a
-  signed commitment; it was restored 2026-08-12 (`IMPLEMENTATION_PLAN.md`'s former "Known gap —
+  signed commitment; it was restored 2026-08-12 (`docs/archive/2026-08/IMPLEMENTATION_PLAN.md`'s former "Known gap —
   2026-08-12" is now closed) and now runs alongside the OTel span, not instead of it — both are
   independent, separately best-effort export paths in `agent_core/router.py`'s `handle()`.
   `IntegrityExporter` is constructed with `background_flush=True` (the SDK default), a deliberate

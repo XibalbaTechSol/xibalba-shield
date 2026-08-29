@@ -86,11 +86,11 @@ def test_simulated_backend_allows_known_benign_pattern():
     assert "SIMULATED SLM" in decision.decision.reason
 
 
-def test_simulated_backend_logs_only_unknown_pattern():
+def test_simulated_backend_escalates_unknown_pattern():
     backend = SimulatedSlmBackend()
     event = _process_event("some-completely-unrecognized-binary --flag")
     decision = backend.evaluate(event, _ctx())
-    assert decision.decision.action == "log_only"
+    assert decision.decision.action == "escalate"
 
 
 def test_simulated_backend_never_mistaken_for_a_real_model():
@@ -166,8 +166,21 @@ def test_router_revises_escalate_decision_using_slm_backend():
     assert decision.rule.rule_id == "_simulated_slm"
 
 
+def test_router_fails_closed_when_simulated_slm_does_not_match_pattern():
+    engine = _force_action(PolicyEngine(), "escalate")
+    backend = SimulatedSlmBackend()
+
+    router = _router(policy_engine=engine, slm_backend=backend)
+    decision = router.handle(_process_event("some-completely-unrecognized-binary --flag"))
+
+    assert decision.decision.action == "contain"
+    assert decision.decision.tier == "tier2_unresolved"
+    assert decision.rule.rule_id == "_simulated_slm"
+    assert "A2A_UNRESOLVED_ESCALATION" in decision.decision.reason
+
+
 def test_router_fails_closed_to_contain_when_no_slm_backend_configured():
-    """docs/design/2026-08-18-a2a-escalation-schema-proposal.md: Tier 1's `escalate` with no
+    """docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md: Tier 1's `escalate` with no
     Tier 2 configured (and no Tier 3 -- none exists) must not reach export as a bare,
     unresolved `escalate` -- that was a real, silent no-decision outcome. Fails closed to
     `contain` instead, tagged with the A2A_UNRESOLVED_ESCALATION reason."""
@@ -208,7 +221,7 @@ def test_router_tags_tier2_on_slm_revised_decision():
 
 
 def test_router_fails_closed_when_tier2_itself_remains_uncertain():
-    """docs/design/2026-08-18-a2a-escalation-schema-proposal.md: Tier 2 consulted and STILL
+    """docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md: Tier 2 consulted and STILL
     uncertain (returns its own `escalate`, not an exception) -- the genuinely-uncertain case
     the fallback exists for, distinct from Tier 2 being unavailable/broken."""
     from shield.schemas.events import Decision as _Decision, EventRef as _EventRef, PolicyDecision as _PolicyDecision, RuleRef as _RuleRef

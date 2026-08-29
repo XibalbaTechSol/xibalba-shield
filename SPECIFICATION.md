@@ -17,7 +17,7 @@ This specification defines what Shield must do, how the current repository is or
 
 ## Current audit and implementation boundary
 
-The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md), corrected by a 2026-08-12 update note at the top of that file. The root-free suite reports **118 tests passed, 9 skipped** (2026-08-12; grew from 103/7 after the ActionBroker-wiring and Tier-2 `SlmBackend` tests landed). Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. Two closed since the 2026-08-06 audit boundary: the Integrity Exporter (deleted 2026-08-07, restored 2026-08-12, see IMPLEMENTATION_PLAN.md) and the Action Broker (existed but was never called from `shield run`'s live loop; wired 2026-08-12). This specification is normative for behavior, but README, IMPLEMENTATION_PLAN, SECURITY, and the audit ledger determine observed implementation status.
+The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md), corrected by later update notes at the top of that file. The root-free suite reports **138 tests passed, 9 skipped** (2026-08-21; grew from 103/7 after ActionBroker, Tier-2 `SlmBackend`, Rego-profile, and CLI wiring tests landed). Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. Two closed since the 2026-08-06 audit boundary: the Integrity Exporter (deleted 2026-08-07, restored 2026-08-12, see `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`) and the Action Broker (existed but was never called from `shield run`'s live loop; wired 2026-08-12). This specification is normative for behavior, but README, the archived implementation plan, SECURITY, and the audit ledger determine observed implementation status.
 
 ## 1. Source Of Truth And Scope
 
@@ -218,7 +218,7 @@ Required principles:
 
 ### 4.3 PolicyDecision Requirements
 
-Every policy evaluation, including allow and log-only outcomes, must produce a decision record with original event reference, rule reference if matched, final action, operator-readable reason, severity, timestamp, and device context.
+Every policy evaluation, including allow and log-only outcomes, must produce a decision record with original event reference, rule reference if matched, final action, operator-readable reason, severity, timestamp, device context, and canonical UUID `invocation_id`. An instrumented agent event preserves its upstream invocation ID; an endpoint-only observation receives a new ID. The identifier follows `integrity-core/spec/invocation-id-v1.md` and provides correlation, not proof of execution or authorization.
 
 ## 5. Sensor Specification
 
@@ -274,10 +274,12 @@ OPA (Open Policy Agent) REST server (default `http://localhost:8181`, package pa
 mocks the OPA call directly). §7.1–§7.3 below describe the **rule schema and condition/action
 vocabulary** — this remains the authoring format JSON bundles use and the shape a Rego policy
 must implement — but the JSON bundle's parsed `rules` content is **not itself consulted** by
-`evaluate()` today; only `policy_version`/`policy_hash` metadata is. Only `policies/rego/smb.rego`
-exists as a real Rego translation of a default pack; `professional-services.json` and
-`regulated.json` have none yet. If OPA is unreachable, `evaluate()` fails closed (`deny`) — never
-a silent allow, matching `bcc_middleware`'s own documented posture in `integrity-core`.
+`evaluate()` today; only `policy_version`/`policy_hash` metadata is. All three default packs have
+real Rego translations under `shield/policies/rego/` and must be loaded as isolated selected profiles;
+`shield local-run --profile {smb,professional-services,regulated}` supervises that local smoke
+path. Plain `shield run` still expects an operator-managed local OPA sidecar. If OPA is
+unreachable, `evaluate()` fails closed (`deny`) — never a silent allow, matching
+`bcc_middleware`'s own documented posture in `integrity-core`.
 
 ### 7.1 Rule Model
 
@@ -474,10 +476,10 @@ README.md's "Goals and Milestones" section; this roadmap is the implementation-p
 
 ### Phase 2.5: Policy Engine Completeness
 
-- Write Rego translations for `professional-services.json` and `regulated.json` (only `smb.json`
-  has one, see §7.0).
-- Document or script a way to run the OPA sidecar alongside `shield run` rather than requiring a
-  manually-started process.
+- Keep all three default Rego translations (`smb`, `professional-services`, `regulated`) covered
+  by interpreter-backed regression tests.
+- Keep `shield local-run --profile ...` as the supervised selected-profile smoke path; plain
+  `shield run` continues to require an operator-managed OPA sidecar.
 - Grow the Tier-2 SFT dataset and run a real fine-tune, with community help (§3.4.3) — needs GPU/
   inference compute this project does not have alone.
 

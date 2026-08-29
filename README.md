@@ -183,9 +183,10 @@ You don't need a fine-tuned model to exercise the Tier-2 escalation path. `shiel
 
 `shield/agent_core/slm_backend.py` defines the `SlmBackend` interface both implementations
 satisfy — a Tier-2 backend is only ever consulted for events Tier 1 already decided `escalate`;
-`--slm-backend none` never calls it at all. A `contain` decision from either backend still routes
-through the real `ActionBroker` (SIGSTOP-based), never through `slm_training/app.py`'s own
-SIGKILL-only demo containment.
+`--slm-backend none` never calls it at all. Unknown synthetic patterns remain unresolved
+`escalate` decisions, which the router fails closed because Tier 3 is not implemented. A
+`contain` decision from either backend still routes through the real `ActionBroker`
+(SIGSTOP-based), never through `slm_training/app.py`'s own SIGKILL-only demo containment.
 
 For high-risk cases where contextual defense is necessary, the Action Broker pauses the suspicious local process while the SLM (or, once Tier 3 is built, a Cloud Agent via A2A) returns a structured decision. Bounded actions Shield can execute on a `contain` decision:
 - Terminating or pausing a process
@@ -223,7 +224,7 @@ Current root-free validation:
 
 ```text
 pytest -q
-118 passed, 9 skipped (2026-08-12)
+138 passed, 9 skipped (2026-08-21)
 Root-free tests currently pass locally; root/live-service tests skip unless their real dependencies exist.
 ```
 
@@ -269,18 +270,12 @@ python3 scripts/e2e_validate.py
 
 The harness always runs root-free tests, validates default policy packs, runs the dev sensor through the real router/policy/log path, checks kernel BTF layout when available, and reports root/live-stack checks as `SKIP` when their real dependencies are absent.
 
-Run a local Shield loop. **Without a running local OPA server, every event fails closed as
-`deny`** — see "Policy Model" below for why and how to actually exercise decisions:
+Run a local Shield smoke loop with one explicit, packaged Open Policy Agent (OPA) profile. This
+development command supervises OPA on loopback, binds the evaluated Rego bytes into decision
+metadata, disables containment and external export, and cleans up the child process:
 
 ```bash
-opa run --server --addr localhost:8181 policies/rego/smb.rego &   # required, see Policy Model
-.venv/bin/shield run \
-  --sensor dev \
-  --device-id dev-1 \
-  --rules policies/defaults/smb.json \
-  --no-exporter \
-  --max-events 12 \
-  --dev-interval 0
+.venv/bin/shield local-run --profile smb --max-events 12 --dev-interval 0
 ```
 
 Inspect local decisions:
@@ -332,19 +327,20 @@ to `shield/policy_engine/engine.py` moved rule *evaluation* from an in-process J
 first-match loop to a real OPA (Open Policy Agent) REST call (`hot_reload.py`'s own comment: "We
 no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
 
-- **A local OPA server must be running** (default `http://localhost:8181`, package path
-  `/v1/data/shield/policy`) for `shield run` to evaluate anything but a hardcoded fail-closed
-  `deny`. Nothing in this repo's Quickstart currently starts one — this is a real, open gap (see
-  IMPLEMENTATION_PLAN.md), not something to work around silently.
+- **Plain `shield run` still requires an operator-managed OPA server** (default
+  `http://localhost:8181`, package path `/v1/data/shield/policy`) and fails closed if it is
+  unavailable. For an explicit local smoke path, `shield local-run --profile PROFILE` starts one
+  packaged, allowlisted profile on loopback. It never auto-selects a profile, downloads OPA, or
+  silently replaces the production sidecar contract.
 - The JSON policy bundle passed to `--rules` (`smb.json` etc., schema below) is still real and
   still enforced for **version/hash pinning and hot-reload trust** (`trusted_policy_hashes`), but
   its `rules` array is **no longer the decision source**. The actual decision logic lives in Rego
   policy loaded into OPA.
 - Only one JSON policy pack was originally translated to Rego. The repository now contains
   translations for all three default packs:
-  - `policies/rego/smb.rego`
-  - `policies/rego/professional-services.rego`
-  - `policies/rego/regulated.rego`
+  - `shield/policies/rego/smb.rego`
+  - `shield/policies/rego/professional-services.rego`
+  - `shield/policies/rego/regulated.rego`
   These translations preserve ordered first-match behavior with explicit precedence guards.
   The SMB registration rule treats a missing registration-map key as unregistered, matching the
   live `PolicyEngine` input contract.
@@ -352,13 +348,10 @@ no longer set self._policy_engine.rules, OPA handles rule logic"). This means:
   profile selection: loading multiple verticals into the same `shield.policy` package creates
   duplicate defaults. `shield run` also still requires a manually started OPA sidecar.
 
-To actually exercise policy decisions locally:
+To exercise one selected policy profile locally from a source checkout or installed wheel:
 
 ```bash
-opa run --server --addr localhost:8181 policies/rego/smb.rego
-# in another terminal:
-.venv/bin/shield run --sensor dev --device-id dev-1 --rules policies/defaults/smb.json \
-  --no-exporter --max-events 12 --dev-interval 0
+.venv/bin/shield local-run --profile smb --max-events 12 --dev-interval 0
 ```
 
 The JSON rule bundle format below documents the schema `load_policy_bundle` parses (for version/
@@ -408,19 +401,18 @@ Supported actions:
 | `log_only` | Record without enforcement |
 | `escalate` | Surface for operator/future control-plane handling |
 
-Every evaluation produces a `PolicyDecision`, including default allow/no-match decisions. Decisions include policy version/hash when loaded from a bundle and export status after the exporter is attempted.
+Every evaluation produces a `PolicyDecision`, including default allow/no-match decisions. Decisions include policy version/hash, a canonical per-attempt `invocation_id`, and export status after the exporter is attempted. The ID is retained locally on export failure; only SDK versions supporting Integrity's invocation profile sign it into the BCC commitment.
 
 ## Default Policy Packs
 
 Default packs live under `policies/defaults/`:
 
 - `smb.json`: shadow AI process paths, unregistered agent tools, sensitive writes. **Has a real
-  Rego translation** (`policies/rego/smb.rego`) — this is the only pack whose content currently
-  drives OPA decisions.
+  Rego translation** (`shield/policies/rego/smb.rego`) for selected-profile OPA evaluation.
 - `professional-services.json`: unregistered agents, unapproved model routing, client-data context.
-  **No Rego translation exists yet** — see "Policy Model" above.
+  **Has a real Rego translation** (`shield/policies/rego/professional-services.rego`) for selected-profile OPA evaluation.
 - `regulated.json`: unregistered agents, PHI-class context, high-risk output, regulated sensitive writes.
-  **No Rego translation exists yet** — see "Policy Model" above.
+  **Has a real Rego translation** (`shield/policies/rego/regulated.rego`) for selected-profile OPA evaluation.
 
 Validate them:
 
@@ -717,11 +709,12 @@ healthcare):
   status table, never implied complete. This is a deliberate product commitment, not just a
   documentation habit: a compliance/audit buyer needs to know exactly what's enforced today.
 
-Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full ledger):
+Milestones, roughly in priority order (see `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` for the archived ledger):
 
 1. **Policy Model completeness** — Rego translations for the three default JSON policy packs now
-   exist and have interpreter-backed regression coverage. The remaining integration work is a
-   documented/scripted OPA profile-selection and startup path alongside `shield run`.
+   exist and have interpreter-backed regression coverage. `shield local-run --profile ...`
+   provides a supervised selected-profile smoke path; plain `shield run` still expects an
+   operator-managed local OPA sidecar.
 2. **Tier-2 SLM, from demo to backbone** — grow past the current small template-generated
    dataset with community help (see "Community: help build Tier 2" above), and evaluate real
    fine-tuned model quality against real endpoint telemetry.
@@ -744,7 +737,7 @@ Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full
 | `SPECIFICATION.md` | Normative Shield product and implementation specification |
 | [Wiki](../../wiki) (`docs/wiki/`) | Architecture concept pages, ecosystem role, compliance evidence trail |
 | `SECURITY.md` | Threat model, security posture, limitations |
-| `IMPLEMENTATION_PLAN.md` | Living implementation ledger |
+| `docs/archive/2026-08/IMPLEMENTATION_PLAN.md` | Archived implementation ledger |
 | `docs/audits/2026-08-06-status.md` | Current audit/status record |
 | `docs/design/signed-policy-bundles.md` | Signed policy bundle design and local hash-pin enforcement |
 | `docs/pilot-acceptance-metrics.md` | Pilot gates for resource use, false positives, export success, operator usability |
@@ -755,9 +748,10 @@ Milestones, roughly in priority order (see `IMPLEMENTATION_PLAN.md` for the full
 
 Highest-priority gaps:
 
-- Rego translations for all three default packs now exist in `policies/rego/` and are covered by
-  interpreter-backed tests. The remaining policy-model gap is deliberate OPA profile selection
-  and startup integration; the sidecar is still not started automatically by `shield run`.
+- Rego translations for all three default packs now exist in `shield/policies/rego/` and are covered by
+  interpreter-backed tests. `shield local-run --profile {smb,professional-services,regulated}`
+  starts exactly one supervised local OPA profile; plain `shield run` still expects an
+  operator-managed OPA sidecar.
 - Run root live verification for TCP-connect eBPF on the target kernel and archive `scripts/verify_tcp_connect_root.py` JSON output.
 - Register the Shield exporter DID with Integrity Oracle and archive live `GET /v1/agent/{did}` or registry readback evidence.
 - Verify exported Shield decisions through the intended Integrity evidence/audit surface.

@@ -20,9 +20,19 @@ from .store import ShieldStore
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
 
 
-def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = ""):
+def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*"):
     class ShieldBackendHandler(BaseHTTPRequestHandler):
         server_version = "XibalbaShieldBackend/0.1"
+
+        def do_OPTIONS(self) -> None:  # noqa: N802 -- CORS preflight, same convention as
+            # xibalba-cortex's local_api.py -- without this a browser-based caller (e.g. the
+            # dashboard's Guided System Test wizard) never even reaches a real endpoint; the
+            # preflight itself gets blocked first.
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.end_headers()
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -92,6 +102,22 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"detection_quality": store.list_detection_quality(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/test-events":
+                if not self._require_admin():
+                    return
+                tenant_id = query.get("tenant_id", ["dashboard"])[0]
+                agent_id = query.get("agent_id", [None])[0]
+                self._send_json({"test_events": store.list_test_events(tenant_id=tenant_id, agent_id=agent_id)})
+                return
+            if parsed.path == "/api/shield/enforcement-outcomes":
+                if not self._require_admin():
+                    return
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None:
+                    return
+                device_id = query.get("device_id", [None])[0]
+                self._send_json({"enforcement_outcomes": store.list_enforcement_outcomes(tenant_id=tenant_id, device_id=device_id)})
+                return
             self._send_error(HTTPStatus.NOT_FOUND, "not found")
 
         def do_POST(self) -> None:
@@ -136,6 +162,24 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 result = _seed_demo(store, body, base_url=str(body.get("base_url") or public_base_url or self._request_base_url()))
                 self._send_json(result, status=HTTPStatus.CREATED)
+                return
+
+            if parsed.path == "/api/shield/test-events":
+                if not self._require_admin():
+                    return
+                try:
+                    row_id = store.record_test_event(
+                        tenant_id=str(body.get("tenant_id", "dashboard")),
+                        agent_id=body.get("agent_id"),
+                        test_name=str(body.get("test_name", "")),
+                        status=str(body.get("status", "")),
+                        detail=body.get("detail"),
+                        metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
                 return
 
             if parsed.path == "/api/shield/detection-quality/report":
@@ -191,6 +235,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 "/api/shield/metrics",
                 "/api/shield/detection-quality",
                 "/api/shield/exporter-status",
+                "/api/shield/enforcement-outcomes",
             ):
                 tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
                 device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
@@ -208,6 +253,10 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     elif parsed.path == "/api/shield/detection-quality":
                         quality = body.get("detection_quality", body)
                         row_id = store.record_detection_quality(tenant_id=tenant_id, device_id=device_id, quality=quality)
+                        self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
+                    elif parsed.path == "/api/shield/enforcement-outcomes":
+                        outcome = body.get("outcome", body)
+                        row_id = store.record_enforcement_outcome(tenant_id=tenant_id, device_id=device_id, outcome=outcome)
                         self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
                     else:
                         status_doc = body.get("status", body)
@@ -274,6 +323,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
             self.end_headers()
             self.wfile.write(raw)
 
@@ -566,9 +616,9 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 6) if denominator else None
 
 
-def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "") -> ThreadingHTTPServer:
+def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*") -> ThreadingHTTPServer:
     store = ShieldStore(db_path)
-    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url)
+    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin)
     server = ThreadingHTTPServer((host, port), handler)
     server.store = store  # type: ignore[attr-defined]
     return server
@@ -581,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", "dev-shield-admin"))
     parser.add_argument("--public-base-url", default=os.getenv("SHIELD_PUBLIC_BASE_URL", ""))
+    parser.add_argument("--allowed-origin", default=os.getenv("SHIELD_BACKEND_ALLOWED_ORIGIN", "*"), help="CORS origin for browser callers (e.g. the dashboard)")
     args = parser.parse_args(argv)
 
     server = run_server(
@@ -588,6 +639,7 @@ def main(argv: list[str] | None = None) -> int:
         port=args.port,
         db_path=args.db_path,
         admin_token=args.admin_token,
+        allowed_origin=args.allowed_origin,
         public_base_url=args.public_base_url,
     )
     print(f"shield-backend listening on http://{args.host}:{server.server_port}")

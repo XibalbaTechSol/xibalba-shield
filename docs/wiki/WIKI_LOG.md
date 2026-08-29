@@ -1,5 +1,22 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-08-28] update | Per-attempt invocation correlation
+
+- Added canonical UUID `invocation_id` to agent events, policy decisions, export status, and
+  Integrity-export integration.
+- Upstream agent IDs are preserved; endpoint-only observations receive a new UUID. Export
+  failure does not remove the local ID.
+- The pinned Integrity SDK remains feature-detected during rollout, and results distinguish
+  whether the ID was included in the signed commitment.
+
+## [2026-08-21] update | CLI Tier-2 backend wiring
+
+- Wired `shield run --slm-backend {none,simulated,local}` through the live CLI runtime into
+  `EventRouter`, matching the existing router-level Tier-2 contract.
+- Added CLI regression coverage proving `--slm-backend simulated` revises a Tier-1 `escalate`
+  decision and records `tier2` provenance. The simulated backend remains explicitly synthetic.
+- Current root-free validation: 138 passed, 9 skipped.
+
 ## [2026-08-13] update | Rego policy bundle coverage
 
 - Added interpreter-backed Rego translations for the professional-services and regulated default
@@ -57,6 +74,17 @@
 - Ran `python3 scripts/wiki_toc.py` to generate every page's `## Table of contents` block, then
   verified with `python3 scripts/wiki_toc.py --check`.
 
+## [2026-08-25] update | Packaged local OPA profile smoke path
+
+- Moved the three Rego profiles into `shield/policies/rego/` and declared them as package data so
+  `shield local-run` works from a built wheel outside a source checkout.
+- Hardened local supervision: Open Policy Agent (OPA) output no longer uses unread pipes, missing
+  binaries return a concise nonzero CLI result, and Continuous Integration pins OPA 1.18.2 with
+  SHA-256 checksum verification instead of downloading `latest` without integrity checking.
+- Verification: focused CLI/OPA tests `27 passed`; full root-free suite `139 passed, 10 skipped`;
+  all three Rego files passed `opa check`; all three JSON bundles passed `shield validate`; a wheel
+  built, installed under `/tmp`, and processed one real selected-profile event from outside the
+  repository. Skips remain the suite's explicit root/live-dependency checks.
 ## [2026-08-22] update | Professional-services combined-condition regression
 
 - Added a real-OPA, table-driven `PolicyEngine.evaluate()` regression for the professional-services

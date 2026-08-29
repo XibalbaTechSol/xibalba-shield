@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import socket
 import subprocess
+import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,11 +12,11 @@ import hashlib
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_ROOT = Path(__file__).resolve().parent
 PROFILES = {
-    "smb": ROOT / "policies/rego/smb.rego",
-    "professional-services": ROOT / "policies/rego/professional-services.rego",
-    "regulated": ROOT / "policies/rego/regulated.rego",
+    "smb": PACKAGE_ROOT / "policies/rego/smb.rego",
+    "professional-services": PACKAGE_ROOT / "policies/rego/professional-services.rego",
+    "regulated": PACKAGE_ROOT / "policies/rego/regulated.rego",
 }
 
 PROFILE_PROBES = {
@@ -66,35 +67,40 @@ def supervised_opa(profile: str, *, opa_binary: str = "opa", port: int | None = 
         raise FileNotFoundError(bundle)
     selected_port = port or _unused_port()
     url = f"http://127.0.0.1:{selected_port}"
-    process = subprocess.Popen(
-        [opa_binary, "run", "--server", "--addr", f"127.0.0.1:{selected_port}", str(bundle)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    deadline = time.monotonic() + timeout
-    try:
-        probe_input, expected_rule = PROFILE_PROBES[profile]
-        last_error: Exception | None = None
-        while time.monotonic() < deadline:
-            if process.poll() is not None:
-                stderr = (process.stderr.read() if process.stderr else "").strip()
-                raise RuntimeError(f"OPA exited before readiness ({process.returncode}): {stderr}")
-            try:
-                result = _query(url, probe_input)
-                if result["rule_id"] != expected_rule or result["version"] != "1.0.0":
-                    raise RuntimeError("OPA readiness probe returned an unexpected selected-profile rule")
-                yield url
-                return
-            except (OSError, URLError, ValueError, RuntimeError) as exc:
-                last_error = exc
-                time.sleep(0.05)
-        raise TimeoutError(f"OPA profile {profile!r} did not become ready: {last_error}")
-    finally:
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=2)
+    # Never leave an unread PIPE attached to a long-lived OPA process: enough output would fill
+    # the pipe and deadlock the policy engine. A temporary file preserves bounded startup
+    # diagnostics without requiring a reader thread.
+    with tempfile.TemporaryFile(mode="w+") as diagnostics:
+        process = subprocess.Popen(
+            [opa_binary, "run", "--server", "--addr", f"127.0.0.1:{selected_port}", str(bundle)],
+            stdout=diagnostics,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        deadline = time.monotonic() + timeout
+        try:
+            probe_input, expected_rule = PROFILE_PROBES[profile]
+            last_error: Exception | None = None
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    diagnostics.seek(0)
+                    output = diagnostics.read().strip()
+                    raise RuntimeError(f"OPA exited before readiness ({process.returncode}): {output}")
+                try:
+                    result = _query(url, probe_input)
+                    if result["rule_id"] != expected_rule or result["version"] != "1.0.0":
+                        raise RuntimeError("OPA readiness probe returned an unexpected selected-profile rule")
+                    yield url
+                    return
+                except (OSError, URLError, ValueError, RuntimeError) as exc:
+                    last_error = exc
+                    time.sleep(0.05)
+            raise TimeoutError(f"OPA profile {profile!r} did not become ready: {last_error}")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)

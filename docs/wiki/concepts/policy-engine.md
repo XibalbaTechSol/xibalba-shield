@@ -2,7 +2,7 @@
 title: Policy Engine
 acronyms: [OPA]
 created: 2026-08-12
-updated: 2026-08-22
+updated: 2026-08-25
 type: concept
 tags: [enforcement, infrastructure]
 confidence: medium
@@ -81,10 +81,16 @@ process is down or unreachable. That is a real operational fact for anyone runni
 
 For local smoke integration, `shield local-run --profile PROFILE` supports exactly three explicit
 profiles: `smb`, `professional-services`, and `regulated`. It starts exactly one corresponding Rego
-file from `policies/rego/`, binds OPA to a dedicated loopback port, waits for a profile-specific rule
+file from `shield/policies/rego/`, binds OPA to a dedicated loopback port, waits for a profile-specific rule
 probe, and fails if OPA exits early or returns an incompatible policy shape. The selected Rego file's
 SHA-256 hash is carried into `PolicyRef` metadata and printed at startup. The child process is
 terminated and force-killed on context exit if necessary.
+
+The Rego files live inside the `shield` Python package and are declared as setuptools package data,
+so `local-run` resolves the same bytes from an installed wheel rather than depending on a source
+checkout. Continuous Integration builds and installs the wheel outside the repository, then runs a
+real selected-profile smoke event. The Open Policy Agent binary remains an explicit external
+prerequisite; Continuous Integration pins version 1.18.2 and verifies its SHA-256 checksum.
 
 This command is local runtime hardening and smoke integration, not production process supervision,
 Windows lifecycle proof, external Integrity export, or deployment readiness. The three shared-package
@@ -115,7 +121,7 @@ schema validation (`shield validate`), and hash pinning** — never consulted by
 `policy_version=`/`policy_hash=` strings.
 
 **Partially closed, 2026-08-13: all three default packs now have Rego translations.**
-`policies/rego/smb.rego`, `professional-services.rego`, and `regulated.rego` are interpreter-backed
+`shield/policies/rego/smb.rego`, `professional-services.rego`, and `regulated.rego` are interpreter-backed
 translations under the shared `shield.policy` package. SMB precedence and absent-agent registration
 handling are regression-tested. Each vertical must still be loaded as an isolated OPA profile;
 loading all three together would create duplicate default-rule conflicts.
@@ -139,7 +145,7 @@ credential dependency, or a mocked OPA decision path.
 ## Documented drift vs. README.md and CLAUDE.md — now corrected
 
 `README.md`'s status table and "Policy Model" section, `CLAUDE.md`'s repository-layout comment,
-and `IMPLEMENTATION_PLAN.md`'s test-count entry were all corrected 2026-08-12 to describe this
+and `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`'s test-count entry were all corrected 2026-08-12 to describe this
 OPA-backed reality (they previously read "table-driven, first-match, local/offline," describing
 the pre-2026-08-07 in-process matcher). Git history shows the OPA migration landed in commit
 `f86c0f0` ("Replace integrity_exporter with OTel telemetry, move policy evaluation to OPA") and

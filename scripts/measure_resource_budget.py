@@ -36,7 +36,7 @@ can isolate.
 
 `PolicyEngine` also no longer evaluates an in-process rule list -- it makes a real HTTP call
 to an OPA server per event (`shield/policy_engine/engine.py`, using the `integrity-sdk` OPA
-client). This script now requires a running OPA instance with `policies/rego/` loaded (e.g.
+client). This script now requires a running OPA instance with `shield/policies/rego/` loaded (e.g.
 `docker compose up -d opa` from the local dev stack) to produce meaningful numbers; without
 one, every `evaluate()` call will hit the fail-closed OPA-unreachable path and this becomes a
 measurement of that failure path's cost, not real policy-evaluation cost. There is no more

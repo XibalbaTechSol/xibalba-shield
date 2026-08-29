@@ -51,3 +51,5 @@ def test_export_decision_reaches_a_real_bcc_middleware():
     # (that depends on OPA/chain state this test doesn't control).
     assert "authorized" in result
     assert isinstance(result["authorized"], bool)
+    assert result["invocation_id"] == decision.invocation_id
+    assert result["invocation_id_signed"] is True

@@ -27,8 +27,8 @@ Written after reading `shield/agent_core/router.py`'s `handle()`,
 
 ## Why this slice, and why now
 
-`IMPLEMENTATION_PLAN.md`'s Hybrid Cascading Architecture section lists, unchecked and with no
-code yet: "Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud
+`docs/archive/2026-08/IMPLEMENTATION_PLAN.md`'s Hybrid Cascading Architecture section lists,
+unchecked and with no code yet: "Define structured Agent-to-Agent (A2A) communication schema for local-to-cloud
 escalations" and "Implement Tier 3 Cloud Frontier fallback for ambiguous/low-confidence SLM
 decisions." Most other open items in this repo's plan are hard-blocked by this environment
 specifically — TCP-sensor verification needs root, Windows/macOS sensors need those platforms,
@@ -111,7 +111,7 @@ it" from "Tier 2 was asked and remains uncertain."
   serialization the same way `PolicyDecision` already does; (b) a Tier-2-still-uncertain event
   resolves to the explicitly chosen fallback disposition, never a bare unresolved `"escalate"`
   reaching export; (c) the `tier` provenance field is correct for all three resolution paths.
-- `IMPLEMENTATION_PLAN.md`'s A2A schema checkbox updated to reflect exactly what's closed —
+- `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`'s A2A schema checkbox updated to reflect exactly what's closed —
   schema + fallback disposition — and the Tier 3 implementation checkbox stays unchecked,
   explicitly not implied closed by this slice.
 - The chosen fail-open/fail-closed fallback posture is stated in the module docstring, matching

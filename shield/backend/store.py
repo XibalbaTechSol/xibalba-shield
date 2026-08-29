@@ -125,6 +125,37 @@ class ShieldStore:
                 FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS enforcement_outcomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                agent_id TEXT,
+                outcome_json TEXT NOT NULL,
+                action TEXT NOT NULL,
+                completed INTEGER NOT NULL,
+                escalated INTEGER NOT NULL DEFAULT 0,
+                received_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
+            );
+
+            -- Generic cross-system test-run log (~/.claude/plans/velvet-giggling-quill.md),
+            -- deliberately NOT tied to devices(tenant_id, device_id) like enforcement_outcomes
+            -- is -- this records "the dashboard ran a test against this system", not "an
+            -- enrolled device did something", so no device enrollment should be required
+            -- just to log a test result. Same role here as integrity-oracle's audit_log or
+            -- xibalba-cortex's otel_events: a loosely-coupled, agent_id-tagged event log.
+            CREATE TABLE IF NOT EXISTS test_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL DEFAULT 'dashboard',
+                agent_id TEXT,
+                test_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                detail TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                recorded_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS integrations (
                 tenant_id TEXT NOT NULL,
                 integration_id TEXT NOT NULL,
@@ -275,6 +306,86 @@ class ShieldStore:
             )
             self._touch_device(tenant_id, device_id)
         return int(cursor.lastrowid)
+
+    def record_enforcement_outcome(self, *, tenant_id: str, device_id: str, outcome: dict[str, Any]) -> int:
+        """Forward-link counterpart to record_decision: what happened when a decision's
+        chosen action was actually carried out, keyed by the same event_id PolicyDecision
+        already carries backward to its triggering event. See
+        shield/schemas/events.py's EnforcementOutcome and agent_core/router.py's
+        _report_enforcement_outcome for where this data comes from."""
+        self._require_device(tenant_id, device_id)
+        event_id = str(outcome.get("event_id", ""))
+        if not event_id:
+            raise ValueError("outcome.event_id is required")
+        agent_id = outcome.get("agent_id")
+        action = str(outcome.get("action", ""))
+        completed = bool(outcome.get("completed"))
+        escalated = bool(outcome.get("escalated"))
+        with self._conn:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO enforcement_outcomes
+                    (tenant_id, device_id, event_id, agent_id, outcome_json, action, completed, escalated, received_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (tenant_id, device_id, event_id, agent_id, json.dumps(outcome, sort_keys=True), action, int(completed), int(escalated), _now()),
+            )
+            self._touch_device(tenant_id, device_id)
+        return int(cursor.lastrowid)
+
+    def list_enforcement_outcomes(self, *, tenant_id: str, device_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        if device_id is not None:
+            rows = self._conn.execute(
+                "SELECT outcome_json, received_at FROM enforcement_outcomes WHERE tenant_id=? AND device_id=? ORDER BY id DESC LIMIT ?",
+                (tenant_id, device_id, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT outcome_json, received_at FROM enforcement_outcomes WHERE tenant_id=? ORDER BY id DESC LIMIT ?",
+                (tenant_id, limit),
+            ).fetchall()
+        return [{"received_at": row["received_at"], "outcome": json.loads(row["outcome_json"])} for row in rows]
+
+    def record_test_event(
+        self, *, tenant_id: str = "dashboard", agent_id: str | None = None,
+        test_name: str, status: str, detail: str | None = None, metadata: dict[str, Any] | None = None,
+    ) -> int:
+        """Generic cross-system test-run log -- no device enrollment required, see the
+        test_events table's own comment in init_schema. Called directly by the dashboard's
+        fan-out helper (testResults.ts), not by anything inside Shield itself."""
+        if not test_name:
+            raise ValueError("test_name is required")
+        if not status:
+            raise ValueError("status is required")
+        with self._conn:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO test_events (tenant_id, agent_id, test_name, status, detail, metadata_json, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (tenant_id, agent_id, test_name, status, detail, json.dumps(metadata or {}, sort_keys=True), _now()),
+            )
+        return int(cursor.lastrowid)
+
+    def list_test_events(self, *, tenant_id: str = "dashboard", agent_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        if agent_id is not None:
+            rows = self._conn.execute(
+                "SELECT id, tenant_id, agent_id, test_name, status, detail, metadata_json, recorded_at FROM test_events WHERE tenant_id=? AND agent_id=? ORDER BY id DESC LIMIT ?",
+                (tenant_id, agent_id, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT id, tenant_id, agent_id, test_name, status, detail, metadata_json, recorded_at FROM test_events WHERE tenant_id=? ORDER BY id DESC LIMIT ?",
+                (tenant_id, limit),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"], "tenant_id": row["tenant_id"], "agent_id": row["agent_id"],
+                "test_name": row["test_name"], "status": row["status"], "detail": row["detail"],
+                "metadata": json.loads(row["metadata_json"]), "recorded_at": row["recorded_at"],
+            }
+            for row in rows
+        ]
 
     def record_metrics(self, *, tenant_id: str, device_id: str, metrics: dict[str, Any]) -> int:
         self._require_device(tenant_id, device_id)
