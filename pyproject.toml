@@ -21,8 +21,9 @@ dependencies = [
     # One-way dependency on integrity-sdk (protocol spec §14.1), imported the same way any
     # third-party agent runtime would use it -- no privileged API, no special-cased access.
     # Git subdirectory dependency keeps clean CI runners independent of a sibling checkout.
-    # Pin this to a release tag when integrity-sdk is published.
-    "integrity-sdk @ git+https://github.com/XibalbaTechSol/integrity-core.git@main#subdirectory=integrity-sdk",
+    # Immutable cross-repository pin: this revision signs invocation_id into BCC commitments.
+    # Advance only after the corresponding Integrity Protocol contract and evidence gates pass.
+    "integrity-sdk @ git+https://github.com/XibalbaTechSol/integrity-core.git@08dcd9485e21cc4370d10668ed246eb7810c31e2#subdirectory=integrity-sdk",
     "mlflow>=3.15.1",
 ]
 

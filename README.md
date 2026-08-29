@@ -401,7 +401,7 @@ Supported actions:
 | `log_only` | Record without enforcement |
 | `escalate` | Surface for operator/future control-plane handling |
 
-Every evaluation produces a `PolicyDecision`, including default allow/no-match decisions. Decisions include policy version/hash when loaded from a bundle and export status after the exporter is attempted.
+Every evaluation produces a `PolicyDecision`, including default allow/no-match decisions. Decisions include policy version/hash, a canonical per-attempt `invocation_id`, and export status after the exporter is attempted. The ID is retained locally on export failure; only SDK versions supporting Integrity's invocation profile sign it into the BCC commitment.
 
 ## Default Policy Packs
 

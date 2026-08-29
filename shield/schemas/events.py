@@ -13,12 +13,21 @@ is `[PLANNED]`. What IS still `[PLANNED]` is the sensor that produces real insta
 from __future__ import annotations
 
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _canonical_invocation_id(value: str) -> str:
+    parsed = uuid.UUID(value)
+    canonical = str(parsed)
+    if value != canonical or parsed.int == 0:
+        raise ValueError("invocation_id must be a non-nil lowercase canonical UUID")
+    return canonical
 
 
 @dataclass
@@ -162,8 +171,13 @@ class AgentEvent:
     agent: AgentInfo
     context: AgentContext
     activity: AgentActivity
+    invocation_id: str | None = None
     time: str = field(default_factory=_now_iso)
     klass: str = field(default="agent_event", init=False)
+
+    def __post_init__(self) -> None:
+        if self.invocation_id is not None:
+            self.invocation_id = _canonical_invocation_id(self.invocation_id)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -173,6 +187,7 @@ class AgentEvent:
             "agent": vars(self.agent),
             "context": vars(self.context),
             "activity": vars(self.activity),
+            "invocation_id": self.invocation_id,
         }
 
 
@@ -222,6 +237,7 @@ class ExportStatus:
     agent_id: str | None = None
     nonce: int | None = None
     intended_state_hash: str | None = None
+    invocation_id: str | None = None
 
 
 @dataclass
@@ -234,16 +250,21 @@ class PolicyDecision:
     event_ref: EventRef
     rule: RuleRef
     decision: Decision
+    invocation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     policy: PolicyRef = field(default_factory=PolicyRef)
     export: ExportStatus = field(default_factory=ExportStatus)
     time: str = field(default_factory=_now_iso)
     klass: str = field(default="policy_decision", init=False)
+
+    def __post_init__(self) -> None:
+        self.invocation_id = _canonical_invocation_id(self.invocation_id)
 
     def to_dict(self) -> dict[str, Any]:
         out = {
             "class": self.klass,
             "time": self.time,
             "device_id": self.device_id,
+            "invocation_id": self.invocation_id,
             # §5.5's canonical shape names this field "class", but the Python attribute is
             # `klass` (a bare `class` attribute isn't legal) -- vars() would emit the wrong
             # wire key here, the same reason the top-level classes below map `self.klass` to

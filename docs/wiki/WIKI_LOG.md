@@ -1,5 +1,14 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-08-28] update | Per-attempt invocation correlation
+
+- Added canonical UUID `invocation_id` to agent events, policy decisions, export status, and
+  Integrity-export integration.
+- Upstream agent IDs are preserved; endpoint-only observations receive a new UUID. Export
+  failure does not remove the local ID.
+- The pinned Integrity SDK remains feature-detected during rollout, and results distinguish
+  whether the ID was included in the signed commitment.
+
 ## [2026-08-21] update | CLI Tier-2 backend wiring
 
 - Wired `shield run --slm-backend {none,simulated,local}` through the live CLI runtime into

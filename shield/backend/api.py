@@ -102,6 +102,13 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"detection_quality": store.list_detection_quality(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/test-events":
+                if not self._require_admin():
+                    return
+                tenant_id = query.get("tenant_id", ["dashboard"])[0]
+                agent_id = query.get("agent_id", [None])[0]
+                self._send_json({"test_events": store.list_test_events(tenant_id=tenant_id, agent_id=agent_id)})
+                return
             if parsed.path == "/api/shield/enforcement-outcomes":
                 if not self._require_admin():
                     return
@@ -155,6 +162,24 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 result = _seed_demo(store, body, base_url=str(body.get("base_url") or public_base_url or self._request_base_url()))
                 self._send_json(result, status=HTTPStatus.CREATED)
+                return
+
+            if parsed.path == "/api/shield/test-events":
+                if not self._require_admin():
+                    return
+                try:
+                    row_id = store.record_test_event(
+                        tenant_id=str(body.get("tenant_id", "dashboard")),
+                        agent_id=body.get("agent_id"),
+                        test_name=str(body.get("test_name", "")),
+                        status=str(body.get("status", "")),
+                        detail=body.get("detail"),
+                        metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
                 return
 
             if parsed.path == "/api/shield/detection-quality/report":

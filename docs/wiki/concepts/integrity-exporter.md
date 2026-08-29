@@ -2,7 +2,7 @@
 title: Integrity Exporter
 acronyms: [DID, BCC]
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-08-28
 type: concept
 tags: [compliance, infrastructure]
 confidence: high
@@ -11,6 +11,11 @@ source_files:
   - shield/agent_core/router.py
   - shield/cli.py
 ---
+
+The exporter passes `PolicyDecision.invocation_id` to SDK versions implementing Integrity's
+`xibalba.invocation.v1` profile, causing it to be signed into the BCC commitment. During the
+pinned-SDK migration, results also distinguish whether the ID was included in the signed
+commitment; an unsigned local correlation value is not receipt-bound evidence.
 
 ## Table of contents
 

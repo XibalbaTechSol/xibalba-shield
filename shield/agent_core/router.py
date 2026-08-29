@@ -251,6 +251,7 @@ class EventRouter:
         agent_id: str | None = None
         nonce: int | None = None
         intended_state_hash: str | None = None
+        invocation_id: str | None = decision.invocation_id
         reasons: list[str] = []
 
         try:
@@ -280,6 +281,7 @@ class EventRouter:
                 agent_id = result.get("agent_id") if isinstance(result, dict) else None
                 nonce = result.get("nonce") if isinstance(result, dict) else None
                 intended_state_hash = result.get("intended_state_hash") if isinstance(result, dict) else None
+                invocation_id = (result.get("invocation_id") or decision.invocation_id) if isinstance(result, dict) else decision.invocation_id
                 decision_exported = authorized is True
                 if not decision_exported:
                     reasons.append(str(result.get("reason", "")) if isinstance(result, dict) else "")
@@ -303,6 +305,7 @@ class EventRouter:
             agent_id=agent_id,
             nonce=nonce,
             intended_state_hash=intended_state_hash,
+            invocation_id=invocation_id,
         )
 
         if self.event_log is not None:

@@ -2,7 +2,7 @@
 title: Event Router
 acronyms: []
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-08-28
 type: concept
 tags: [enforcement, containment]
 confidence: high
@@ -11,6 +11,11 @@ source_files:
   - shield/agent_core/action_broker.py
   - shield/agent_core/slm_backend.py
 ---
+
+Every `PolicyDecision` carries a canonical UUID `invocation_id`. For an instrumented
+`AgentEvent`, Shield preserves the upstream ID; otherwise it creates a new UUID for the endpoint
+action it observed. The ID remains in local decision/export status even if downstream Integrity
+export fails. It correlates records but does not itself prove enforcement or effect.
 
 ## Table of contents
 

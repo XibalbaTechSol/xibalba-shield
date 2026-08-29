@@ -218,7 +218,7 @@ Required principles:
 
 ### 4.3 PolicyDecision Requirements
 
-Every policy evaluation, including allow and log-only outcomes, must produce a decision record with original event reference, rule reference if matched, final action, operator-readable reason, severity, timestamp, and device context.
+Every policy evaluation, including allow and log-only outcomes, must produce a decision record with original event reference, rule reference if matched, final action, operator-readable reason, severity, timestamp, device context, and canonical UUID `invocation_id`. An instrumented agent event preserves its upstream invocation ID; an endpoint-only observation receives a new ID. The identifier follows `integrity-core/spec/invocation-id-v1.md` and provides correlation, not proof of execution or authorization.
 
 ## 5. Sensor Specification
 
