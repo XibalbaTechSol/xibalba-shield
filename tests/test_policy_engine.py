@@ -6,8 +6,13 @@ import pytest
 
 from integrity_sdk.policy.opa_client import OPADecision, OPAUnavailableError
 from shield.policy_engine.engine import EvaluationContext, PolicyEngine
+from shield.opa_local import selected_profile_metadata, supervised_opa
 from shield.schemas.events import (
     Activity,
+    AgentActivity,
+    AgentContext,
+    AgentEvent,
+    AgentInfo,
     ProcessActivity,
     ProcessInfo,
 )
@@ -88,3 +93,75 @@ def test_opa_unavailable_fails_closed(mock_evaluate):
     assert decision.decision.severity == "high"
     assert decision.rule.rule_id == "_opa_unavailable"
 
+
+@pytest.mark.parametrize(
+    (
+        "registered_agent_ids",
+        "model_endpoint",
+        "data_sources",
+        "expected_action",
+        "expected_rule_id",
+        "expected_reason",
+    ),
+    [
+        (
+            frozenset(),
+            "https://unapproved.example/v1/chat/completions",
+            ["customer_records"],
+            "deny",
+            "ps-deny-unregistered-agents",
+            "Unregistered agent activity denied.",
+        ),
+        (
+            frozenset({"agent-1"}),
+            "https://unapproved.example/v1/chat/completions",
+            ["customer_records"],
+            "deny",
+            "ps-deny-unapproved-model-routing",
+            "Model endpoint is not approved for this tenant.",
+        ),
+        (
+            frozenset({"agent-1"}),
+            "https://approved.example/v1/chat/completions",
+            ["customer_records"],
+            "escalate",
+            "ps-escalate-client-data-context",
+            "Client data source attached to agent context.",
+        ),
+    ],
+)
+def test_professional_services_combined_agent_context_precedence_with_real_opa(
+    registered_agent_ids,
+    model_endpoint,
+    data_sources,
+    expected_action,
+    expected_rule_id,
+    expected_reason,
+):
+    policy_version, policy_hash = selected_profile_metadata("professional-services")
+    event = AgentEvent(
+        device_id="dev-1",
+        agent=AgentInfo(agent_id="agent-1", name="Case Review Agent"),
+        context=AgentContext(
+            model_endpoint=model_endpoint,
+            data_sources=data_sources,
+            tools_called=["summarize_contract"],
+        ),
+        activity=AgentActivity(type="inference", risk_level="medium"),
+    )
+
+    with supervised_opa("professional-services") as opa_url:
+        decision = PolicyEngine(
+            opa_url=opa_url,
+            policy_version=policy_version,
+            policy_hash=policy_hash,
+        ).evaluate(event, _ctx(registered_agent_ids=registered_agent_ids))
+
+    assert decision.event_ref.klass == "agent_event"
+    assert decision.policy.version == policy_version
+    assert decision.policy.hash == policy_hash
+    assert decision.decision.action == expected_action
+    assert decision.decision.reason == expected_reason
+    assert decision.decision.severity == "medium"
+    assert decision.rule.rule_id == expected_rule_id
+    assert decision.rule.version == "1.0.0"

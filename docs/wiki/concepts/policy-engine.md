@@ -19,6 +19,7 @@ source_files:
 - [Overview](#overview)
 - [What evaluate() actually does](#what-evaluate-actually-does)
 - [Local profile-supervised OPA smoke runs](#local-profile-supervised-opa-smoke-runs)
+- [Combined-condition regression coverage](#combined-condition-regression-coverage)
 - [Documented drift vs. README.md and CLAUDE.md — now corrected](#documented-drift-vs-readme-md-and-claude-md-now-corrected)
 - [Interface shape reused by Tier 2](#interface-shape-reused-by-tier-2)
 - [Related pages](#related-pages)
@@ -124,6 +125,22 @@ schema validation (`shield validate`), and hash pinning** — never consulted by
 translations under the shared `shield.policy` package. SMB precedence and absent-agent registration
 handling are regression-tested. Each vertical must still be loaded as an isolated OPA profile;
 loading all three together would create duplicate default-rule conflicts.
+
+## Combined-condition regression coverage
+
+`tests/test_policy_engine.py` now includes a real-OPA, table-driven regression for the
+professional-services profile using normalized `AgentEvent` inputs. The cases deliberately combine
+agent, context, and activity fields on each event and verify the policy engine's public
+`evaluate()` interface preserves the Rego profile's ordered evidence:
+
+- an unregistered agent wins before the same event's unapproved endpoint and client-data context;
+- once the agent is registered, the unapproved endpoint denial wins before client-data escalation;
+- once the agent is registered and the endpoint is approved, the client-data context reaches the
+  escalation rule.
+
+This is regression coverage for the existing professional-services Rego translation and the
+OPA-backed `PolicyEngine.evaluate()` adapter. It does not add a policy-language feature, a network
+credential dependency, or a mocked OPA decision path.
 
 ## Documented drift vs. README.md and CLAUDE.md — now corrected
 

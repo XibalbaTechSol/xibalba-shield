@@ -85,3 +85,12 @@
   all three Rego files passed `opa check`; all three JSON bundles passed `shield validate`; a wheel
   built, installed under `/tmp`, and processed one real selected-profile event from outside the
   repository. Skips remain the suite's explicit root/live-dependency checks.
+## [2026-08-22] update | Professional-services combined-condition regression
+
+- Added a real-OPA, table-driven `PolicyEngine.evaluate()` regression for the professional-services
+  profile using normalized `AgentEvent` inputs that carry agent, context, and activity fields.
+- Covered ordered evidence for overlapping conditions: unregistered agent denial before unapproved
+  endpoint and client-data context, unapproved endpoint denial before client-data escalation after
+  registration, and client-data escalation after registration plus approved endpoint.
+- Updated `concepts/policy-engine.md` to document the regression boundary: existing Rego semantics
+  only, no policy-language change, no credentials, and no mocked OPA decision path.
