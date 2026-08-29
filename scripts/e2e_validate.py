@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -121,10 +122,15 @@ def check_local_dev_loop(report: Report) -> None:
         if len(rows) != 12:
             report.add("local dev decision log", "FAIL", f"expected 12 decisions, found {len(rows)}")
             return
-        if not all(row.get("export", {}).get("decision_exported") is True for row in rows):
-            report.add("local dev export status", "FAIL", "local no-exporter decisions did not record export success")
+        if not all(
+            row.get("export", {}).get("event_exported") is True
+            and row.get("export", {}).get("decision_exported") is False
+            and row.get("export", {}).get("authorized") is None
+            for row in rows
+        ):
+            report.add("local dev export status", "FAIL", "--no-exporter did not produce telemetry-only export state")
             return
-        report.add("local dev shield run", "PASS", "12 decisions logged with export=ok")
+        report.add("local dev shield run", "PASS", "12 decisions logged with export=telemetry_only")
 
 
 def check_btf(report: Report) -> None:
@@ -162,19 +168,23 @@ def check_root_ebpf(report: Report) -> None:
 
 
 def check_live_bcc(report: Report, bcc_url: str) -> None:
-    # `tests/test_integrity_exporter.py` was removed when router.py moved from a
-    # constructor-injected IntegrityExporter to unconditional OTel spans via
-    # integrity_sdk.telemetry.tracing.get_tracer() -- no replacement integration test
-    # exercising real span export against a live bcc_middleware exists yet. This is a real
-    # gap (this used to be the one integration test with actual network/signing coverage),
-    # not something to silently skip past -- report it as a known gap explicitly.
-    report.add(
-        "live bcc exporter",
-        "GAP",
-        "no replacement for the removed tests/test_integrity_exporter.py exists since the "
-        "OTel telemetry refactor -- real end-to-end span export against bcc_middleware is "
-        "currently untested",
+    # Run the real signed-export integration test when the stack is available. Pytest exits
+    # zero when every selected test skips, so classify that outcome explicitly rather than
+    # promoting an unavailable middleware to a live PASS.
+    proc = _run(
+        [PYTHON, "-m", "pytest", "-q", "-rs", "tests/test_integrity_exporter.py"],
+        timeout=60,
+        env={"BCC_MIDDLEWARE_URL": bcc_url},
     )
+    summary = proc.stdout.strip()
+    if proc.returncode != 0:
+        report.add("live bcc exporter", "FAIL", summary[-500:])
+    elif re.search(r"\b\d+ skipped\b", summary) and not re.search(r"\b\d+ passed\b", summary):
+        detail = summary.splitlines()[-1] if summary else "live integration test skipped"
+        report.add("live bcc exporter", "SKIP", detail)
+    else:
+        detail = summary.splitlines()[-1] if summary else "ok"
+        report.add("live bcc exporter", "PASS", detail)
 
 
 def check_exporter_registration_readback(report: Report) -> None:
