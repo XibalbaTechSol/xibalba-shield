@@ -5,6 +5,7 @@ import threading
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 from shield.backend.api import make_handler
 from shield.backend.store import ShieldStore
@@ -97,6 +98,167 @@ def test_backend_rejects_policy_distribution_without_device_token(tmp_path):
             assert exc.code == 401
         else:
             raise AssertionError("expected 401")
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_evaluates_authenticated_transaction_intent_without_broadcasting(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1"}
+        )
+        _request(
+            f"{base}/api/shield/policies/tenant-a/dev-1",
+            method="POST",
+            body={
+                "policy_version": "tx-v1",
+                "transaction_policy": {
+                    "allowed_chain_ids": [84532],
+                    "allowed_contracts": ["0x1111111111111111111111111111111111111111"],
+                    "allowed_function_selectors": ["0xa9059cbb"],
+                    "max_token_amount": 1000,
+                    "max_slippage_bps": 100,
+                },
+                "rules": [],
+            },
+        )
+        status, result = _request(
+            f"{base}/api/shield/transaction-intents",
+            method="POST",
+            token=enrolled["device_token"],
+            body={
+                "tenant_id": "tenant-a",
+                "device_id": "dev-1",
+                "agent_id": "agent-1",
+                "request_id": "req-1",
+                "chain_id": 84532,
+                "to": "0x1111111111111111111111111111111111111111",
+                "function_selector": "0xa9059cbb",
+                "token_amount": 100,
+                "slippage_bps": 50,
+            },
+        )
+        assert status == 200
+        assert result["decision"]["action"] == "allow"
+        assert result["decision"]["execution"] == "not_broadcast"
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_simulates_only_after_policy_allows(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1"}
+        )
+        _request(
+            f"{base}/api/shield/policies/tenant-a/dev-1",
+            method="POST",
+            body={
+                "policy_version": "tx-v1",
+                "transaction_policy": {
+                    "allowed_chain_ids": [84532],
+                    "allowed_contracts": ["0x1111111111111111111111111111111111111111"],
+                    "allowed_function_selectors": ["0xa9059cbb"],
+                    "max_token_amount": 1000,
+                },
+                "rules": [],
+            },
+        )
+        body = {
+            "tenant_id": "tenant-a", "device_id": "dev-1", "agent_id": "agent-1", "request_id": "req-1",
+            "chain_id": 84532, "to": "0x1111111111111111111111111111111111111111",
+            "function_selector": "0xa9059cbb", "calldata": "0xa9059cbb" + "00" * 32,
+        }
+        with patch("shield.backend.api.simulate_transaction_intent") as simulate:
+            simulate.return_value.as_dict.return_value = {
+                "chain_id": 84532, "gas_estimate": 21000, "status": "simulated", "execution": "not_broadcast"
+            }
+            status, result = _request(
+                f"{base}/api/shield/transaction-simulations", method="POST", token=enrolled["device_token"], body=body
+            )
+        assert status == 200
+        assert result["decision"]["action"] == "allow"
+        assert result["simulation"]["gas_estimate"] == 21000
+        simulate.assert_called_once()
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_binds_human_approval_to_escalated_intent_hash(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1"}
+        )
+        token = enrolled["device_token"]
+        _request(
+            f"{base}/api/shield/policies/tenant-a/dev-1",
+            method="POST",
+            body={
+                "policy_version": "tx-v1",
+                "transaction_policy": {
+                    "allowed_chain_ids": [84532],
+                    "allowed_contracts": ["0x1111111111111111111111111111111111111111"],
+                    "allowed_function_selectors": ["0xa9059cbb"],
+                    "max_token_amount": 1000,
+                    "require_approval": True,
+                },
+                "rules": [],
+            },
+        )
+        intent = {
+            "tenant_id": "tenant-a", "device_id": "dev-1", "agent_id": "agent-1", "request_id": "req-approval",
+            "chain_id": 84532, "to": "0x1111111111111111111111111111111111111111",
+            "function_selector": "0xa9059cbb", "calldata": "0xa9059cbb" + "00" * 32,
+        }
+        _status, pending = _request(f"{base}/api/shield/transaction-intents", method="POST", token=token, body=intent)
+        assert pending["decision"]["action"] == "escalate"
+        approval_status, approval = _request(
+            f"{base}/api/shield/transaction-approvals",
+            method="POST",
+            body={
+                "tenant_id": "tenant-a", "device_id": "dev-1",
+                "intent_hash": pending["decision"]["intent_hash"],
+                "approver_id": "operator-1", "expires_at": "2099-01-01T00:00:00Z",
+            },
+        )
+        assert approval_status == 201
+        assert approval["intent_hash"] == pending["decision"]["intent_hash"]
+        verify_status, verified = _request(
+            f"{base}/api/shield/transaction-approvals/verify",
+            method="POST", token=token,
+            body={"tenant_id": "tenant-a", "device_id": "dev-1", "intent_hash": approval["intent_hash"]},
+        )
+        assert verify_status == 200
+        assert verified["authorized"] is True
+        consume_status, consumed = _request(
+            f"{base}/api/shield/transaction-approvals/consume",
+            method="POST",
+            body={
+                "tenant_id": "tenant-a", "device_id": "dev-1",
+                "approval_id": approval["approval_id"], "intent_hash": approval["intent_hash"],
+            },
+        )
+        assert consume_status == 200
+        assert consumed["approval_id"] == approval["approval_id"]
+        repeat = urllib.request.Request(
+            f"{base}/api/shield/transaction-approvals/consume",
+            data=json.dumps({
+                "tenant_id": "tenant-a", "device_id": "dev-1",
+                "approval_id": approval["approval_id"], "intent_hash": approval["intent_hash"],
+            }).encode(), method="POST", headers={"Content-Type": "application/json", "Authorization": f"Bearer {ADMIN}"},
+        )
+        try:
+            urllib.request.urlopen(repeat, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 409
+        else:
+            raise AssertionError("expected one-time approval consumption")
     finally:
         server.shutdown()
         store.close()

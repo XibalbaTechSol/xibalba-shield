@@ -170,7 +170,10 @@ def check_root_ebpf(report: Report) -> None:
 def check_live_bcc(report: Report, bcc_url: str) -> None:
     # Run the real signed-export integration test when the stack is available. Pytest exits
     # zero when every selected test skips, so classify that outcome explicitly rather than
-    # promoting an unavailable middleware to a live PASS.
+    # promoting an unavailable middleware to a live PASS. This test constructs a real SDK
+    # identity, signs a real BCC commitment, submits it to the configured middleware, and
+    # asserts the structured response. A denial is valid here: transport/signature/OPA/chain
+    # response coverage is the gate; DID registration is a separate readback gate below.
     proc = _run(
         [PYTHON, "-m", "pytest", "-q", "-rs", "tests/test_integrity_exporter.py"],
         timeout=60,

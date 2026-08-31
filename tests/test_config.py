@@ -134,6 +134,7 @@ def test_loads_full_device_config_with_feature_flags(tmp_path):
         "feature_flags": {"strict_mode": True},
         "sensitive_paths": ["/home/*/.ssh/*", "/var/secrets/*"],
         "trusted_policy_hashes": ["sha256:abc"],
+        "reject_policy_downgrades": True,
     }))
 
     config = load_device_config(path)
@@ -143,6 +144,7 @@ def test_loads_full_device_config_with_feature_flags(tmp_path):
     assert config.flag("unknown_flag") is False  # unknown flags default safely, don't raise
     assert config.sensitive_paths == ["/home/*/.ssh/*", "/var/secrets/*"]
     assert config.trusted_policy_hashes == ["sha256:abc"]
+    assert config.reject_policy_downgrades is True
 
 
 def test_device_config_sensitive_paths_must_be_a_list(tmp_path):
@@ -158,6 +160,14 @@ def test_device_config_trusted_policy_hashes_must_be_a_list(tmp_path):
     path.write_text(json.dumps({"device_id": "dev-1", "trusted_policy_hashes": "sha256:abc"}))
 
     with pytest.raises(ConfigError, match="trusted_policy_hashes"):
+        load_device_config(path)
+
+
+def test_device_config_reject_policy_downgrades_must_be_boolean(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({"device_id": "dev-1", "reject_policy_downgrades": "yes"}))
+
+    with pytest.raises(ConfigError, match="reject_policy_downgrades"):
         load_device_config(path)
 
 

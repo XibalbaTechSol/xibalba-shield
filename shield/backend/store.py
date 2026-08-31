@@ -165,6 +165,29 @@ class ShieldStore:
                 PRIMARY KEY (tenant_id, integration_id),
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS transaction_intents (
+                intent_hash TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                request_id TEXT NOT NULL,
+                intent_json TEXT NOT NULL,
+                decision_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS transaction_approvals (
+                approval_id TEXT PRIMARY KEY,
+                intent_hash TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                approver_id TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                consumed_at TEXT,
+                FOREIGN KEY (intent_hash) REFERENCES transaction_intents(intent_hash) ON DELETE CASCADE
+            );
             """
         )
         self._conn.commit()
@@ -211,6 +234,7 @@ class ShieldStore:
                 "tenant_id": tenant_id,
                 "device_role": device_role,
                 "tenant_policy_url": policy_url,
+                "backend_url": base_url,
                 "device_token": token,
                 "feature_flags": {},
                 "sensitive_paths": [],
@@ -507,6 +531,131 @@ class ShieldStore:
             }
             for row in rows
         ]
+
+    def record_transaction_intent(
+        self, *, tenant_id: str, device_id: str, intent: dict[str, Any], decision: dict[str, Any]
+    ) -> None:
+        self._require_device(tenant_id, device_id)
+        intent_hash = str(decision.get("intent_hash", ""))
+        request_id = str(intent.get("request_id", ""))
+        if not intent_hash or not request_id:
+            raise ValueError("transaction intent hash and request_id are required")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO transaction_intents
+                    (intent_hash, tenant_id, device_id, request_id, intent_json, decision_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(intent_hash) DO UPDATE SET
+                    decision_json=excluded.decision_json
+                """,
+                (intent_hash, tenant_id, device_id, request_id, json.dumps(intent, sort_keys=True), json.dumps(decision, sort_keys=True), _now()),
+            )
+
+    def create_transaction_approval(
+        self, *, tenant_id: str, device_id: str, intent_hash: str, approver_id: str, expires_at: str
+    ) -> dict[str, Any]:
+        self._validate_id("approver_id", approver_id)
+        self._require_device(tenant_id, device_id)
+        try:
+            datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("expires_at must be an ISO-8601 timestamp") from exc
+        row = self._conn.execute(
+            "SELECT decision_json, device_id FROM transaction_intents WHERE intent_hash=? AND tenant_id=?",
+            (intent_hash, tenant_id),
+        ).fetchone()
+        if not row or row["device_id"] != device_id:
+            raise KeyError("transaction intent not found")
+        decision = json.loads(row["decision_json"])
+        if decision.get("action") != "escalate":
+            raise ValueError("only escalated transaction intents may receive approval")
+        approval = {
+            "approval_id": "approval-" + secrets.token_hex(12),
+            "intent_hash": intent_hash,
+            "tenant_id": tenant_id,
+            "device_id": device_id,
+            "approver_id": approver_id,
+            "expires_at": expires_at,
+            "created_at": _now(),
+            "consumed_at": None,
+        }
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO transaction_approvals (approval_id, intent_hash, tenant_id, device_id, approver_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                tuple(approval[key] for key in ("approval_id", "intent_hash", "tenant_id", "device_id", "approver_id", "expires_at", "created_at")),
+            )
+        return approval
+
+    def verify_transaction_approval(self, *, tenant_id: str, device_id: str, intent_hash: str) -> dict[str, Any]:
+        self._require_device(tenant_id, device_id)
+        row = self._conn.execute(
+            "SELECT approval_id, intent_hash, approver_id, expires_at, created_at, consumed_at FROM transaction_approvals WHERE tenant_id=? AND device_id=? AND intent_hash=? ORDER BY created_at DESC LIMIT 1",
+            (tenant_id, device_id, intent_hash),
+        ).fetchone()
+        if not row:
+            return {"authorized": False, "reason": "approval not found", "intent_hash": intent_hash}
+        approval = dict(row)
+        try:
+            expired = datetime.fromisoformat(approval["expires_at"].replace("Z", "+00:00")) <= datetime.now(timezone.utc)
+        except ValueError:
+            expired = True
+        if expired:
+            return {"authorized": False, "reason": "approval expired", **approval}
+        if approval["consumed_at"]:
+            return {"authorized": False, "reason": "approval already consumed", **approval}
+        return {"authorized": True, **approval}
+
+    def consume_transaction_approval(
+        self, *, tenant_id: str, device_id: str, approval_id: str, intent_hash: str
+    ) -> dict[str, Any]:
+        """Atomically consume an approval and return the exact approved intent.
+
+        Consumption happens before signing so an approval cannot be replayed if a signer or
+        transport is retried. A failed signing attempt requires a new approval.
+        """
+        self._require_device(tenant_id, device_id)
+        now = datetime.now(timezone.utc)
+        with self._conn:
+            row = self._conn.execute(
+                """
+                SELECT a.approval_id, a.intent_hash, a.tenant_id, a.device_id, a.approver_id,
+                       a.expires_at, a.created_at, a.consumed_at, i.intent_json, i.decision_json
+                FROM transaction_approvals a
+                JOIN transaction_intents i ON i.intent_hash=a.intent_hash
+                WHERE a.approval_id=? AND a.intent_hash=? AND a.tenant_id=? AND a.device_id=?
+                """,
+                (approval_id, intent_hash, tenant_id, device_id),
+            ).fetchone()
+            if not row:
+                raise KeyError("transaction approval not found")
+            if row["consumed_at"]:
+                raise ValueError("transaction approval already consumed")
+            try:
+                expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+            except ValueError as exc:
+                raise ValueError("transaction approval has invalid expiry") from exc
+            if expires_at <= now:
+                raise ValueError("transaction approval expired")
+            consumed_at = now.isoformat().replace("+00:00", "Z")
+            updated = self._conn.execute(
+                "UPDATE transaction_approvals SET consumed_at=? WHERE approval_id=? AND consumed_at IS NULL",
+                (consumed_at, approval_id),
+            )
+            if updated.rowcount != 1:
+                raise ValueError("transaction approval already consumed")
+        return {
+            "approval_id": row["approval_id"],
+            "intent_hash": row["intent_hash"],
+            "tenant_id": row["tenant_id"],
+            "device_id": row["device_id"],
+            "approver_id": row["approver_id"],
+            "consumed_at": consumed_at,
+            "intent": json.loads(row["intent_json"]),
+            "decision": json.loads(row["decision_json"]),
+        }
 
     def dashboard_summary(self, *, tenant_id: str) -> dict[str, Any]:
         devices = self.list_devices(tenant_id=tenant_id)

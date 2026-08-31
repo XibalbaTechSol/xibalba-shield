@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -101,6 +102,32 @@ def _events(args: argparse.Namespace) -> int:
     return 0
 
 
+def _codex_analyze(args: argparse.Namespace) -> int:
+    """Run advisory Codex analysis on one JSON event; never changes enforcement state."""
+    from .codex_agent import CodexAdvisoryAgent, CodexAgentError
+
+    try:
+        raw = args.event_file.read_text(encoding="utf-8") if args.event_file else sys.stdin.read()
+        event = json.loads(raw)
+        if not isinstance(event, dict):
+            raise ValueError("event must be a JSON object")
+        result = CodexAdvisoryAgent(timeout=args.timeout).analyze_event(
+            event, policy_action=args.policy_action,
+        )
+    except (OSError, json.JSONDecodeError, ValueError, CodexAgentError) as exc:
+        print(f"shield codex-analyze: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({
+        "source": result.source,
+        "classification": result.classification,
+        "confidence": result.confidence,
+        "rationale": result.rationale,
+        "recommended_test": result.recommended_test,
+        "enforcement": "advisory_only",
+    }, sort_keys=True))
+    return 0
+
+
 def _validate(args: argparse.Namespace) -> int:
     """Load a policy-rules and/or device-config file through the real loader and report
     the real result -- exit 0/valid only if BOTH given files (whichever were passed) parse
@@ -168,6 +195,21 @@ def _run(args: argparse.Namespace) -> int:
     policy_version = getattr(args, "policy_version", "")
     policy_hash = getattr(args, "policy_hash", "")
     reloader = None
+    if args.rules is None and device_config.tenant_policy_url:
+        # An enrolled device owns its policy source.  Fetch once before constructing the
+        # engine, then use the same validated local cache for hot reloads.  A configured
+        # tenant endpoint that cannot be fetched is a startup failure, not permission to
+        # run with an empty policy set.
+        policy_cache = Path.home() / ".xibalba-shield" / "policies" / f"{device_config.device_id}.json"
+        try:
+            fetched = fetch_tenant_policy(device_config=device_config, destination=policy_cache)
+            args.rules = fetched.path
+            policy_version = fetched.bundle.version
+            policy_hash = fetched.bundle.hash
+            rules = fetched.bundle.rules
+        except ConfigError as exc:
+            print(f"shield run: unable to fetch assigned tenant policy: {exc}", file=sys.stderr)
+            return 1
     if args.rules is not None:
         try:
             bundle = load_policy_bundle(args.rules)
@@ -183,7 +225,23 @@ def _run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
+    opa_supervisor = None
+    if args.opa_command:
+        from .opa_supervisor import OpaSupervisor
+        opa_supervisor = OpaSupervisor(args.opa_command, args.opa_url)
+        try:
+            opa_supervisor.start()
+        except (OSError, RuntimeError, TimeoutError) as exc:
+            print(f"shield run: unable to start supervised OPA: {exc}", file=sys.stderr)
+            return 1
+
     policy_engine = PolicyEngine(opa_url=args.opa_url, policy_version=policy_version, policy_hash=policy_hash)
+    from .runtime_status import publish_runtime_status
+    publish_runtime_status(
+        device_config=device_config,
+        policy_status=(reloader.status().__dict__ if reloader else {"healthy": bool(policy_hash), "active_policy_version": policy_version, "active_policy_hash": policy_hash}),
+        opa_status=policy_engine.health_status(),
+    )
     if args.rules is not None:
         # PolicyHotReloader has no public "seed with an already-loaded rule set" API, so
         # its own first check_and_reload() will re-parse args.rules once more and find it
@@ -194,6 +252,7 @@ def _run(args: argparse.Namespace) -> int:
             policy_engine,
             args.rules,
             trusted_policy_hashes=device_config.trusted_policy_hashes,
+            reject_downgrades=device_config.reject_policy_downgrades,
         )
 
     device = DeviceContext(device_id=device_config.device_id, tenant_id=device_config.tenant_id,
@@ -257,10 +316,20 @@ def _run(args: argparse.Namespace) -> int:
             count += 1
             if reloader is not None:
                 reloader.check_and_reload()
+            if opa_supervisor is not None:
+                opa_supervisor.restart_if_unhealthy()
+            publish_runtime_status(
+                device_config=device_config,
+                policy_status=(reloader.status().__dict__ if reloader else {"healthy": bool(policy_hash), "active_policy_version": policy_version, "active_policy_hash": policy_hash}),
+                opa_status=policy_engine.health_status(),
+            )
             if args.max_events and count >= args.max_events:
                 break
     except KeyboardInterrupt:
         print(f"\nshield run: interrupted after {count} event(s)")
+
+    if opa_supervisor is not None:
+        opa_supervisor.stop()
 
     print(f"shield run: processed {count} event(s), exiting")
     return 0
@@ -353,6 +422,15 @@ def main(argv: list[str] | None = None) -> int:
     p_events.add_argument("--recent", type=int, default=20)
     p_events.set_defaults(func=_events)
 
+    p_codex = sub.add_parser(
+        "codex-analyze",
+        help="run isolated, advisory Codex analysis for one JSON event; never enforces or broadcasts",
+    )
+    p_codex.add_argument("--event-file", type=Path, default=None, help="JSON event file; stdin when omitted")
+    p_codex.add_argument("--policy-action", default="", help="already-computed Shield action for context")
+    p_codex.add_argument("--timeout", type=float, default=30.0)
+    p_codex.set_defaults(func=_codex_analyze)
+
     p_validate = sub.add_parser("validate", help="validate a policy-rules and/or device-config JSON file")
     p_validate.add_argument("--rules", type=Path, default=None, help="policy rules file (spec §7 shape)")
     p_validate.add_argument("--device-config", type=Path, default=None, help="device/tenant config file")
@@ -392,6 +470,9 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--oracle-url", default=None,
                        help="overrides --device-config's oracle_url if given; "
                             "falls back to integrity-sdk's own default if neither is set")
+    p_run.add_argument("--opa-command", nargs="+", default=None,
+                        help="optional OPA command to supervise; it must listen at --opa-url",
+                        metavar="COMMAND")
     p_run.add_argument("--opa-url", default="http://localhost:8181",
                         help="local OPA sidecar the policy engine evaluates rules against "
                              "(PolicyEngine's own default — was previously hardcoded and "

@@ -18,6 +18,12 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
 ReadWritePaths=/var/log/xibalba-shield /var/lib/xibalba-shield /etc/xibalba-shield
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
 AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
 

@@ -10,6 +10,7 @@ kernel event to produce real, policy-evaluated `PolicyDecision`s.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from shield.agent_core.eventlog import EventLog
 from shield.config import load_policy_bundle
@@ -114,6 +115,30 @@ def test_run_dev_sensor_processes_real_events_end_to_end(tmp_path, capsys):
     assert log.count() == 5
     rows = log.recent(5)
     assert all(row["decision"]["action"] == "allow" for row in rows)  # no rules loaded -> default allow
+
+
+def test_run_fetches_assigned_policy_when_device_config_has_policy_url(tmp_path, monkeypatch, capsys):
+    rules_path = _write(tmp_path / "assigned.json", {
+        "policy_version": "assigned-v1",
+        "rules": [{"rule_id": "assigned-rule", "name": "Assigned", "version": "1.0.0", "conditions": [], "actions": []}],
+    })
+    bundle = load_policy_bundle(rules_path)
+    monkeypatch.setattr(
+        "shield.cli.fetch_tenant_policy",
+        lambda **_kwargs: SimpleNamespace(path=rules_path, bundle=bundle),
+    )
+    config_path = _write(tmp_path / "device.json", {
+        "device_id": "assigned-device", "tenant_id": "tenant-1", "tenant_policy_url": "http://backend/policy",
+    })
+
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-config", str(config_path),
+        "--max-events", "1", "--dev-interval", "0", "--no-exporter", "--no-containment",
+    ])
+
+    assert code == 0
+    assert "rules=1" in capsys.readouterr().out
 
 
 def test_events_prints_export_status(tmp_path, capsys):
@@ -353,3 +378,24 @@ def test_run_tcp_connect_sensor_without_root_fails_cleanly(tmp_path, capsys):
 
     assert code == 1
     assert "requires root" in capsys.readouterr().err
+
+
+def test_codex_analyze_is_advisory_only(tmp_path, monkeypatch, capsys):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"class": "process_activity", "token": "hidden"}))
+    monkeypatch.setattr(
+        "shield.codex_agent.CodexAdvisoryAgent.analyze_event",
+        lambda self, event, policy_action="": type(
+            "Analysis", (), {
+                "source": "codex-cli-advisory", "classification": "unknown",
+                "confidence": 0.2, "rationale": "review", "recommended_test": "inspect",
+            }
+        )(),
+    )
+
+    code = main(["codex-analyze", "--event-file", str(event), "--policy-action", "escalate"])
+
+    assert code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["enforcement"] == "advisory_only"
+    assert output["classification"] == "unknown"

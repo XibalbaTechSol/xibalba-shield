@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Base Sepolia Bridge Helper</title>
+<style>
+  body { max-width: 720px; margin: 40px auto; padding: 0 20px; font: 16px system-ui, sans-serif; }
+  code, input, button { font: inherit; }
+  input { width: 100%; box-sizing: border-box; padding: 10px; margin: 6px 0 14px; }
+  button { padding: 10px 16px; margin: 4px 0; cursor: pointer; }
+  .box { padding: 16px; border: 1px solid #ccc; border-radius: 8px; margin: 16px 0; }
+  .warning { background: #fff8e1; }
+  #status { white-space: pre-wrap; word-break: break-word; }
+</style>
+<h1>Base Sepolia bridge helper</h1>
+<p>This sends testnet ETH from Ethereum Sepolia to Base Sepolia through the canonical bridge. It never handles private keys.</p>
+<div class="box warning">
+  <strong>Verify before approving:</strong>
+  <p>Bridge contract: <code>0xfd0Bf71F60660E2f608ed56e1659C450eB113120</code></p>
+  <p>Recipient: <code>0x67ba5d723e1f5517aff7eb980e2f73a9e17ad556</code></p>
+</div>
+<div class="box">
+  <label>Amount (Ethereum Sepolia ETH)</label>
+  <input id="amount" value="0.05" inputmode="decimal">
+  <button id="connect">Connect MetaMask</button>
+  <button id="send" disabled>Prepare transaction</button>
+  <p id="account">Not connected</p>
+  <p id="status">Ready.</p>
+</div>
+<script>
+const BRIDGE = "0xfd0Bf71F60660E2f608ed56e1659C450eB113120";
+const RECIPIENT = "0x67ba5d723e1f5517aff7eb980e2f73a9e17ad556";
+const CHAIN_ID = "0xaa36a7"; // Ethereum Sepolia 11155111
+const status = document.querySelector("#status");
+const accountText = document.querySelector("#account");
+const send = document.querySelector("#send");
+let account;
+
+function setStatus(value) { status.textContent = value; }
+function pad64(value) { return value.replace(/^0x/, "").padStart(64, "0"); }
+function encodeDepositETHTo(to, minGasLimit) {
+  return "0x9a2ac6d5" + pad64(to.toLowerCase()) + pad64("0x" + minGasLimit.toString(16)) +
+    pad64("0x60") + pad64("0x0");
+}
+function parseWei(decimal) {
+  const [whole, fraction = ""] = decimal.trim().split(".");
+  if (!/^\d+$/.test(whole || "") || !/^\d*$/.test(fraction) || fraction.length > 18) throw new Error("Invalid ETH amount");
+  return BigInt(whole || "0") * 10n ** 18n + BigInt((fraction + "0".repeat(18)).slice(0, 18));
+}
+function hex(value) { return "0x" + value.toString(16); }
+
+async function connect() {
+  if (!window.ethereum) throw new Error("MetaMask was not detected in this browser");
+  const chain = await window.ethereum.request({ method: "eth_chainId" });
+  if (chain.toLowerCase() !== CHAIN_ID) throw new Error("Switch MetaMask to Ethereum Sepolia, then press Connect again.");
+  [account] = await window.ethereum.request({ method: "eth_requestAccounts" });
+  accountText.textContent = `Connected: ${account}`;
+  send.disabled = false;
+  setStatus("Connected. Review the fields, then press Prepare transaction.");
+}
+
+async function prepare() {
+  if (!account) return;
+  const value = parseWei(document.querySelector("#amount").value);
+  if (value <= 0n) throw new Error("Amount must be positive");
+  const data = encodeDepositETHTo(RECIPIENT, 200000);
+  const gasPrice = BigInt(await window.ethereum.request({ method: "eth_gasPrice" }));
+  const maxFee = gasPrice * 2n;
+  const maxPriority = 1000000n;
+  const gas = await window.ethereum.request({ method: "eth_estimateGas", params: [{ from: account, to: BRIDGE, value: hex(value), data }] });
+  const tx = { from: account, to: BRIDGE, value: hex(value), data, gas, maxFeePerGas: hex(maxFee), maxPriorityFeePerGas: hex(maxPriority) };
+  setStatus("MetaMask transaction prepared. Verify Ethereum Sepolia, the bridge contract, recipient, amount, and fees in the popup before approving.\n\n" + JSON.stringify(tx, null, 2));
+  const hash = await window.ethereum.request({ method: "eth_sendTransaction", params: [tx] });
+  setStatus(`Submitted: ${hash}\nhttps://sepolia.etherscan.io/tx/${hash}`);
+}
+
+document.querySelector("#connect").onclick = () => connect().catch(error => setStatus(error.message));
+send.onclick = () => prepare().catch(error => setStatus(error.message));
+</script>
