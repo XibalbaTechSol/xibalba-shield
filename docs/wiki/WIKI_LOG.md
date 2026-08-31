@@ -85,6 +85,7 @@
   all three Rego files passed `opa check`; all three JSON bundles passed `shield validate`; a wheel
   built, installed under `/tmp`, and processed one real selected-profile event from outside the
   repository. Skips remain the suite's explicit root/live-dependency checks.
+
 ## [2026-08-22] update | Professional-services combined-condition regression
 
 - Added a real-OPA, table-driven `PolicyEngine.evaluate()` regression for the professional-services
@@ -94,3 +95,15 @@
   registration, and client-data escalation after registration plus approved endpoint.
 - Updated `concepts/policy-engine.md` to document the regression boundary: existing Rego semantics
   only, no policy-language change, no credentials, and no mocked OPA decision path.
+
+## [2026-08-29] update | Honest pilot-gate outcomes after runtime migration
+
+- Reconciled the burn-in smoke constructor and no-exporter assertions with the packaged local
+  Open Policy Agent runtime introduced on `main`.
+- Restored the real signed BCC integration test in the end-to-end harness while preserving
+  `PASS`, `SKIP`, and `FAIL` as distinct evidence states; an all-skipped pytest run is never
+  reported as live success.
+- Verification: full root-free suite `151 passed, 7 skipped`; `scripts/e2e_validate.py --json`
+  completed with local loop, burn-in, kernel BTF, and all three policy profiles passing. Root
+  eBPF, live BCC, and DID readback remained explicit skips because those dependencies were not
+  available in this isolated run.

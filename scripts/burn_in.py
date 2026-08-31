@@ -192,7 +192,7 @@ def main() -> int:
     router = EventRouter(
         device=DeviceContext(device_id="burn-in-dev", tenant_id="burn-in", device_role="workstation"),
         registry=AgentRegistry(),
-        policy_engine=PolicyEngine(rules=bundle.rules, policy_version=bundle.version, policy_hash=bundle.hash),
+        policy_engine=PolicyEngine(policy_version=bundle.version, policy_hash=bundle.hash),
         exporter=_NullExporter(),
         event_log=EventLog(args.log_path),
     )

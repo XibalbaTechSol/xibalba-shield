@@ -10,6 +10,8 @@ source_files:
   - shield/integrity_exporter/exporter.py
   - shield/agent_core/router.py
   - shield/cli.py
+  - scripts/e2e_validate.py
+  - tests/test_integrity_exporter.py
 ---
 
 The exporter passes `PolicyDecision.invocation_id` to SDK versions implementing Integrity's
@@ -23,6 +25,7 @@ commitment; an unsigned local correlation value is not receipt-bound evidence.
 - [Detection quality evidence](#detection-quality-evidence)
 - [What it does on construction](#what-it-does-on-construction)
 - [Two export methods, two different Integrity Protocol endpoints](#two-export-methods-two-different-integrity-protocol-endpoints)
+- [Live validation semantics](#live-validation-semantics)
 - [Restored 2026-08-12](#restored-2026-08-12)
 - [Local enforcement does not depend on export succeeding](#local-enforcement-does-not-depend-on-export-succeeding)
 - [Related pages](#related-pages)
@@ -83,6 +86,15 @@ class IntegrityExporter:
 Both are best-effort: a failed `bcc.submit_commitment` call is caught, logged loudly (never
 silently swallowed), and returns `{"authorized": False, "reason": "submission failed: ..."}`
 rather than raising into the caller.
+
+## Live validation semantics
+
+`scripts/e2e_validate.py` runs `tests/test_integrity_exporter.py` against the configured live
+Behavioral Commitment Chain (BCC) middleware. The report preserves three distinct outcomes:
+a passing real submission is `PASS`, an unavailable middleware that causes the integration test
+to skip is `SKIP`, and a real test failure is `FAIL`. Because pytest exits zero when every
+selected test skips, the harness checks the selected test's summary explicitly and does not
+promote an unavailable dependency into live evidence.
 
 ## Restored 2026-08-12
 
