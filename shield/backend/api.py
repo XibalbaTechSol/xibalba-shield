@@ -16,6 +16,8 @@ import urllib.request
 
 from ..config import ConfigError
 from .store import ShieldStore
+from ..transaction_gateway import TransactionIntent, TransactionPolicy, evaluate_transaction_intent
+from ..transaction_simulator import SimulationError, simulate_transaction_intent
 
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
 
@@ -228,6 +230,133 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json({"policy_version": bundle.version, "policy_hash": bundle.hash, "rules": len(bundle.rules)})
+                return
+
+            if parsed.path == "/api/shield/transaction-intents":
+                tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
+                device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                try:
+                    policy_doc = store.get_policy_doc(tenant_id=tenant_id, device_id=device_id)
+                    if not policy_doc or not isinstance(policy_doc.get("transaction_policy"), dict):
+                        decision = {
+                            "action": "deny",
+                            "rule_id": "transaction-policy-missing",
+                            "reason": "transaction policy is not configured",
+                            "execution": "not_broadcast",
+                        }
+                    else:
+                        raw_intent = dict(body)
+                        raw_intent["tenant_id"] = tenant_id
+                        raw_intent["device_id"] = device_id
+                        intent = TransactionIntent.from_dict(raw_intent)
+                        decision = evaluate_transaction_intent(
+                            intent, TransactionPolicy.from_dict(policy_doc["transaction_policy"])
+                        ).as_dict()
+                    if decision.get("intent_hash"):
+                        store.record_transaction_intent(
+                            tenant_id=tenant_id,
+                            device_id=device_id,
+                            intent=raw_intent if "raw_intent" in locals() else body,
+                            decision=decision,
+                        )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"decision": decision})
+                return
+
+            if parsed.path == "/api/shield/transaction-approvals":
+                if not self._require_admin():
+                    return
+                try:
+                    approval = store.create_transaction_approval(
+                        tenant_id=str(body["tenant_id"]),
+                        device_id=str(body["device_id"]),
+                        intent_hash=str(body["intent_hash"]),
+                        approver_id=str(body["approver_id"]),
+                        expires_at=str(body["expires_at"]),
+                    )
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                except (ValueError, ConfigError, KeyError) as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(approval, status=HTTPStatus.CREATED)
+                return
+
+            if parsed.path == "/api/shield/transaction-approvals/verify":
+                tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
+                device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                try:
+                    result = store.verify_transaction_approval(
+                        tenant_id=tenant_id, device_id=device_id, intent_hash=str(body["intent_hash"])
+                    )
+                except (KeyError, ValueError) as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(result)
+                return
+
+            if parsed.path == "/api/shield/transaction-approvals/consume":
+                if not self._require_admin():
+                    return
+                try:
+                    consumed = store.consume_transaction_approval(
+                        tenant_id=str(body["tenant_id"]),
+                        device_id=str(body["device_id"]),
+                        approval_id=str(body["approval_id"]),
+                        intent_hash=str(body["intent_hash"]),
+                    )
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.CONFLICT, str(exc))
+                    return
+                self._send_json(consumed)
+                return
+
+            if parsed.path == "/api/shield/transaction-simulations":
+                tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
+                device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                try:
+                    policy_doc = store.get_policy_doc(tenant_id=tenant_id, device_id=device_id)
+                    if not policy_doc or not isinstance(policy_doc.get("transaction_policy"), dict):
+                        self._send_json({"decision": {"action": "deny", "rule_id": "transaction-policy-missing", "reason": "transaction policy is not configured", "execution": "not_broadcast"}})
+                        return
+                    raw_intent = dict(body)
+                    raw_intent["tenant_id"] = tenant_id
+                    raw_intent["device_id"] = device_id
+                    intent = TransactionIntent.from_dict(raw_intent)
+                    decision = evaluate_transaction_intent(
+                        intent, TransactionPolicy.from_dict(policy_doc["transaction_policy"])
+                    )
+                    response: dict[str, Any] = {"decision": decision.as_dict()}
+                    if decision.action != "allow":
+                        self._send_json(response)
+                        return
+                    response["simulation"] = simulate_transaction_intent(intent).as_dict()
+                except SimulationError as exc:
+                    response = {
+                        "decision": {
+                            "action": "deny",
+                            "rule_id": "simulation-failed",
+                            "reason": str(exc),
+                            "execution": "not_broadcast",
+                        },
+                        "simulation": {"status": "failed", "execution": "not_broadcast"},
+                    }
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(response)
                 return
 
             if parsed.path in (

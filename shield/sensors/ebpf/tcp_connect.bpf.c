@@ -101,12 +101,21 @@ int trace_connect_v4_return(struct pt_regs *ctx)
     task = (struct task_struct *)bpf_get_current_task();
     rec.ppid = task->real_parent->tgid;
     bpf_get_current_comm(&rec.comm, sizeof(rec.comm));
-    rec.saddr = skp->__sk_common.skc_rcv_saddr;
-    rec.daddr = skp->__sk_common.skc_daddr;
+    // Do not form field addresses from `skp` directly. On newer kernels the
+    // verifier treats the pointer loaded from the map as a scalar, so even a
+    // bpf_probe_read(&skp->__sk_common.field, ...) is rejected before the
+    // helper runs. Copy the known socket prefix first, then read locals.
+    struct shield_sock_common common = {};
+    if (bpf_probe_read(&common, sizeof(common), skp) != 0) {
+        currsock.delete(&id);
+        return 0;
+    }
+    rec.saddr = common.skc_rcv_saddr;
+    rec.daddr = common.skc_daddr;
     // skc_num is already host-byte-order (unlike skc_dport, which needs ntohs) --
     // same asymmetry BCC's own tcpconnect reference handles the identical way.
-    rec.lport = skp->__sk_common.skc_num;
-    rec.dport = ntohs(skp->__sk_common.skc_dport);
+    rec.lport = common.skc_num;
+    rec.dport = ntohs(common.skc_dport);
 
     tcp_connect_events.perf_submit(ctx, &rec, sizeof(rec));
     currsock.delete(&id);

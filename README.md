@@ -208,11 +208,11 @@ Legend: real and tested means there is code and a test or live verification path
 | Guardrail hooks | Real and tested | All six hook points exist: ingress, retrieval/context, model routing, output, tool execution, post-action verification. |
 | CLI | Real and tested | `shield status`, `shield events`, `shield validate`, `shield run`, `shield fetch-policy`, `shield verify-log`, `shield siem-export`. |
 | Config, policy distribution, and hot reload | Real and tested | Local JSON parsing, tenant HTTP policy fetch, atomic replace, policy version/hash, trusted policy hash pinning. |
-| Integrity exporter | Real, live path — restored 2026-08-12 after a 2026-08-07 regression | Uses `integrity-sdk` DID, BCC signing, and telemetry, running alongside (not instead of) the OTel span in `agent_core/router.py`. Registration/readback scripts exist; live validation needs funded RPC/oracle credentials. |
+| Integrity exporter | Real, live middleware path verified 2026-08-29; DID readback pending | Uses `integrity-sdk` DID, BCC signing, and telemetry, running alongside (not instead of) the OTel span in `agent_core/router.py`. A real signed submission received a structured response from live `bcc_middleware`; the Shield DID still needs registration for successful remote evidence readback. |
 | Dev sensor | Real and synthetic | Explicitly test/demo-only; never claimed as endpoint telemetry. |
 | Linux process eBPF | Real, historically live-verified | Observed a real spawned subprocess `execve`. |
 | Linux file-write eBPF | Real, historically live-verified | Observed a real write-mode `openat`; supports userspace sensitive-path filtering. |
-| Linux TCP-connect eBPF | Source blocker reduced; root verification pending | `net/sock.h` include chain removed using BTF-checked minimal socket prefix. Needs root live verification before being marked verified. |
+| Linux TCP-connect eBPF | Real, live-verified on the development kernel; matrix pending | BTF-checked minimal socket prefix passed root verifier and observed a real localhost TCP connect on kernel `7.0.0-30-generic`. Additional supported kernels remain unverified. |
 | DNS observation | Planned | Needs separate uprobe or packet-parsing design. |
 | Metadata DLP classifier | Real and tested | Classifies labels, paths, data-source names, and model endpoints without storing raw content. Not a deep content scanner. |
 | SIEM/SOAR export | Real and tested | JSONL normalization and generic webhook POST adapters. |
@@ -752,7 +752,7 @@ Highest-priority gaps:
   interpreter-backed tests. `shield local-run --profile {smb,professional-services,regulated}`
   starts exactly one supervised local OPA profile; plain `shield run` still expects an
   operator-managed OPA sidecar.
-- Run root live verification for TCP-connect eBPF on the target kernel and archive `scripts/verify_tcp_connect_root.py` JSON output.
+- Run root live verification for TCP-connect eBPF on every supported kernel and archive `scripts/verify_tcp_connect_root.py` JSON output.
 - Register the Shield exporter DID with Integrity Oracle and archive live `GET /v1/agent/{did}` or registry readback evidence.
 - Verify exported Shield decisions through the intended Integrity evidence/audit surface.
 - Run multi-day burn-in with real workloads: false positive review, CPU/RAM, eBPF overhead, and export reliability.

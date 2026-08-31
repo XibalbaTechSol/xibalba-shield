@@ -1,0 +1,59 @@
+{
+  "checks": [
+    {
+      "name": "root-free pytest",
+      "status": "PASS",
+      "detail": "CLIENT SIGNABLE BYTES: {\"agent_id\":\"did:integrity:2ea17967f7a65589d570ca7e800844701fb36e6aa7374243e8766de8651f6bc4\",\"derived_signals\":{\"compliance\":1.0,\"entropy\":0.0,\"grounding\":0.0,\"sacrifice\":0.0},\"nonce\":1,\"otel_spans\":[{\"kind\":\"telemetry\",\"metadata\":{\"shield_event\":{\"activity\":{\"outcome\":\"success\",\"severity\":\"low\",\"type\":\"launch\"},\"class\":\"process_activity\",\"device_id\":\"test-dev\",\"process\":{\"cmdline\":\"shadow_ai_tool.exe --dev-mode-synthetic\",\"exe_path\":\"/usr/bin/shadow_ai_tool\",\"hash_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"name\":\"shadow_ai_tool.exe\",\"parent_name\":\"explorer.exe\",\"pid\":1000,\"ppid\":1000},\"tenant_id\":\"\",\"time\":\"2026-08-29T10:17:02Z\"}}},{\"kind\":\"telemetry\",\"metadata\":{\"shield_event\":{\"activity\":{\"policy_violation\":false,\"risk_level\":\"low\",\"type\":\"inference\"},\"agent\":{\"agent_id\":\"customer-support-bot\",\"name\":\"customer-support-bot\",\"owner_user_id\":\"\",\"type\":\"llm_tool\",\"workload_id\":\"\"},\"class\":\"agent_event\",\"context\":{\"data_sources\":[],\"model_endpoint\":\"dev-mode-synthetic\",\"tools_called\":[\"read_file\"]},\"device_id\":\"test-dev\",\"invocation_id\":null,\"time\":\"2026-08-29T10:17:02Z\"}}},{\"kind\":\"telemetry\",\"metadata\":{\"shield_event\":{\"activity\":{\"policy_violation\":false,\"risk_level\":\"low\",\"type\":\"inference\"},\"agent\":{\"agent_id\":\"unregistered-llm-tool\",\"name\":\"unregistered-llm-tool\",\"owner_user_id\":\"\",\"type\":\"llm_tool\",\"workload_id\":\"\"},\"class\":\"agent_event\",\"context\":{\"data_sources\":[],\"model_endpoint\":\"dev-mode-synthetic\",\"tools_called\":[\"read_file\"]},\"device_id\":\"test-dev\",\"invocation_id\":null,\"time\":\"2026-08-29T10:17:02Z\"}}},{\"kind\":\"telemetry\",\"metadata\":{\"shield_event\":{\"activity\":{\"outcome\":\"success\",\"severity\":\"medium\",\"type\":\"connect\"},\"class\":\"network_flow\",\"device_id\":\"test-dev\",\"dns\":{\"query_name\":\"dev-mode-synthetic.example\",\"resolved_ips\":[\"203.0.113.10\"]},\"flow\":{\"direction\":\"outbound\",\"dst_ip\":\"203.0.113.10\",\"dst_port\":443,\"protocol\":\"tcp\",\"src_ip\":\"10.0.0.5\",\"src_port\":45913},\"process\":{\"name\":\"python.exe\",\"pid\":1001},\"time\":\"2026-08-29T10:17:02Z\"}}},{\"kind\":\"telemetry\",\"metadata\":{\"shield_event\":{\"activity\":{\"outcome\":\"success\",\"severity\":\"low\",\"type\":\"launch\"},\"class\":\"process_activity\",\"device_id\":\"test-dev\",\"process\":{\"cmdline\":\"shadow_ai_tool.exe --dev-mode-synthetic\",\"exe_path\":\"/usr/bin/shadow_ai_tool\",\"hash_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"name\":\"shadow_ai_tool.exe\",\"parent_name\":\"explorer.exe\",\"pid\":1002,\"ppid\":1000},\"tenant_id\":\"\",\"time\":\"2026-08-29T10:17:02Z\"}}}],\"schema_version\":1,\"zk_proof\":null}"
+    },
+    {
+      "name": "validate policies/defaults/smb.json",
+      "status": "PASS",
+      "detail": "OK   /home/xibalba/Projects/xibalba-shield/policies/defaults/smb.json: 3 rule(s), in order: smb-contain-shadow-ai-processes, smb-deny-unregistered-agent-tools, smb-escalate-sensitive-file-write policy_version=smb-2026.08 policy_hash=sha256:117eea18bd22a026bd2fa46dd36d33b4f6ecdfd54f1e33eac451c8d76515dcf2"
+    },
+    {
+      "name": "validate policies/defaults/professional-services.json",
+      "status": "PASS",
+      "detail": "OK   /home/xibalba/Projects/xibalba-shield/policies/defaults/professional-services.json: 3 rule(s), in order: ps-deny-unregistered-agents, ps-deny-unapproved-model-routing, ps-escalate-client-data-context policy_version=professional-services-2026.08 policy_hash=sha256:cf48baa544e4848ea74d4df6a2b8a62e54130ef3c92926df2f6e287178aec06a"
+    },
+    {
+      "name": "validate policies/defaults/regulated.json",
+      "status": "PASS",
+      "detail": "OK   /home/xibalba/Projects/xibalba-shield/policies/defaults/regulated.json: 4 rule(s), in order: regulated-deny-unregistered-agents, regulated-deny-phi-context, regulated-deny-high-risk-output, regulated-escalate-sensitive-write policy_version=regulated-2026.08 policy_hash=sha256:e7101882773dbacf4af5e39f047ce8f0e8efd6843b87c1636e70ef5f0ad98939"
+    },
+    {
+      "name": "local dev export status",
+      "status": "FAIL",
+      "detail": "local no-exporter decisions did not record export success"
+    },
+    {
+      "name": "burn-in smoke",
+      "status": "PASS",
+      "detail": "25 events, fp_rate=0.0"
+    },
+    {
+      "name": "kernel BTF sock layout",
+      "status": "PASS",
+      "detail": "TCP sensor fields are present"
+    },
+    {
+      "name": "root eBPF tests",
+      "status": "SKIP",
+      "detail": "run with sudo to load and verify real BPF probes"
+    },
+    {
+      "name": "root TCP-connect eBPF",
+      "status": "SKIP",
+      "detail": "run sudo python3 scripts/verify_tcp_connect_root.py"
+    },
+    {
+      "name": "live bcc exporter",
+      "status": "GAP",
+      "detail": "no replacement for the removed tests/test_integrity_exporter.py exists since the OTel telemetry refactor -- real end-to-end span export against bcc_middleware is currently untested"
+    },
+    {
+      "name": "DID environment preflight",
+      "status": "SKIP",
+      "detail": "blocked: rpc_reachable, oracle_reachable"
+    }
+  ]
+}

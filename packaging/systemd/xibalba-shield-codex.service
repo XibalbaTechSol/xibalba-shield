@@ -1,0 +1,28 @@
+[Unit]
+Description=Xibalba Shield Codex advisory worker
+Documentation=README.md docs/design/codex-agent-boundary.md
+After=network-online.target xibalba-shield.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xibalba
+Group=xibalba
+ExecStart=/usr/local/bin/python3 /usr/local/lib/xibalba-shield/scripts/codex_worker.py --inbox /var/lib/xibalba-shield/codex/inbox --outbox /var/lib/xibalba-shield/codex/outbox
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/xibalba-shield/codex
+
+[Install]
+WantedBy=multi-user.target

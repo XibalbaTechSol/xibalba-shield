@@ -1,0 +1,104 @@
+In file included from /virtual/main.c:35:
+In file included from include/linux/sched.h:12:
+arch/x86/include/asm/current.h:23:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
+   23 |                 return this_cpu_read_const(const_current_task);
+      |                        ^
+arch/x86/include/asm/percpu.h:560:36: note: expanded from macro 'this_cpu_read_const'
+  560 | #define this_cpu_read_const(pcp)                        __raw_cpu_read_const(pcp)
+      |                                                         ^
+arch/x86/include/asm/percpu.h:148:35: note: expanded from macro '__raw_cpu_read_const'
+  148 | #define __raw_cpu_read_const(pcp)       __raw_cpu_read(, , pcp)
+      |                                         ^
+arch/x86/include/asm/percpu.h:140:38: note: expanded from macro '__raw_cpu_read'
+  140 |         *(qual __my_cpu_type(pcp) * __force)__my_cpu_ptr(&(pcp));       \
+      |                                             ^
+note: (skipping 4 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
+   25 | #define __CONCAT(a, b) a ## b
+      |                        ^
+<scratch space>:90:1: note: expanded from here
+   90 | __seg_gs
+      | ^
+<built-in>:358:33: note: expanded from macro '__seg_gs'
+  358 | #define __seg_gs __attribute__((address_space(256)))
+      |                                 ^
+In file included from /virtual/main.c:35:
+In file included from include/linux/sched.h:12:
+arch/x86/include/asm/current.h:23:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
+arch/x86/include/asm/percpu.h:560:36: note: expanded from macro 'this_cpu_read_const'
+  560 | #define this_cpu_read_const(pcp)                        __raw_cpu_read_const(pcp)
+      |                                                         ^
+arch/x86/include/asm/percpu.h:148:35: note: expanded from macro '__raw_cpu_read_const'
+  148 | #define __raw_cpu_read_const(pcp)       __raw_cpu_read(, , pcp)
+      |                                         ^
+arch/x86/include/asm/percpu.h:140:9: note: expanded from macro '__raw_cpu_read'
+  140 |         *(qual __my_cpu_type(pcp) * __force)__my_cpu_ptr(&(pcp));       \
+      |                ^
+note: (skipping 3 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
+   25 | #define __CONCAT(a, b) a ## b
+      |                        ^
+<scratch space>:89:1: note: expanded from here
+   89 | __seg_gs
+      | ^
+<built-in>:358:33: note: expanded from macro '__seg_gs'
+  358 | #define __seg_gs __attribute__((address_space(256)))
+      |                                 ^
+In file included from /virtual/main.c:35:
+In file included from include/linux/sched.h:13:
+arch/x86/include/asm/processor.h:554:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
+  554 |                 return this_cpu_read_const(const_cpu_current_top_of_stack);
+      |                        ^
+arch/x86/include/asm/percpu.h:560:36: note: expanded from macro 'this_cpu_read_const'
+  560 | #define this_cpu_read_const(pcp)                        __raw_cpu_read_const(pcp)
+      |                                                         ^
+arch/x86/include/asm/percpu.h:148:35: note: expanded from macro '__raw_cpu_read_const'
+  148 | #define __raw_cpu_read_const(pcp)       __raw_cpu_read(, , pcp)
+      |                                         ^
+arch/x86/include/asm/percpu.h:140:38: note: expanded from macro '__raw_cpu_read'
+  140 |         *(qual __my_cpu_type(pcp) * __force)__my_cpu_ptr(&(pcp));       \
+      |                                             ^
+note: (skipping 4 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
+   25 | #define __CONCAT(a, b) a ## b
+      |                        ^
+<scratch space>:116:1: note: expanded from here
+  116 | __seg_gs
+      | ^
+<built-in>:358:33: note: expanded from macro '__seg_gs'
+  358 | #define __seg_gs __attribute__((address_space(256)))
+      |                                 ^
+In file included from /virtual/main.c:35:
+In file included from include/linux/sched.h:13:
+arch/x86/include/asm/processor.h:554:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
+arch/x86/include/asm/percpu.h:560:36: note: expanded from macro 'this_cpu_read_const'
+  560 | #define this_cpu_read_const(pcp)                        __raw_cpu_read_const(pcp)
+      |                                                         ^
+arch/x86/include/asm/percpu.h:148:35: note: expanded from macro '__raw_cpu_read_const'
+  148 | #define __raw_cpu_read_const(pcp)       __raw_cpu_read(, , pcp)
+      |                                         ^
+arch/x86/include/asm/percpu.h:140:9: note: expanded from macro '__raw_cpu_read'
+  140 |         *(qual __my_cpu_type(pcp) * __force)__my_cpu_ptr(&(pcp));       \
+      |                ^
+note: (skipping 3 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
+   25 | #define __CONCAT(a, b) a ## b
+      |                        ^
+<scratch space>:115:1: note: expanded from here
+  115 | __seg_gs
+      | ^
+<built-in>:358:33: note: expanded from macro '__seg_gs'
+  358 | #define __seg_gs __attribute__((address_space(256)))
+      |                                 ^
+4 warnings generated.
+[self-test:tcp_connect] loading (requires root)...
+[self-test:tcp_connect] connecting to 127.0.0.1:38467 from this process (pid 105082), watching...
+[self-test:tcp_connect] PASS — observed this process's real connect to port 38467.
+{
+  "check": "tcp_connect_root_verification",
+  "command": "python3 scripts/verify_tcp_connect_root.py",
+  "reason": "observed real localhost TCP connect",
+  "requires_root": true,
+  "returncode": 0,
+  "status": "pass"
+}

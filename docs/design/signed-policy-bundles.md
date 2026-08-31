@@ -16,6 +16,7 @@ Policy files are JSON objects:
 ```json
 {
   "policy_version": "regulated-2026.08",
+  "policy_revision": 42,
   "rules": []
 }
 ```
@@ -23,6 +24,7 @@ Policy files are JSON objects:
 `shield.config.load_policy_bundle()` computes:
 
 - `version`: `policy_version` or `version`, if present.
+- `revision`: optional non-negative integer `policy_revision`, used for opt-in downgrade rejection during hot reload.
 - `hash`: `sha256:` plus SHA-256 over the exact policy file bytes.
 - `rules`: parsed `PolicyRule` entries in file order.
 

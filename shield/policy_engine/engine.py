@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 import logging
+from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
 
 from integrity_sdk.policy.opa_client import evaluate as opa_evaluate, OPAUnavailableError
@@ -54,6 +55,22 @@ class PolicyEngine:
         self.opa_package_path = opa_package_path
         self.policy_version = policy_version
         self.policy_hash = policy_hash
+        self._opa_healthy: bool | None = None
+        self._last_opa_check_at: str | None = None
+        self._last_opa_error: str | None = None
+
+    def health_status(self) -> dict[str, str | bool | None]:
+        """Return advisory runtime health from the most recent policy evaluation.
+
+        This never participates in an enforcement decision; evaluation still fails closed
+        when OPA is unavailable.
+        """
+        return {
+            "opa_url": self.opa_url,
+            "healthy": self._opa_healthy,
+            "last_checked_at": self._last_opa_check_at,
+            "last_error": self._last_opa_error,
+        }
 
     def evaluate(self, event: NormalizedEvent, ctx: EvaluationContext) -> PolicyDecision:
         event_id = f"evt-{uuid.uuid4().hex[:12]}"
@@ -78,6 +95,9 @@ class PolicyEngine:
                 opa_timeout_seconds=2.0,
                 opa_input=opa_input
             ))
+            self._opa_healthy = True
+            self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            self._last_opa_error = None
             raw = opa_decision.raw_result
             
             # Extract fields expected by shield
@@ -105,6 +125,9 @@ class PolicyEngine:
                 ),
             )
         except OPAUnavailableError as exc:
+            self._opa_healthy = False
+            self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            self._last_opa_error = str(exc)
             logger.error("OPA unavailable: %s", exc)
             # Fail closed as per spec
             return PolicyDecision(

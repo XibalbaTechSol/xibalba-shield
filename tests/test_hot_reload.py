@@ -21,9 +21,10 @@ from shield.policy_engine.engine import EvaluationContext
 from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
 
 
-def _write_rules(path, rule_ids: list[str]):
+def _write_rules(path, rule_ids: list[str], revision: int | None = None):
     path.write_text(json.dumps({
         "policy_version": f"v-{len(rule_ids)}",
+        **({"policy_revision": revision} if revision is not None else {}),
         "rules": [
             {"rule_id": rid, "name": rid, "version": "1.0.0", "conditions": [], "actions": [{"type": "allow"}]}
             for rid in rule_ids
@@ -34,6 +35,67 @@ def _write_rules(path, rule_ids: list[str]):
 def _bump_mtime(path, seconds_forward: float):
     st = path.stat()
     os.utime(path, (st.st_atime + seconds_forward, st.st_mtime + seconds_forward))
+
+
+def test_status_starts_unhealthy_before_first_load(tmp_path):
+    path = tmp_path / "rules.json"
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+
+    status = reloader.status()
+
+    assert status.healthy is False
+    assert status.active_policy_hash == ""
+    assert status.last_attempt_at is None
+
+
+def test_status_reports_success_then_degraded_update(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"])
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+
+    assert reloader.check_and_reload() is True
+    healthy = reloader.status()
+    assert healthy.healthy is True
+    assert healthy.active_policy_version == "v-1"
+    assert healthy.last_success_at == healthy.last_attempt_at
+
+    path.write_text("{not valid json")
+    _bump_mtime(path, 5)
+    assert reloader.check_and_reload() is False
+    degraded = reloader.status()
+    assert degraded.healthy is False
+    assert degraded.active_policy_version == "v-1"
+    assert degraded.active_policy_hash == healthy.active_policy_hash
+    assert degraded.last_error is not None
+
+
+def test_rejects_policy_downgrade_when_enabled(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"], revision=2)
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path, reject_downgrades=True)
+    assert reloader.check_and_reload() is True
+
+    _write_rules(path, ["a", "older"], revision=1)
+    _bump_mtime(path, 5)
+    assert reloader.check_and_reload() is False
+    assert engine.policy_version == "v-1"
+    assert reloader.status().last_error is not None
+
+
+def test_policy_without_revision_is_rejected_after_revisioned_policy(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"], revision=1)
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path, reject_downgrades=True)
+    assert reloader.check_and_reload() is True
+
+    _write_rules(path, ["unversioned"])
+    _bump_mtime(path, 5)
+    assert reloader.check_and_reload() is False
+    assert engine.policy_version == "v-1"
 
 
 def test_first_check_loads_initial_rules(tmp_path):

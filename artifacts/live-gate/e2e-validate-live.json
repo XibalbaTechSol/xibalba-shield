@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "name": "root-free pytest",
+      "status": "PASS",
+      "detail": "agent did:integrity:2ea17967f7a65589d570ca7e800844701fb36e6aa7374243e8766de8651f6bc4 is not registered with oracle http://localhost:8080 (confirmed via GET /v1/agent/did:integrity:2ea17967f7a65589d570ca7e800844701fb36e6aa7374243e8766de8651f6bc4) \u2014 refusing to send telemetry by default; batch re-queued for a later flush"
+    },
+    {
+      "name": "validate policies/defaults/smb.json",
+      "status": "PASS",
+      "detail": "OK   /home/xibalba/Projects/xibalba-shield/policies/defaults/smb.json: 3 rule(s), in order: smb-contain-shadow-ai-processes, smb-deny-unregistered-agent-tools, smb-escalate-sensitive-file-write policy_version=smb-2026.08 policy_hash=sha256:117eea18bd22a026bd2fa46dd36d33b4f6ecdfd54f1e33eac451c8d76515dcf2"
+    },
+    {
+      "name": "validate policies/defaults/professional-services.json",
+      "status": "PASS",
+      "detail": "OK   /home/xibalba/Projects/xibalba-shield/policies/defaults/professional-services.json: 3 rule(s), in order: ps-deny-unregistered-agents, ps-deny-unapproved-model-routing, ps-escalate-client-data-context policy_version=professional-services-2026.08 policy_hash=sha256:cf48baa544e4848ea74d4df6a2b8a62e54130ef3c92926df2f6e287178aec06a"
+    },
+    {
+      "name": "validate policies/defaults/regulated.json",
+      "status": "PASS",
+      "detail": "OK   /home/xibalba/Projects/xibalba-shield/policies/defaults/regulated.json: 4 rule(s), in order: regulated-deny-unregistered-agents, regulated-deny-phi-context, regulated-deny-high-risk-output, regulated-escalate-sensitive-write policy_version=regulated-2026.08 policy_hash=sha256:e7101882773dbacf4af5e39f047ce8f0e8efd6843b87c1636e70ef5f0ad98939"
+    },
+    {
+      "name": "local dev shield run",
+      "status": "PASS",
+      "detail": "12 decisions logged with export=telemetry_only"
+    },
+    {
+      "name": "burn-in smoke",
+      "status": "PASS",
+      "detail": "25 events, fp_rate=0.0"
+    },
+    {
+      "name": "kernel BTF sock layout",
+      "status": "PASS",
+      "detail": "TCP sensor fields are present"
+    },
+    {
+      "name": "root eBPF tests",
+      "status": "SKIP",
+      "detail": "run with sudo to load and verify real BPF probes"
+    },
+    {
+      "name": "root TCP-connect eBPF",
+      "status": "SKIP",
+      "detail": "run sudo python3 scripts/verify_tcp_connect_root.py"
+    },
+    {
+      "name": "live bcc exporter",
+      "status": "PASS",
+      "detail": "1 passed in 0.54s"
+    },
+    {
+      "name": "DID environment preflight",
+      "status": "PASS",
+      "detail": "live prerequisites available"
+    },
+    {
+      "name": "exporter DID readback",
+      "status": "SKIP",
+      "detail": "DID is not registered: did:integrity:2ea17967f7a65589d570ca7e800844701fb36e6aa7374243e8766de8651f6bc4"
+    }
+  ]
+}

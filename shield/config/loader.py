@@ -35,6 +35,7 @@ class PolicyBundle:
     rules: list[PolicyRule]
     version: str
     hash: str
+    revision: int | None = None
 
 
 def _load_json_file(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
@@ -84,7 +85,10 @@ def load_policy_bundle(path: Path | str) -> PolicyBundle:
             raise ConfigError(f"policy rules file {p}: rules[{i}] has an invalid shape: {exc}") from exc
 
     version = str(doc.get("policy_version", doc.get("version", "")))
-    return PolicyBundle(rules=rules, version=version, hash=f"sha256:{hashlib.sha256(raw_bytes).hexdigest()}")
+    revision = doc.get("policy_revision")
+    if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 0):
+        raise ConfigError(f"policy rules file {p}: \"policy_revision\" must be a non-negative integer")
+    return PolicyBundle(rules=rules, version=version, hash=f"sha256:{hashlib.sha256(raw_bytes).hexdigest()}", revision=revision)
 
 
 def load_policy_rules(path: Path | str) -> list[PolicyRule]:
@@ -103,6 +107,7 @@ class DeviceConfig:
     device_role: str = ""
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
+    backend_url: str = ""
     # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
     # every BCC commitment this device's exporter signs must now bind chain_id +
     # verifying_contract. Defaults match Base Sepolia (CLAUDE.md's "Live deployment").
@@ -113,6 +118,7 @@ class DeviceConfig:
     feature_flags: dict[str, bool] = field(default_factory=dict)
     sensitive_paths: list[str] = field(default_factory=list)
     trusted_policy_hashes: list[str] = field(default_factory=list)
+    reject_policy_downgrades: bool = False
 
     def flag(self, name: str, default: bool = False) -> bool:
         return self.feature_flags.get(name, default)
@@ -133,6 +139,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "device_role",
         "bcc_middleware_url",
         "oracle_url",
+        "backend_url",
         "chain_id",
         "verifying_contract",
         "tenant_policy_url",
@@ -140,6 +147,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "feature_flags",
         "sensitive_paths",
         "trusted_policy_hashes",
+        "reject_policy_downgrades",
     }
     unknown = set(doc.keys()) - known_fields
     if unknown:
@@ -151,6 +159,8 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         raise ConfigError(f"device config file {p}: \"sensitive_paths\" must be an array")
     if any(not isinstance(pattern, str) for pattern in kwargs.get("sensitive_paths", [])):
         raise ConfigError(f"device config file {p}: every \"sensitive_paths\" entry must be a string")
+    if "reject_policy_downgrades" in kwargs and not isinstance(kwargs["reject_policy_downgrades"], bool):
+        raise ConfigError(f"device config file {p}: \"reject_policy_downgrades\" must be a boolean")
     if "trusted_policy_hashes" in kwargs and not isinstance(kwargs["trusted_policy_hashes"], list):
         raise ConfigError(f"device config file {p}: \"trusted_policy_hashes\" must be an array")
     if any(not isinstance(policy_hash, str) for policy_hash in kwargs.get("trusted_policy_hashes", [])):
