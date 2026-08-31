@@ -2,16 +2,18 @@
 title: Policy Engine
 acronyms: [OPA]
 created: 2026-08-12
-updated: 2026-08-25
+updated: 2026-08-31
 type: concept
 tags: [enforcement, infrastructure]
 confidence: medium
 source_files:
+  - shield/cli.py
   - shield/policy_engine/engine.py
   - shield/config/loader.py
   - shield/config/hot_reload.py
   - shield/schemas/policy_rule.py
   - shield/agent_core/slm_backend.py
+  - tests/test_cli.py
 ---
 
 ## Table of contents
@@ -91,6 +93,12 @@ so `local-run` resolves the same bytes from an installed wheel rather than depen
 checkout. Continuous Integration builds and installs the wheel outside the repository, then runs a
 real selected-profile smoke event. The Open Policy Agent binary remains an explicit external
 prerequisite; Continuous Integration pins version 1.18.2 and verifies its SHA-256 checksum.
+
+`local-run` owns that Open Policy Agent process through `supervised_opa`; it therefore passes
+`opa_command=None` into the shared enforcement loop so the loop does not try to start a second
+supervisor. A command-level regression exercises this namespace handoff before processing one
+synthetic event, covering the packaged-wheel failure that previously raised `AttributeError`
+before the smoke event ran.
 
 This command is local runtime hardening and smoke integration, not production process supervision,
 Windows lifecycle proof, external Integrity export, or deployment readiness. The three shared-package

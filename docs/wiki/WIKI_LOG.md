@@ -107,3 +107,14 @@
   completed with local loop, burn-in, kernel BTF, and all three policy profiles passing. Root
   eBPF, live BCC, and DID readback remained explicit skips because those dependencies were not
   available in this isolated run.
+
+## [2026-08-31] update | Restore packaged local-run smoke after OPA supervision merge
+
+- Fixed the `local-run` to shared-run namespace handoff by explicitly disabling the shared
+  `--opa-command` supervisor when the selected-profile supervisor already owns Open Policy Agent.
+- Added a command-level regression that reaches the enforcement loop and processes one synthetic
+  event; before the fix it reproduced the hosted `AttributeError: Namespace has no attribute
+  'opa_command'` failure.
+- Verification: focused regression `1 passed`; full root-free suite `181 passed, 7 skipped`; all
+  three default JSON policy packs validated; a built wheel installed under `/tmp` and processed
+  one real `smb` profile event with Open Policy Agent 1.18.2; wiki table-of-contents check passed.
