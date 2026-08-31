@@ -30,6 +30,30 @@ def test_local_run_reports_missing_opa_without_traceback(tmp_path, capsys):
     assert "unable to start selected OPA profile" in captured.err
     assert "Traceback" not in captured.err
 
+
+def test_local_run_reaches_enforcement_loop(tmp_path, monkeypatch, capsys):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_supervised_opa(*_args, **_kwargs):
+        yield "http://localhost:18181"
+
+    monkeypatch.setattr("shield.opa_local.supervised_opa", fake_supervised_opa)
+
+    result = main([
+        "local-run",
+        "--profile", "smb",
+        "--max-events", "1",
+        "--dev-interval", "0",
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+    ])
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "processed 1 event(s)" in captured.out
+    assert "Traceback" not in captured.err
+
+
 import pytest
 from unittest.mock import AsyncMock, patch
 from integrity_sdk.policy.opa_client import OPADecision

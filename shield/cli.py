@@ -396,6 +396,7 @@ def _local_run(args: argparse.Namespace) -> int:
             args.device_role = ""
             args.bcc_middleware_url = "http://localhost:8000"
             args.oracle_url = None
+            args.opa_command = None
             args.agent_label = "xibalba-shield-local"
             args.no_exporter = True
             args.no_containment = True
