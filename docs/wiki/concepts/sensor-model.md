@@ -66,7 +66,7 @@ implementations, not stubs:
 |---|---|
 | Process execution | Historically live-verified — a kprobe on `execve` observed a real spawned subprocess as root. |
 | File write-open | Historically live-verified — a kprobe/kretprobe on `openat` observed a real write-mode open; filters write-mode opens in-kernel and sensitive paths in userspace. |
-| TCP connect | Source-blocker reduced, root verification pending. Uses a BTF-checked minimal socket-prefix mirror to avoid the old `net/sock.h` BCC header compile failure. Not yet re-verified live as root. |
+| TCP connect | Live-verified as root on Ubuntu 24.04 LTS. Uses a BTF-checked minimal socket-prefix mirror to avoid the old `net/sock.h` BCC header compile failure, copied into a local struct before field reads (newer verifiers reject reading fields directly off the map-loaded pointer). See `docs/SUPPORTED_MATRIX.md` for which other kernels still need this evidence. |
 
 No eBPF sensor in this repo should be marked verified unless it was loaded as root and observed a
 real event on the target kernel — "historically live-verified" specifically means that
