@@ -55,6 +55,13 @@ class ShieldStore:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS tenant_admin_tokens (
+                tenant_id TEXT PRIMARY KEY,
+                token_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS devices (
                 tenant_id TEXT NOT NULL,
                 device_id TEXT NOT NULL,
@@ -248,6 +255,36 @@ class ShieldStore:
             (tenant_id, device_id),
         ).fetchone()
         return bool(row and secrets.compare_digest(row["device_token_hash"], _hash_token(token)))
+
+    def mint_tenant_admin_token(self, *, tenant_id: str) -> str:
+        """Issue a fresh admin token scoped to one tenant, replacing any prior token."""
+        self._validate_id("tenant_id", tenant_id)
+        token = secrets.token_urlsafe(32)
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO tenants (tenant_id, created_at) VALUES (?, ?)",
+                (tenant_id, now),
+            )
+            self._conn.execute(
+                """
+                INSERT INTO tenant_admin_tokens (tenant_id, token_hash, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(tenant_id) DO UPDATE SET
+                    token_hash=excluded.token_hash,
+                    created_at=excluded.created_at
+                """,
+                (tenant_id, _hash_token(token), now),
+            )
+        return token
+
+    def authenticate_tenant_admin(self, *, tenant_id: str, token: str) -> bool:
+        """Check a tenant-scoped admin token. Never grants access to a different tenant_id."""
+        row = self._conn.execute(
+            "SELECT token_hash FROM tenant_admin_tokens WHERE tenant_id=?",
+            (tenant_id,),
+        ).fetchone()
+        return bool(row and secrets.compare_digest(row["token_hash"], _hash_token(token)))
 
     def put_policy(self, *, tenant_id: str, device_id: str, policy_doc: dict[str, Any]) -> PolicyBundle:
         self._validate_id("tenant_id", tenant_id)

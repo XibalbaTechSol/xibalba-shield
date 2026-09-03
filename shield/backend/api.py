@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,10 +49,10 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 self._send_json({"ok": True, "service": "xibalba-shield-backend"})
                 return
             if parts[:3] == ["api", "shield", "devices"]:
-                if not self._require_admin():
-                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
                     return
                 if len(parts) == 3:
                     self._send_json({"devices": store.list_devices(tenant_id=tenant_id)})
@@ -73,49 +74,49 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     self._send_json(policy)
                 return
             if parsed.path == "/api/shield/dashboard-summary":
-                if not self._require_admin():
-                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json(store.dashboard_summary(tenant_id=tenant_id))
                 return
             if parsed.path == "/api/shield/exporter-status":
-                if not self._require_admin():
-                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json({"exporter_status": store.list_exporter_status(tenant_id=tenant_id)})
                 return
             if parsed.path == "/api/shield/integrations":
-                if not self._require_admin():
-                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json({"integrations": store.list_integrations(tenant_id=tenant_id)})
                 return
             if parsed.path == "/api/shield/detection-quality":
-                if not self._require_admin():
-                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json({"detection_quality": store.list_detection_quality(tenant_id=tenant_id)})
                 return
             if parsed.path == "/api/shield/test-events":
-                if not self._require_admin():
-                    return
                 tenant_id = query.get("tenant_id", ["dashboard"])[0]
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
                 agent_id = query.get("agent_id", [None])[0]
                 self._send_json({"test_events": store.list_test_events(tenant_id=tenant_id, agent_id=agent_id)})
                 return
             if parsed.path == "/api/shield/enforcement-outcomes":
-                if not self._require_admin():
-                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
                     return
                 device_id = query.get("device_id", [None])[0]
                 self._send_json({"enforcement_outcomes": store.list_enforcement_outcomes(tenant_id=tenant_id, device_id=device_id)})
@@ -132,7 +133,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/enroll":
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=body.get("tenant_id")):
                     return
                 try:
                     enrollment = store.enroll_device(
@@ -159,6 +160,20 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 )
                 return
 
+            if parsed.path == "/api/shield/admin-tokens":
+                # Minting a tenant-scoped admin token is a cross-tenant-capable action, so it
+                # requires the global super-admin token, not another tenant's own token.
+                if not self._require_admin():
+                    return
+                try:
+                    tenant_id = str(body["tenant_id"])
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"missing field {exc}")
+                    return
+                token = store.mint_tenant_admin_token(tenant_id=tenant_id)
+                self._send_json({"tenant_id": tenant_id, "admin_token": token}, status=HTTPStatus.CREATED)
+                return
+
             if parsed.path == "/api/shield/demo/seed":
                 if not self._require_admin():
                     return
@@ -167,7 +182,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/test-events":
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=str(body.get("tenant_id", "dashboard"))):
                     return
                 try:
                     row_id = store.record_test_event(
@@ -185,7 +200,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/detection-quality/report":
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=body.get("tenant_id")):
                     return
                 try:
                     tenant_id = str(body["tenant_id"])
@@ -206,7 +221,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/integrations":
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=body.get("tenant_id")):
                     return
                 try:
                     integration_id = store.put_integration(
@@ -222,7 +237,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if len(parts) == 5 and parts[:3] == ["api", "shield", "policies"]:
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=parts[3]):
                     return
                 try:
                     bundle = store.put_policy(tenant_id=parts[3], device_id=parts[4], policy_doc=body)
@@ -268,7 +283,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/transaction-approvals":
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=body.get("tenant_id")):
                     return
                 try:
                     approval = store.create_transaction_approval(
@@ -303,7 +318,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/transaction-approvals/consume":
-                if not self._require_admin():
+                if not self._require_admin(tenant_id=body.get("tenant_id")):
                     return
                 try:
                     consumed = store.consume_transaction_approval(
@@ -414,14 +429,26 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 raise ValueError("request body must be a JSON object")
             return doc
 
-        def _require_admin(self) -> bool:
-            if not admin_token:
-                return True
-            expected = f"Bearer {admin_token}"
-            if self.headers.get("Authorization") != expected:
+        def _require_admin(self, tenant_id: str | None = None) -> bool:
+            """Fail-closed admin auth. A missing/misconfigured token denies, it never allows.
+
+            Accepts either the global super-admin token (full cross-tenant access, meant for the
+            operator) or a tenant-scoped token minted via mint_tenant_admin_token (bound to the
+            single tenant_id it was issued for). A tenant-scoped token can never read or write a
+            different tenant's data.
+            """
+            auth = self.headers.get("Authorization", "")
+            prefix = "Bearer "
+            token = auth[len(prefix):] if auth.startswith(prefix) else ""
+            if not token:
                 self._send_error(HTTPStatus.UNAUTHORIZED, "admin token required")
                 return False
-            return True
+            if admin_token and secrets.compare_digest(token, admin_token):
+                return True
+            if tenant_id and store.authenticate_tenant_admin(tenant_id=tenant_id, token=token):
+                return True
+            self._send_error(HTTPStatus.UNAUTHORIZED, "invalid admin token")
+            return False
 
         def _require_device_token(self, *, tenant_id: str, device_id: str) -> bool:
             auth = self.headers.get("Authorization", "")
@@ -758,10 +785,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default=os.getenv("SHIELD_BACKEND_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("SHIELD_BACKEND_PORT", "8765")))
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
-    parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", "dev-shield-admin"))
+    parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", ""))
     parser.add_argument("--public-base-url", default=os.getenv("SHIELD_PUBLIC_BASE_URL", ""))
     parser.add_argument("--allowed-origin", default=os.getenv("SHIELD_BACKEND_ALLOWED_ORIGIN", "*"), help="CORS origin for browser callers (e.g. the dashboard)")
     args = parser.parse_args(argv)
+
+    if not args.admin_token:
+        args.admin_token = secrets.token_urlsafe(32)
+        print(
+            "shield-backend: no SHIELD_BACKEND_TOKEN/--admin-token set — generated a random "
+            f"super-admin token for this run (save it, it will not be shown again):\n"
+            f"  {args.admin_token}",
+            file=sys.stderr,
+        )
 
     server = run_server(
         host=args.host,
@@ -832,7 +868,7 @@ def _console_html() -> str:
     <h1>Xibalba Shield</h1>
     <div class="toolbar">
       <input id="tenant" value="demo-tenant" aria-label="tenant id">
-      <input id="token" value="dev-shield-admin" aria-label="admin token">
+      <input id="token" value="" placeholder="admin token" aria-label="admin token">
       <button onclick="loadSummary()">Refresh</button>
       <button onclick="seedDemo()">Seed Demo</button>
     </div>

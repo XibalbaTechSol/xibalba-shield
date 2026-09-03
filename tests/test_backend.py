@@ -638,6 +638,86 @@ def test_backend_device_token_is_tenant_scoped(tmp_path):
         store.close()
 
 
+def test_backend_admin_auth_fails_closed_with_no_admin_token_configured(tmp_path):
+    store = ShieldStore(tmp_path / "shield.sqlite3")
+    handler = make_handler(store=store, admin_token="")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        request = urllib.request.Request(
+            f"{base}/api/shield/devices?tenant_id=tenant-a",
+            headers={"Authorization": "Bearer anything"},
+        )
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+        else:
+            raise AssertionError("expected auth to fail closed when no admin token is configured")
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_tenant_scoped_admin_token_cannot_read_another_tenant(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, minted = _request(
+            f"{base}/api/shield/admin-tokens",
+            method="POST",
+            body={"tenant_id": "tenant-a"},
+        )
+        assert status == 201
+        tenant_token = minted["admin_token"]
+
+        status, _ = _request(f"{base}/api/shield/devices?tenant_id=tenant-a", token=tenant_token)
+        assert status == 200
+
+        request = urllib.request.Request(
+            f"{base}/api/shield/devices?tenant_id=tenant-b",
+            headers={"Authorization": f"Bearer {tenant_token}"},
+        )
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+        else:
+            raise AssertionError("expected tenant-scoped admin token to be rejected for another tenant")
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_minting_admin_token_requires_super_admin_token(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, minted = _request(
+            f"{base}/api/shield/admin-tokens",
+            method="POST",
+            body={"tenant_id": "tenant-a"},
+        )
+        tenant_token = minted["admin_token"]
+        assert status == 201
+
+        request = urllib.request.Request(
+            f"{base}/api/shield/admin-tokens",
+            data=json.dumps({"tenant_id": "tenant-b"}).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {tenant_token}"},
+        )
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+        else:
+            raise AssertionError("expected a tenant-scoped token to be unable to mint another tenant's token")
+    finally:
+        server.shutdown()
+        store.close()
+
+
 def test_backend_serves_xibalba_shield_console(tmp_path):
     server, store, base = _start_backend(tmp_path)
     try:
