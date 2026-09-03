@@ -26,8 +26,15 @@
  * BTF shows `struct sock` starts with `struct sock_common __sk_common`, and the fields used
  * below (`skc_daddr`, `skc_rcv_saddr`, `skc_dport`, `skc_num`) are in the first three unions
  * of `struct sock_common`. The minimal mirror below intentionally models only that prefix.
- * This removes the known compile blocker, but the sensor still requires root-run live
- * verification before README/SPEC should claim TCP-connect VERIFIED.
+ * This removed the known compile blocker, but newer verifiers still rejected the resulting
+ * program: forming a field address directly from `skp` (the pointer loaded from the BPF map)
+ * is treated as scalar-pointer arithmetic and rejected before `bpf_probe_read` even runs, so
+ * the fix below (2026-08-31) reads the whole known prefix into a local struct first via
+ * `bpf_probe_read(&common, sizeof(common), skp)`, then reads fields from that local copy.
+ * Root-run evidence: `sudo python3 scripts/verify_tcp_connect_root.py` observed a real
+ * localhost TCP connect on kernel `7.0.0-30-generic`, archived at
+ * `artifacts/live-gate/tcp-connect-root.log`. That evidence covers this one kernel only —
+ * see `shield/sensors/ebpf/README.md` for what a broader supported-matrix claim still needs.
  */
 
 #include <uapi/linux/ptrace.h>

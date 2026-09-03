@@ -297,17 +297,17 @@ Open:
 http://127.0.0.1:8765/xibalba-shield
 ```
 
-Default local admin token:
-
-```text
-dev-shield-admin
-```
+There is no default admin token. If you don't set `SHIELD_BACKEND_TOKEN`/`--admin-token`,
+`shield-backend` generates a random one at startup and prints it once to stderr — copy it from
+there. This is a global super-admin token (full cross-tenant access); mint a token scoped to one
+tenant instead with `POST /api/shield/admin-tokens` (requires the super-admin token) once you
+have more than one tenant.
 
 The console has a `Seed Demo` control that creates a synthetic tenant/device scenario and labels synthetic decisions as synthetic. For API-only setup:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8765/api/shield/demo/seed \
-  -H 'Authorization: Bearer dev-shield-admin' \
+  -H "Authorization: Bearer $SHIELD_BACKEND_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"tenant_id":"demo-tenant"}'
 ```
@@ -474,9 +474,14 @@ POST /api/shield/integrations
 GET  /api/shield/integrations?tenant_id=...
 GET  /api/shield/dashboard-summary?tenant_id=...
 POST /api/shield/demo/seed
+POST /api/shield/admin-tokens
 ```
 
-Admin endpoints require `Authorization: Bearer $SHIELD_BACKEND_TOKEN`; local default is `dev-shield-admin`. Device ingestion endpoints require the per-device bearer token returned by enrollment.
+Admin endpoints require `Authorization: Bearer <token>` — either the global `SHIELD_BACKEND_TOKEN`
+super-admin token, or a token minted per tenant via `POST /api/shield/admin-tokens` (super-admin
+only), which is bound to that one `tenant_id` and cannot read or write another tenant's data.
+There is no built-in default token; auth fails closed if none is configured. Device ingestion
+endpoints require the per-device bearer token returned by enrollment.
 
 ## Guardrail Hooks
 
