@@ -212,12 +212,12 @@ Legend: real and tested means there is code and a test or live verification path
 | Dev sensor | Real and synthetic | Explicitly test/demo-only; never claimed as endpoint telemetry. |
 | Linux process eBPF | Real, historically live-verified | Observed a real spawned subprocess `execve`. |
 | Linux file-write eBPF | Real, historically live-verified | Observed a real write-mode `openat`; supports userspace sensitive-path filtering. |
-| Linux TCP-connect eBPF | Real, live-verified on the development kernel; matrix pending | BTF-checked minimal socket prefix passed root verifier and observed a real localhost TCP connect on kernel `7.0.0-30-generic`. Additional supported kernels remain unverified. |
+| Linux TCP-connect eBPF | Real, live-verified on Ubuntu 24.04 LTS; matrix frozen, 2 of 3 rows unverified | BTF-checked minimal socket prefix passed root verifier and observed a real localhost TCP connect on kernel `7.0.0-30-generic`. See `docs/SUPPORTED_MATRIX.md` — Ubuntu 22.04/26.04 LTS rows still need root-run evidence. |
 | DNS observation | Planned | Needs separate uprobe or packet-parsing design. |
 | Metadata DLP classifier | Real and tested | Classifies labels, paths, data-source names, and model endpoints without storing raw content. Not a deep content scanner. |
 | SIEM/SOAR export | Real and tested | JSONL normalization and generic webhook POST adapters. |
 | Local tamper evidence | Real and tested | Optional HMAC hash chain for decision logs via `--log-integrity-key`; root can still delete/disable local state. |
-| Windows/macOS sensors | Interface boundary only | Status helpers document ETW/EndpointSecurity target sources; native sensors need target systems. |
+| Windows/macOS sensors | Interface boundary only | Status helpers document ETW/EndpointSecurity target sources; native sensors need target systems. See `docs/SUPPORTED_MATRIX.md`'s Windows track for real scope and why it isn't started (no Windows host available to write against, compile, or verify). |
 | Customer installer/updater | Partial | Linux install and policy-update scripts exist. Signed binary updater is still planned. |
 
 Current root-free validation:
@@ -599,7 +599,7 @@ shield --log-path /var/log/xibalba-shield/decisions.jsonl siem-export \
 |---|---|---|
 | Process execution | Verified historically | kprobe on `execve`; observed real spawned subprocess. |
 | File write-open | Verified historically | kprobe/kretprobe on `openat`; filters write-mode opens in kernel and sensitive paths in userspace. |
-| TCP connect | Root verification pending | Uses BTF-checked minimal socket-prefix mirror to avoid the old `net/sock.h` BCC header failure. Needs `sudo pytest tests/test_ebpf_sensor.py -k tcp_connect` before verified claims. |
+| TCP connect | Verified on Ubuntu 24.04 LTS | Uses BTF-checked minimal socket-prefix mirror to avoid the old `net/sock.h` BCC header failure, and copies that prefix into a local struct before reading it (newer verifiers reject field access formed directly from the map-loaded pointer). `sudo python3 scripts/verify_tcp_connect_root.py` passed; archived at `artifacts/live-gate/tcp-connect-root.log`. See `docs/SUPPORTED_MATRIX.md` for which other kernels still need this run. |
 | DNS | Planned | Likely uprobe on `getaddrinfo` or packet parsing; not a syscall-kprobe clone. |
 
 No eBPF sensor should be marked verified unless it is loaded as root and observes a real event on the target kernel.

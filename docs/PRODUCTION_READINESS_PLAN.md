@@ -25,7 +25,7 @@ Production readiness is an evidence threshold. A feature is not considered compl
 
 Exit requires all of the following:
 
-- A published supported OS/kernel matrix with native process, file, and TCP evidence on each target.
+- A published supported OS/kernel matrix with native process, file, and TCP evidence on each target — see `docs/SUPPORTED_MATRIX.md`, the canonical record for this requirement.
 - A production policy profile distinct from observe-only development defaults.
 - Signed policy bundles with version pinning, atomic activation, rollback, and last-known-good recovery.
 - Local enforcement that remains deterministic and available when OPA, the exporter, or the network is unavailable.
@@ -73,7 +73,9 @@ Document trust boundaries and attack paths for a root attacker, a same-user atta
 
 ### C. Native Linux sensing
 
-- Freeze the supported kernel/distribution matrix.
+- Freeze the supported kernel/distribution matrix — done for scope (`docs/SUPPORTED_MATRIX.md`:
+  Ubuntu 22.04/24.04/26.04 LTS); one of three rows has archived root-run evidence, two remain
+  `not run`.
 - Produce root-gated live evidence for process execution, file writes, and TCP connect decisions on every supported target.
 - Replace conceptual sensor claims with measured coverage and event-loss telemetry.
 - Define DNS as a separate scope decision; do not imply it is covered by TCP sensing.

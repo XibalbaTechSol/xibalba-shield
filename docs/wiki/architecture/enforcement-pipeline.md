@@ -57,7 +57,7 @@ flowchart TD
 
 1. **Sensor.** A `Sensor` implementation ([Sensor Model](../concepts/sensor-model.md)) yields a
    `NormalizedEvent` — synthetic from `DevModeSensor`, or a real Linux eBPF observation for
-   process-exec/file-write (TCP-connect pending root re-verification).
+   process-exec/file-write/TCP-connect, verified on Ubuntu 24.04 LTS (`docs/SUPPORTED_MATRIX.md`).
 2. **`EventRouter.handle()`.** Coordinates everything below; owns no policy logic itself.
 3. **Tier 1 — Policy Engine.** Always runs first. Delegates the actual match to a local OPA
    sidecar; produces a `PolicyDecision` unconditionally, including default-allow/no-match

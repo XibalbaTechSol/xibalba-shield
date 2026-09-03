@@ -41,7 +41,7 @@ Shield v1 is:
 - A local policy decision engine that can operate without a cloud round trip.
 - A producer of signed evidence for Integrity Protocol.
 - A guardrail hook library for semantic agent/LLM boundaries.
-- A Linux-first security agent with verified process and file-write sensing, and a blocked TCP-connect sensor pending BCC/kernel compatibility work.
+- A Linux-first security agent with verified process, file-write, and TCP-connect sensing on Ubuntu 24.04 LTS; see `docs/SUPPORTED_MATRIX.md` for the frozen matrix and which additional kernels remain unverified.
 
 Shield v1 is not:
 
