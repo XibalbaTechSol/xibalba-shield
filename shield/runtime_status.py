@@ -17,15 +17,22 @@ def publish_runtime_status(
     device_config: DeviceConfig,
     policy_status: dict[str, Any],
     opa_status: dict[str, Any],
+    sensors_status: dict[str, Any] | None = None,
+    exporter_status_detail: dict[str, Any] | None = None,
     timeout: float = 1.0,
 ) -> bool:
     """Publish status without ever affecting local enforcement or process exit."""
     if not device_config.backend_url or not device_config.device_token:
         return False
+    status: dict[str, Any] = {"policy": policy_status, "opa": opa_status}
+    if sensors_status is not None:
+        status["sensors"] = sensors_status
+    if exporter_status_detail is not None:
+        status["exporter"] = exporter_status_detail
     payload = {
         "tenant_id": device_config.tenant_id,
         "device_id": device_config.device_id,
-        "status": {"policy": policy_status, "opa": opa_status},
+        "status": status,
     }
     request = Request(
         f"{device_config.backend_url.rstrip('/')}/api/shield/exporter-status",

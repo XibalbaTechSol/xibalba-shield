@@ -14,6 +14,7 @@ from __future__ import annotations
 import itertools
 import random
 import time
+from datetime import datetime, timezone
 from typing import Iterator
 
 from ..schemas.events import (
@@ -48,6 +49,7 @@ class DevModeSensor:
         self.interval_sec = interval_sec
         self._rng = random.Random(seed)
         self._pid_counter = itertools.count(1000)
+        self._last_event_at: str | None = None
 
     def _next_process_event(self) -> ProcessActivity:
         name, base, ppid, parent_name = self._rng.choice(_SAMPLE_PROCESSES)
@@ -91,6 +93,7 @@ class DevModeSensor:
     def events(self) -> Iterator[NormalizedEvent]:
         generators = [self._next_process_event, self._next_network_event, self._next_agent_event]
         while True:
+            self._last_event_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             yield self._rng.choice(generators)()
             if self.interval_sec > 0:
                 time.sleep(self.interval_sec)
@@ -98,3 +101,7 @@ class DevModeSensor:
     def one_of_each(self) -> list[NormalizedEvent]:
         """Convenience for tests: one event of each class, no sleep, no randomness in count."""
         return [self._next_process_event(), self._next_network_event(), self._next_agent_event()]
+
+    def health(self) -> dict:
+        """Always healthy -- synthetic, never claims to observe real attach/loss state."""
+        return {"attached": True, "lost_events": 0, "last_event_at": self._last_event_at}

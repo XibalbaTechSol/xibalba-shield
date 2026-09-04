@@ -50,6 +50,7 @@ import socket
 import struct
 import time
 import fnmatch
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -84,6 +85,10 @@ def _matches_sensitive_path(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 class LinuxEbpfSensor:
     """Structurally satisfies `shield.sensors.base.Sensor` (a `Protocol` — matched by shape,
     not inheritance, the same way `dev_generator.DevModeSensor` does). Real implementation
@@ -102,14 +107,17 @@ class LinuxEbpfSensor:
         self._device_id = device_id
         self._tenant_id = tenant_id
         self._pending: list[ProcessActivity] = []
+        self._lost_events = 0
+        self._last_event_at: str | None = None
 
         self._bpf = BPF(text=_BPF_SOURCE.read_text())
         execve_fnname = self._bpf.get_syscall_fnname("execve")
         self._bpf.attach_kprobe(event=execve_fnname, fn_name="on_execve")
-        self._bpf["process_exec_events"].open_perf_buffer(self._on_perf_event)
+        self._bpf["process_exec_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002 — perf_buffer callback signature
         rec = self._bpf["process_exec_events"].event(data)
+        self._last_event_at = _now_iso()
         self._pending.append(
             ProcessActivity(
                 device_id=self._device_id,
@@ -123,6 +131,19 @@ class LinuxEbpfSensor:
                 activity=Activity(type="launch", severity="medium", outcome="success"),
             )
         )
+
+    def _on_lost(self, count: int) -> None:
+        # BCC's lost_cb is invoked with a single argument (the lost-sample count for that
+        # CPU's ring buffer), not (cpu, count) -- confirmed against bcc.table.PerfEventArray's
+        # actual C-callback wiring, not assumed from open_perf_buffer's callback naming.
+        self._lost_events += count
+
+    def health(self) -> dict:
+        return {
+            "attached": True,
+            "lost_events": self._lost_events,
+            "last_event_at": self._last_event_at,
+        }
 
     def poll(self, timeout_ms: int = 1000) -> list[ProcessActivity]:
         """One poll cycle: blocks up to `timeout_ms`, returns whatever real events arrived
@@ -155,15 +176,18 @@ class LinuxFileWriteSensor:
         self._tenant_id = tenant_id
         self._sensitive_path_globs = sensitive_path_globs or []
         self._pending: list[FileActivity] = []
+        self._lost_events = 0
+        self._last_event_at: str | None = None
 
         self._bpf = BPF(text=_FILE_WRITE_SOURCE.read_text())
         openat_fnname = self._bpf.get_syscall_fnname("openat")
         self._bpf.attach_kprobe(event=openat_fnname, fn_name="syscall__trace_entry_openat")
         self._bpf.attach_kretprobe(event=openat_fnname, fn_name="trace_openat_return")
-        self._bpf["file_write_events"].open_perf_buffer(self._on_perf_event)
+        self._bpf["file_write_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002
         rec = self._bpf["file_write_events"].event(data)
+        self._last_event_at = _now_iso()
         path = rec.filename.decode("utf-8", errors="replace")
         if not _matches_sensitive_path(path, self._sensitive_path_globs):
             return
@@ -184,6 +208,19 @@ class LinuxFileWriteSensor:
                 ),
             )
         )
+
+    def _on_lost(self, count: int) -> None:
+        # BCC's lost_cb is invoked with a single argument (the lost-sample count for that
+        # CPU's ring buffer), not (cpu, count) -- confirmed against bcc.table.PerfEventArray's
+        # actual C-callback wiring, not assumed from open_perf_buffer's callback naming.
+        self._lost_events += count
+
+    def health(self) -> dict:
+        return {
+            "attached": True,
+            "lost_events": self._lost_events,
+            "last_event_at": self._last_event_at,
+        }
 
     def poll(self, timeout_ms: int = 1000) -> list[FileActivity]:
         self._bpf.perf_buffer_poll(timeout=timeout_ms)
@@ -209,14 +246,17 @@ class LinuxTcpConnectSensor:
         self._device_id = device_id
         self._tenant_id = tenant_id
         self._pending: list[NetworkFlow] = []
+        self._lost_events = 0
+        self._last_event_at: str | None = None
 
         self._bpf = BPF(text=_TCP_CONNECT_SOURCE.read_text())
         self._bpf.attach_kprobe(event="tcp_v4_connect", fn_name="trace_connect_entry")
         self._bpf.attach_kretprobe(event="tcp_v4_connect", fn_name="trace_connect_v4_return")
-        self._bpf["tcp_connect_events"].open_perf_buffer(self._on_perf_event)
+        self._bpf["tcp_connect_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002
         rec = self._bpf["tcp_connect_events"].event(data)
+        self._last_event_at = _now_iso()
         self._pending.append(
             NetworkFlow(
                 device_id=self._device_id,
@@ -236,6 +276,19 @@ class LinuxTcpConnectSensor:
                 activity=Activity(type="connect", severity="medium", outcome="success"),
             )
         )
+
+    def _on_lost(self, count: int) -> None:
+        # BCC's lost_cb is invoked with a single argument (the lost-sample count for that
+        # CPU's ring buffer), not (cpu, count) -- confirmed against bcc.table.PerfEventArray's
+        # actual C-callback wiring, not assumed from open_perf_buffer's callback naming.
+        self._lost_events += count
+
+    def health(self) -> dict:
+        return {
+            "attached": True,
+            "lost_events": self._lost_events,
+            "last_event_at": self._last_event_at,
+        }
 
     def poll(self, timeout_ms: int = 1000) -> list[NetworkFlow]:
         self._bpf.perf_buffer_poll(timeout=timeout_ms)

@@ -502,8 +502,21 @@ class ShieldStore:
         ]
 
     def upsert_exporter_status(self, *, tenant_id: str, device_id: str, status: dict[str, Any]) -> None:
+        """Shallow-merges `status` onto whatever was previously stored for this device,
+        rather than replacing it wholesale. A real device's watchdog publishes only
+        `{"policy": ..., "opa": ..., "sensors": ..., "exporter": ...}` on each tick; the
+        demo-seed path writes sibling keys into the same document (`did_registered`,
+        `bcc_middleware`, `oracle_readback`, `synthetic`, `endpoint_posture`). A wholesale
+        replace would let either writer silently erase the other's fields -- merging keeps
+        both live without requiring every caller to know the other's full key set."""
         self._require_device(tenant_id, device_id)
         with self._conn:
+            existing_row = self._conn.execute(
+                "SELECT status_json FROM exporter_status WHERE tenant_id=? AND device_id=?",
+                (tenant_id, device_id),
+            ).fetchone()
+            merged = dict(json.loads(existing_row["status_json"])) if existing_row else {}
+            merged.update(status)
             self._conn.execute(
                 """
                 INSERT INTO exporter_status (tenant_id, device_id, status_json, updated_at)
@@ -512,7 +525,7 @@ class ShieldStore:
                     status_json=excluded.status_json,
                     updated_at=excluded.updated_at
                 """,
-                (tenant_id, device_id, json.dumps(status, sort_keys=True), _now()),
+                (tenant_id, device_id, json.dumps(merged, sort_keys=True), _now()),
             )
 
     def list_exporter_status(self, *, tenant_id: str) -> list[dict[str, Any]]:

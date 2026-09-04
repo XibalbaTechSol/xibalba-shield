@@ -223,6 +223,22 @@ Pass when the selected pilot fleet meets resource, availability, event-loss, dec
 6. Add failure-injection and adversarial tests, then run the pilot-gate report and burn-in.
 7. Wire the dashboard to the resulting health, coverage, policy, evidence, and containment contracts.
 
+Current evidence (2026-09-04): item 2 (watchdog/health telemetry) is implemented — a
+`Watchdog` (`shield/watchdog.py`) now owns hot-reload checking, OPA restart-if-unhealthy,
+an active OPA `/health` probe independent of evaluation traffic, and a status publish
+covering policy/opa/sensors/exporter on its own timer, decoupled from the sensor event
+loop that previously drove all of this only as a side effect of handled events. Sensor
+`lost_events`/`last_event_at` (via BCC's `lost_cb`) and exporter `export_failures`/
+`queue_depth` are new, real telemetry, not placeholders. `OpaSupervisor` is now wired
+into the packaged systemd unit as an opt-in (`SHIELD_OPA_ARGS`, unset by default — the
+unit still assumes an externally managed OPA sidecar unless an operator opts in). The
+dashboard's `ShieldFleetOverview` no longer displays a frozen OPA/policy "healthy" value
+past the exporter-status row's own staleness window. Not yet closed by this item: policy
+bundle *signing*/version-pinning (item 1, separate), queue/backpressure telemetry beyond
+the exporter's SDK-batcher queue depth (agent_core's router remains fully synchronous
+with no queue of its own), and burn-in validation of the watchdog itself under sustained
+load.
+
 Current evidence (2026-08-29): the Shield dashboard has been validated in Chromium against the
 real local Shield backend in both empty-tenant and seeded-tenant states. The populated state
 renders enrolled devices, deny/contain counts, policy/exporter status, and the evidence graph

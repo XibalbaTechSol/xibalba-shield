@@ -177,6 +177,7 @@ def test_exporter_rejects_mismatched_bcc_response_invocation_id(monkeypatch):
     exporter.chain_id = 84532
     exporter.verifying_contract = "0x" + "1" * 40
     exporter._nonce_store = type("NonceStore", (), {"next": lambda self: 8})()
+    exporter._export_failures = 0
 
     result = exporter.export_decision(_decision(invocation_id=invocation_id))
 

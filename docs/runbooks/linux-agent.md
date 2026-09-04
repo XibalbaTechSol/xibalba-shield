@@ -56,6 +56,25 @@ This runbook turns the existing `shield run` loop into a supervised Linux proces
    sudo systemctl enable --now xibalba-shield
    ```
 
+   By default this unit assumes OPA is already running as an externally managed sidecar
+   at the policy engine's `--opa-url` (default `http://localhost:8181`) — this package
+   does not install or manage an OPA process for you. To have Shield itself own the OPA
+   process lifecycle instead (start it, actively health-probe it, and restart it with
+   bounded backoff on failure via `OpaSupervisor`), install an `opa` binary on this host
+   first, then set `SHIELD_OPA_ARGS` in `/etc/xibalba-shield/shield.env`:
+
+   ```bash
+   sudo sed -i \
+     's#^SHIELD_OPA_ARGS=.*#SHIELD_OPA_ARGS=--opa-command /usr/local/bin/opa run --server --addr localhost:8181#' \
+     /etc/xibalba-shield/shield.env
+   sudo systemctl restart xibalba-shield
+   ```
+
+   `SHIELD_OPA_ARGS` must carry the whole `--opa-command ...` flag, not just a bare path
+   — the CLI flag takes one-or-more arguments (`nargs="+"`), so it cannot be left in the
+   unit's fixed `ExecStart` line with nothing following it when this is unset, the same
+   reason `SHIELD_EXPORTER_ARGS` carries its whole flag rather than just a value.
+
 ## Diagnose
 
 Use local-only mode until the Integrity exporter DID is registered:
@@ -73,6 +92,12 @@ journalctl -u xibalba-shield -n 100 --no-pager
 shield --log-path /var/log/xibalba-shield/decisions.jsonl status
 shield --log-path /var/log/xibalba-shield/decisions.jsonl events --recent 20
 ```
+
+`shield status`/`events` only reflect the local decision log. Fleet-level OPA/policy/
+sensor/exporter health — including sensor `lost_events` and exporter `queue_depth`, both
+published every `--watchdog-interval` seconds (default 15s) independent of whether any
+events are actually flowing — is visible on the dashboard's Shield fleet view or via the
+backend's `GET /api/shield/exporter-status` endpoint, not this CLI.
 
 If the service was started with `--log-integrity-key /var/lib/xibalba-shield/log.key`, verify local log continuity:
 

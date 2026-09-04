@@ -309,25 +309,30 @@ def _run(args: argparse.Namespace) -> int:
     print(f"shield run: sensor={args.sensor} device_id={device_config.device_id!r} "
           f"rules={len(rules)} policy_hash={policy_hash or '(none)'}")
 
+    from .watchdog import Watchdog
+
+    watchdog = Watchdog(
+        interval=args.watchdog_interval,
+        device_config=device_config,
+        policy_engine=policy_engine,
+        reloader=reloader,
+        opa_supervisor=opa_supervisor,
+        exporter=exporter,
+        sensor=sensor,
+    )
+    watchdog.start()
+
     count = 0
     try:
         for event in sensor.events():
             router.handle(event)
             count += 1
-            if reloader is not None:
-                reloader.check_and_reload()
-            if opa_supervisor is not None:
-                opa_supervisor.restart_if_unhealthy()
-            publish_runtime_status(
-                device_config=device_config,
-                policy_status=(reloader.status().__dict__ if reloader else {"healthy": bool(policy_hash), "active_policy_version": policy_version, "active_policy_hash": policy_hash}),
-                opa_status=policy_engine.health_status(),
-            )
             if args.max_events and count >= args.max_events:
                 break
     except KeyboardInterrupt:
         print(f"\nshield run: interrupted after {count} event(s)")
 
+    watchdog.stop()
     if opa_supervisor is not None:
         opa_supervisor.stop()
 
@@ -402,6 +407,7 @@ def _local_run(args: argparse.Namespace) -> int:
             args.no_containment = True
             args.log_integrity_key = None
             args.slm_backend = "none"
+            args.watchdog_interval = 15.0
             return _run(args)
     except (FileNotFoundError, RuntimeError, TimeoutError, OSError) as exc:
         print(f"shield local-run: unable to start selected OPA profile: {exc}", file=sys.stderr)
@@ -492,6 +498,12 @@ def main(argv: list[str] | None = None) -> int:
                        help="HMAC key file for tamper-evident decision log entries")
     p_run.add_argument("--max-events", type=int, default=None,
                        help="stop after this many events (default: run forever, until Ctrl+C)")
+    p_run.add_argument("--watchdog-interval", type=float, default=15.0,
+                       help="seconds between watchdog ticks (hot-reload check, OPA "
+                            "restart-if-unhealthy, OPA active health probe, and a status "
+                            "publish covering policy/opa/sensors/exporter) -- runs "
+                            "independent of event traffic, so an idle or stalled sensor "
+                            "stream no longer freezes health reporting")
     p_run.set_defaults(func=_run)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")

@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/xibalba-shield/shield.env
-ExecStart=/usr/local/bin/shield --log-path /var/log/xibalba-shield/decisions.jsonl run --sensor ${SHIELD_SENSOR} --device-config /etc/xibalba-shield/device.json --rules /etc/xibalba-shield/policies/current.json ${SHIELD_EXPORTER_ARGS}
+ExecStart=/usr/local/bin/shield --log-path /var/log/xibalba-shield/decisions.jsonl run --sensor ${SHIELD_SENSOR} --device-config /etc/xibalba-shield/device.json --rules /etc/xibalba-shield/policies/current.json ${SHIELD_EXPORTER_ARGS} ${SHIELD_OPA_ARGS}
 Restart=on-failure
 RestartSec=5s
 RuntimeDirectory=xibalba-shield

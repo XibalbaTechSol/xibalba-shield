@@ -91,6 +91,7 @@ class IntegrityExporter:
             auto_flush=True,
             background_flush=True,
         )
+        self._export_failures = 0
 
     def export_decision(self, decision: PolicyDecision) -> dict[str, Any]:
         intent_type = _intent_type_for(decision)
@@ -134,6 +135,7 @@ class IntegrityExporter:
             # losing the evidence submission must not be silently invisible, so it's logged
             # loudly rather than swallowed.
             logger.warning("BCC submission failed for decision %s: %r", decision.event_ref.event_id, exc)
+            self._export_failures += 1
             return {
                 "authorized": False,
                 "reason": f"submission failed: {exc}",
@@ -146,3 +148,29 @@ class IntegrityExporter:
 
     def flush(self) -> None:
         self._telemetry_client.flush_telemetry()
+
+    def health(self) -> dict:
+        """Watchdog telemetry for the exporter. `queue_depth` reaches into the SDK's
+        private `TelemetryBatcher` because `integrity-sdk` has no public API for this yet
+        (see integrity-core/docs/PRODUCTION_READINESS_PLAN.md §5, "Backbone contract" --
+        SDK API stability is owed to downstream consumers, not yet delivered). If the
+        private shape ever changes, this reads `None`, not raises.
+
+        Deliberately does NOT call `batcher.drain_dropped_count()`: that read is
+        consuming (resets the SDK's counter, "since the last call" by design) and the
+        SDK's own `flush_telemetry` already relies on being its one and only caller to
+        report drops as a real oracle metric (`integrity.telemetry.dropped_entries`).
+        A second caller here would silently steal/undercount that signal instead of
+        adding a new one -- a dropped-entry count would need a real SDK API (a
+        non-consuming peek) to be surfaced safely, not this workaround."""
+        batcher = getattr(self._telemetry_client, "_batcher", None)
+        queue_depth = None
+        if batcher is not None:
+            try:
+                queue_depth = batcher.queue_depth()
+            except AttributeError:
+                queue_depth = None
+        return {
+            "export_failures": self._export_failures,
+            "queue_depth": queue_depth,
+        }

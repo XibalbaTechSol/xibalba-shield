@@ -18,6 +18,8 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from integrity_sdk.policy.opa_client import evaluate as opa_evaluate, OPAUnavailableError
 
@@ -71,6 +73,24 @@ class PolicyEngine:
             "last_checked_at": self._last_opa_check_at,
             "last_error": self._last_opa_error,
         }
+
+    def probe(self, timeout: float = 0.5) -> dict[str, str | bool | None]:
+        """Active OPA health check, independent of `evaluate()` traffic. Without this,
+        `health_status()` only reflects the last real evaluation -- on an idle sensor
+        stream (no events, so no `evaluate()` calls) that value is frozen and can read
+        stale-healthy indefinitely. Hits OPA's own `/health` endpoint directly, the same
+        one `OpaSupervisor._healthy_probe` already uses, so this works whether or not
+        Shield itself supervises the OPA process."""
+        try:
+            request = Request(f"{self.opa_url.rstrip('/')}/health", method="GET")
+            with urlopen(request, timeout=timeout) as response:
+                self._opa_healthy = 200 <= getattr(response, "status", 200) < 300
+                self._last_opa_error = None if self._opa_healthy else f"HTTP {response.status}"
+        except (OSError, URLError) as exc:
+            self._opa_healthy = False
+            self._last_opa_error = str(exc)
+        self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        return self.health_status()
 
     def evaluate(self, event: NormalizedEvent, ctx: EvaluationContext) -> PolicyDecision:
         event_id = f"evt-{uuid.uuid4().hex[:12]}"
