@@ -128,7 +128,62 @@ Use layered evidence:
 - Adversarial tests for prompt/tool abuse, policy bypass, replay, downgrade, event flooding, PID reuse, and containment failure.
 - Multi-day burn-in with resource and event-loss measurements.
 
-## 5. Release gates
+## 5. SaaS business readiness
+
+Shield is a **Linux-first agentic security SaaS**, not just an on-prem sensor. The
+technical gates above (L0-L2) are necessary but not sufficient for a sellable product;
+this section names the business-layer gaps separately so they are not silently assumed
+solved alongside the technical ones.
+
+### 5.1 Tenancy and isolation
+
+- `08eb97f` (fix/backend-admin-auth-and-ebpf-docs) introduced tenant-scoped admin
+  tokens and closed the fail-open-on-missing-admin-token gap. That is the seed of
+  multi-tenancy, not a completed tenant model: there is no cross-tenant data
+  partitioning test, no verified isolation boundary between two tenants' event streams,
+  policy bundles, or evidence exports, and no tenant lifecycle (provisioning,
+  suspension, deletion with verified data purge).
+- **Gap:** a real multi-tenant data model in the backend store plus adversarial
+  cross-tenant leakage tests before any tenant is onboarded next to another.
+
+### 5.2 Pricing tiers
+
+The three existing policy packs (`policies/defaults/`: smb, professional-services,
+regulated) are already a natural tier boundary — they differ in strictness and
+compliance posture, not just label. Proposed mapping, not yet implemented as billing
+logic:
+
+| Tier | Policy pack | Readiness gate required |
+|---|---|---|
+| Starter | smb | Gate 2 (local enforcement) |
+| Professional | professional-services | Gates 2-3 (+ sensor coverage) |
+| Regulated | regulated | Gates 1-6 (adversarial validation required before sale) |
+
+**Gap:** no tier is currently enforced anywhere in code — `shield local-run --profile`
+selects a pack for a smoke run, not a billing-gated feature flag.
+
+### 5.3 Billing and metering
+
+No metering exists. A SaaS Shield needs per-tenant counters for at least: enrolled
+device count, decision/event volume, containment actions taken, and evidence export
+volume — none of these are currently aggregated or exposed outside `shield status`'s
+single-tenant local summary. **Gap, not yet started.**
+
+### 5.4 Support and SLA tiers
+
+Tie support commitments to the technical readiness levels rather than inventing a
+separate scale: L1 pilot = best-effort/community support, no uptime SLA; L2 hardened
+production = contracted SLA (decision latency, evidence delivery lag, incident response
+time) matching the SLOs already scoped in Workstream H. Do not offer a contracted SLA
+before Gate 5 (packaging/operations) passes.
+
+### 5.5 Onboarding
+
+Self-serve onboarding requires signed package installation (Gate 5) and enrollment/
+tenant identity (Workstream G) to exist first — there is currently no path for a new
+tenant to install and register a device without direct engineering involvement.
+
+## 6. Release gates
 
 ### Gate 1 — Scope and threat model
 
@@ -158,7 +213,7 @@ Pass when the threat-model matrix has no unexplained critical bypasses and all k
 
 Pass when the selected pilot fleet meets resource, availability, event-loss, decision-latency, evidence-lag, and recovery SLOs for the agreed burn-in period.
 
-## 6. Immediate implementation sequence
+## 7. Immediate implementation sequence
 
 1. Add the explicit production policy profile and policy-bundle signing/rollback lifecycle.
 2. Add supervisor/watchdog and health/degraded-state telemetry for OPA, sensors, exporter, and queue.
@@ -178,7 +233,7 @@ kernel matrix, DID registration, remote BCC submission, packaging, or pilot burn
 
 Tier 3/cloud model routing is intentionally outside the critical path for the Linux pilot. It can be added after the local enforcement and evidence planes have production measurements.
 
-## 7. External gates that cannot be completed locally
+## 8. External gates that cannot be completed locally
 
 - Root and kernel-matrix validation on the actual target hosts.
 - Windows/macOS native sensor implementation and validation.
@@ -188,6 +243,6 @@ Tier 3/cloud model routing is intentionally outside the critical path for the Li
 
 Until these are supplied, the honest status is **pilot engineering complete/near-complete in local development, production deployment not yet proven**.
 
-## 8. Definition of done for the first pilot
+## 9. Definition of done for the first pilot
 
 Shield may be called **Linux pilot-ready** only when Gates 1–5 pass, Gate 6 has no unresolved critical bypass, and Gate 7 has recorded results. The release notes must include the exact supported matrix, enabled sensors, enforcement mode, evidence limitations, root-tamper limitation, and rollback procedure.
