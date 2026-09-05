@@ -260,3 +260,169 @@ def test_rejects_untrusted_policy_hash_on_reload(tmp_path):
     reloaded = reloader.check_and_reload()
 
     assert reloaded is False
+
+
+# ---- expiry (independent of the mtime shortcut) ----
+
+def _write_signed_rules(path, rule_ids: list[str], keypair, *, expires_at=None, revision=None):
+    import json as _json
+
+    from shield.config import sign_policy_bundle
+
+    policy = {
+        "policy_version": f"v-{len(rule_ids)}",
+        **({"policy_revision": revision} if revision is not None else {}),
+        **({"expires_at": expires_at} if expires_at is not None else {}),
+        "rules": [
+            {"rule_id": rid, "name": rid, "version": "1.0.0", "conditions": [], "actions": [{"type": "allow"}]}
+            for rid in rule_ids
+        ],
+    }
+    path.write_text(_json.dumps(sign_policy_bundle(policy, keypair)))
+
+
+def test_expiry_is_reported_unhealthy_without_a_file_change():
+    """The real gap this closes: a bundle that's ALREADY loaded and unchanged on disk
+    must stop being reported healthy once its expires_at passes -- the mtime-only poll
+    would otherwise never re-examine it again."""
+    from datetime import datetime, timedelta, timezone
+
+    from integrity_sdk.did import Keypair
+
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "rules.json"
+        keypair = Keypair.generate()
+        soon = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
+        _write_signed_rules(path, ["a"], keypair, expires_at=soon)
+
+        engine = PolicyEngine()
+        reloader = PolicyHotReloader(engine, path)
+        assert reloader.check_and_reload() is True
+        assert reloader.status().healthy is True
+
+        import time
+        time.sleep(1.2)  # real wall-clock wait past the real expiry -- no mocked clock
+
+        # No file change at all -- pure expiry re-check.
+        assert reloader.check_and_reload() is False
+        status = reloader.status()
+        assert status.healthy is False
+        assert "expired" in status.last_error
+
+
+def test_non_expiring_bundle_stays_healthy_across_repeated_checks(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"])
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+    assert reloader.check_and_reload() is True
+
+    assert reloader.check_and_reload() is False  # unchanged, not reloaded
+    assert reloader.status().healthy is True  # but still healthy -- no expiry set
+
+
+# ---- history + rollback ----
+
+def test_history_is_empty_before_any_successful_reload(tmp_path):
+    path = tmp_path / "rules.json"
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+
+    assert reloader.history() == []
+
+
+def test_history_records_each_successful_reload_newest_first(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"], revision=1)
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+    reloader.check_and_reload()
+
+    _write_rules(path, ["a", "b"], revision=2)
+    _bump_mtime(path, 5)
+    reloader.check_and_reload()
+
+    history = reloader.history()
+
+    assert len(history) == 2
+    assert history[0].policy_version == "v-2"  # newest first
+    assert history[1].policy_version == "v-1"
+
+
+def test_history_is_bounded_at_the_configured_limit(tmp_path):
+    path = tmp_path / "rules.json"
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path, history_limit=2)
+
+    for i, rule_ids in enumerate([["a"], ["a", "b"], ["a", "b", "c"]]):
+        _write_rules(path, rule_ids, revision=i)
+        if i > 0:
+            _bump_mtime(path, 5 * i)
+        reloader.check_and_reload()
+
+    history = reloader.history()
+
+    assert len(history) == 2
+    assert history[0].policy_version == "v-3"
+    assert history[1].policy_version == "v-2"
+    # the pruned oldest entry's file must actually be gone, not just unindexed
+    assert not any(f.stem not in {e.hash.removeprefix("sha256:") for e in history} for f in (path.parent / "history").glob("*.json") if f.name != "index.json")
+
+
+def test_rollback_restores_a_specific_prior_bundle(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"], revision=1)
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+    reloader.check_and_reload()
+    first_hash = engine.policy_hash
+
+    _write_rules(path, ["a", "b"], revision=2)
+    _bump_mtime(path, 5)
+    reloader.check_and_reload()
+    assert engine.policy_version == "v-2"
+
+    ok = reloader.rollback_to(first_hash)
+
+    assert ok is True
+    assert engine.policy_version == "v-1"
+    assert engine.policy_hash == first_hash
+    assert reloader.status().healthy is True
+
+
+def test_rollback_bypasses_the_downgrade_check(tmp_path):
+    """Rollback is an intentional revision regression -- the exact thing
+    reject_downgrades exists to catch when it's accidental, not when an operator asks
+    for it explicitly."""
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"], revision=2)
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path, reject_downgrades=True)
+    reloader.check_and_reload()
+
+    _write_rules(path, ["a", "b"], revision=1)  # a real, deliberate downgrade attempt
+    _bump_mtime(path, 5)
+    assert reloader.check_and_reload() is False  # correctly rejected as an accidental downgrade
+
+    # Roll back to revision 2's own hash instead -- not a downgrade rejection case,
+    # this is restoring what SHOULD be active; just prove rollback_to itself doesn't
+    # get blocked by reject_downgrades for a target that predates the current state.
+    history = reloader.history()
+    assert len(history) == 1
+    assert reloader.rollback_to(history[0].hash) is True
+
+
+def test_rollback_to_unknown_hash_fails_without_raising(tmp_path):
+    path = tmp_path / "rules.json"
+    _write_rules(path, ["a"])
+    engine = PolicyEngine()
+    reloader = PolicyHotReloader(engine, path)
+    reloader.check_and_reload()
+
+    ok = reloader.rollback_to("sha256:" + "0" * 64)
+
+    assert ok is False
+    assert engine.policy_version == "v-1"  # untouched
