@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from shield.config import ConfigError, DeviceConfig, load_device_config, load_policy_bundle, load_policy_rules
+from shield.config import ConfigError, DeviceConfig, load_device_config, load_policy_bundle, load_policy_rules, sign_policy_bundle
 
 
 # ---- load_policy_rules ----
@@ -187,3 +187,130 @@ def test_device_config_unknown_field_raises_config_error(tmp_path):
 
     with pytest.raises(ConfigError, match="unknown field"):
         load_device_config(path)
+
+
+def test_device_config_loads_signing_fields(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({
+        "device_id": "dev-1",
+        "trusted_signing_keys": ["a-base64-key=="],
+        "require_signed_policy": True,
+    }))
+
+    config = load_device_config(path)
+
+    assert config.trusted_signing_keys == ["a-base64-key=="]
+    assert config.require_signed_policy is True
+
+
+def test_device_config_trusted_signing_keys_must_be_a_list(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({"device_id": "dev-1", "trusted_signing_keys": "not-a-list"}))
+
+    with pytest.raises(ConfigError, match="trusted_signing_keys"):
+        load_device_config(path)
+
+
+def test_device_config_require_signed_policy_must_be_boolean(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({"device_id": "dev-1", "require_signed_policy": "yes"}))
+
+    with pytest.raises(ConfigError, match="require_signed_policy"):
+        load_device_config(path)
+
+
+# ---- signed policy bundles ----
+
+def _real_policy(**extra) -> dict:
+    return {
+        "policy_version": "v-1",
+        "rules": [{"rule_id": "a", "name": "a", "version": "1.0.0", "conditions": [], "actions": [{"type": "allow"}]}],
+        **extra,
+    }
+
+
+def test_loads_a_validly_signed_bundle(tmp_path):
+    from integrity_sdk.did import Keypair
+
+    keypair = Keypair.generate()
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(sign_policy_bundle(_real_policy(), keypair)))
+
+    bundle = load_policy_bundle(path)
+
+    assert bundle.signed is True
+    assert len(bundle.rules) == 1
+    assert bundle.signer_public_key is not None
+
+
+def test_unsigned_bundle_still_loads_when_signing_not_required(tmp_path):
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(_real_policy()))
+
+    bundle = load_policy_bundle(path)
+
+    assert bundle.signed is False
+    assert len(bundle.rules) == 1
+
+
+def test_require_signed_policy_rejects_an_unsigned_bundle(tmp_path):
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(_real_policy()))
+
+    with pytest.raises(ConfigError, match="unsigned bundle rejected"):
+        load_policy_bundle(path, require_signed_policy=True)
+
+
+def test_require_signed_policy_rejects_an_invalidly_signed_bundle(tmp_path):
+    from integrity_sdk.did import Keypair
+
+    keypair = Keypair.generate()
+    other = Keypair.generate()
+    doc = sign_policy_bundle(_real_policy(), keypair)
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(doc))
+
+    with pytest.raises(ConfigError, match="signature verification failed"):
+        load_policy_bundle(
+            path,
+            require_signed_policy=True,
+            trusted_signing_keys=["not-the-real-key"],
+        )
+
+
+def test_require_signed_policy_accepts_a_trusted_signed_bundle(tmp_path):
+    import base64
+
+    from integrity_sdk.did import Keypair
+
+    keypair = Keypair.generate()
+    trusted = base64.b64encode(keypair.public_bytes()).decode("ascii")
+    doc = sign_policy_bundle(_real_policy(), keypair)
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(doc))
+
+    bundle = load_policy_bundle(path, require_signed_policy=True, trusted_signing_keys=[trusted])
+
+    assert bundle.signed is True
+    assert bundle.signer_public_key == trusted
+
+
+def test_expired_bundle_loads_but_is_reported_expired(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    from integrity_sdk.did import Keypair
+
+    keypair = Keypair.generate()
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    doc = sign_policy_bundle(_real_policy(expires_at=past), keypair)
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(doc))
+
+    # Not required-signed, so the bundle still loads (expiry is enforced by the hot
+    # reloader re-checking it continuously, see test_hot_reload.py) -- but it's
+    # correctly reported as NOT verified/signed, since signature verification itself
+    # includes the expiry check.
+    bundle = load_policy_bundle(path)
+
+    assert bundle.signed is False
+    assert bundle.expires_at == past

@@ -212,7 +212,11 @@ def _run(args: argparse.Namespace) -> int:
             return 1
     if args.rules is not None:
         try:
-            bundle = load_policy_bundle(args.rules)
+            bundle = load_policy_bundle(
+                args.rules,
+                trusted_signing_keys=device_config.trusted_signing_keys,
+                require_signed_policy=device_config.require_signed_policy,
+            )
             rules = bundle.rules
             policy_version = bundle.version
             policy_hash = bundle.hash
@@ -253,6 +257,8 @@ def _run(args: argparse.Namespace) -> int:
             args.rules,
             trusted_policy_hashes=device_config.trusted_policy_hashes,
             reject_downgrades=device_config.reject_policy_downgrades,
+            trusted_signing_keys=device_config.trusted_signing_keys,
+            require_signed_policy=device_config.require_signed_policy,
         )
 
     device = DeviceContext(device_id=device_config.device_id, tenant_id=device_config.tenant_id,
@@ -388,6 +394,63 @@ def _siem_export(args: argparse.Namespace) -> int:
     return 0 if result.failed == 0 else 1
 
 
+def _policy_history(args: argparse.Namespace) -> int:
+    from .config.hot_reload import PolicyHotReloader
+
+    reloader = PolicyHotReloader(PolicyEngine(), args.rules, history_dir=args.history_dir)
+    entries = reloader.history()
+    if not entries:
+        print("no retained policy history (no successful reload has been recorded yet, or history is empty)")
+        return 0
+    for entry in entries:
+        print(f"{entry.hash}  policy_version={entry.policy_version or '(none)'}  revision={entry.revision if entry.revision is not None else '(none)'}  loaded_at={entry.loaded_at}")
+    return 0
+
+
+def _policy_rollback(args: argparse.Namespace) -> int:
+    from .config.hot_reload import PolicyHotReloader
+
+    reloader = PolicyHotReloader(PolicyEngine(), args.rules, history_dir=args.history_dir)
+    if reloader.rollback_to(args.to_hash):
+        print(f"OK   rolled back {args.rules} to {args.to_hash}")
+        return 0
+    print(f"FAIL {args.to_hash} is not in the retained history at {args.history_dir or (Path(args.rules).parent / 'history')}", file=sys.stderr)
+    return 1
+
+
+def _sign_policy(args: argparse.Namespace) -> int:
+    import base64
+
+    from integrity_sdk.did import Keypair
+
+    from .config.signing import sign_policy_bundle
+
+    if args.key.exists():
+        keypair = Keypair.from_pem(args.key.read_bytes())
+    else:
+        keypair = Keypair.generate()
+        args.key.parent.mkdir(parents=True, exist_ok=True)
+        args.key.write_bytes(keypair.private_pem())
+        args.key.chmod(0o600)
+        print(f"generated a new signing keypair at {args.key} (0600) -- back this up, it cannot be recovered")
+
+    try:
+        policy = json.loads(args.input.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"shield sign-policy: cannot read {args.input}: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(policy, dict) or "rules" not in policy:
+        print(f"shield sign-policy: {args.input} must be a JSON object with a top-level \"rules\" array", file=sys.stderr)
+        return 1
+    if args.expires_at:
+        policy["expires_at"] = args.expires_at
+
+    signed = sign_policy_bundle(policy, keypair)
+    args.output.write_text(json.dumps(signed, indent=2))
+    print(f"OK   signed {args.input} -> {args.output}  signer_public_key={base64.b64encode(keypair.public_bytes()).decode('ascii')}")
+    return 0
+
+
 def _local_run(args: argparse.Namespace) -> int:
     from .opa_local import selected_profile_metadata, supervised_opa
 
@@ -459,6 +522,24 @@ def main(argv: list[str] | None = None) -> int:
     p_siem.add_argument("--profile", choices=("generic", "elastic", "splunk"), default="generic")
     p_siem.add_argument("--timeout", type=float, default=10.0, help="webhook timeout in seconds")
     p_siem.set_defaults(func=_siem_export)
+
+    p_policy_history = sub.add_parser("policy-history", help="list retained policy bundle history")
+    p_policy_history.add_argument("--rules", type=Path, required=True, help="active policy rules file")
+    p_policy_history.add_argument("--history-dir", type=Path, default=None, help="override the default <rules-dir>/history")
+    p_policy_history.set_defaults(func=_policy_history)
+
+    p_policy_rollback = sub.add_parser("policy-rollback", help="roll back to a specific retained policy bundle")
+    p_policy_rollback.add_argument("--rules", type=Path, required=True, help="active policy rules file to overwrite")
+    p_policy_rollback.add_argument("--to-hash", required=True, help="target bundle hash from `shield policy-history` (sha256:... or bare hex)")
+    p_policy_rollback.add_argument("--history-dir", type=Path, default=None, help="override the default <rules-dir>/history")
+    p_policy_rollback.set_defaults(func=_policy_rollback)
+
+    p_sign_policy = sub.add_parser("sign-policy", help="sign a policy bundle with an Ed25519 keypair")
+    p_sign_policy.add_argument("--key", type=Path, required=True, help="Ed25519 private key PEM file; generated if it doesn't exist")
+    p_sign_policy.add_argument("--in", dest="input", type=Path, required=True, help="unsigned policy JSON (spec §7 shape)")
+    p_sign_policy.add_argument("--out", dest="output", type=Path, required=True, help="destination signed bundle path")
+    p_sign_policy.add_argument("--expires-at", default=None, help="optional ISO-8601 expiry, e.g. 2026-12-01T00:00:00Z")
+    p_sign_policy.set_defaults(func=_sign_policy)
 
     p_run = sub.add_parser("run", help="run the real enforcement loop: sensor -> policy engine -> containment -> exporter")
     p_run.add_argument("--sensor", choices=_SENSOR_CHOICES, required=True,

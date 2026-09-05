@@ -36,6 +36,12 @@ class PolicyBundle:
     version: str
     hash: str
     revision: int | None = None
+    # Real signature state for operator/dashboard visibility -- distinct from
+    # trusted_policy_hashes' exact-byte allowlist, which doesn't tell you anything
+    # about who signed a bundle, only whether this exact content was pre-approved.
+    signed: bool = False
+    signer_public_key: str | None = None
+    expires_at: str | None = None
 
 
 def _load_json_file(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
@@ -53,23 +59,60 @@ def _load_json_file(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
     return doc, raw
 
 
-def load_policy_bundle(path: Path | str) -> PolicyBundle:
-    """Load a policy bundle from a local JSON file, shaped `{"rules": [...]}` where each
-    entry is the same dict shape `PolicyRule.from_dict` already accepts (spec §7). Returns
-    rules in file order — the Policy Engine's first-match-wins semantics make that order
-    load-bearing, so this function must not reorder or deduplicate.
+def load_policy_bundle(
+    path: Path | str,
+    *,
+    trusted_signing_keys: list[str] | None = None,
+    require_signed_policy: bool = False,
+) -> PolicyBundle:
+    """Load a policy bundle from a local JSON file. Two shapes are understood:
+
+    - Legacy/unsigned: `{"rules": [...], "policy_version": "...", "policy_revision": N}`
+      — loaded exactly as before, with no behavior change for anyone not opting into
+      signing, UNLESS `require_signed_policy` is true, in which case this shape is
+      rejected outright (fail closed, matching this repo's own stated posture).
+    - Signed: `{"policy": {...same fields, plus optional "expires_at"...},
+      "signature": "...", "signer_public_key": "..."}` (see `shield/config/signing.py`
+      for the exact algorithm) — verified via `verify_policy_signature` before the
+      inner `policy` object's rules are parsed at all.
+
+    Returns rules in file order — the Policy Engine's first-match-wins semantics make
+    that order load-bearing, so this function must not reorder or deduplicate.
 
     Raises `ConfigError` (never returns a partial/empty list) if the file is missing,
-    isn't valid JSON, isn't shaped `{"rules": [...]}`, or any individual rule fails to
-    parse — better to refuse the whole bundle loudly than silently drop one bad rule and
-    run with fewer policies than the operator intended."""
+    isn't valid JSON, isn't shaped as either of the above, any individual rule fails to
+    parse, or (when applicable) the signature/expiry/trust checks fail — better to
+    refuse the whole bundle loudly than silently drop one bad rule and run with fewer
+    policies than the operator intended."""
     p = Path(path)
     doc, raw_bytes = _load_json_file(p, "policy rules")
 
-    if "rules" not in doc:
-        raise ConfigError(f"policy rules file {p} must be a JSON object with a top-level \"rules\" array")
+    signed = False
+    signer_public_key: str | None = None
+    if "policy" in doc:
+        from .signing import verify_policy_signature  # local import: avoids a hard
+        # integrity_sdk import for every caller of this module that never touches a
+        # signed bundle at all (mirrors integrity_exporter's own lazy-import reasoning
+        # elsewhere in this repo).
 
-    raw_rules = doc["rules"]
+        result = verify_policy_signature(doc, trusted_signing_keys or [])
+        if require_signed_policy and not result.verified:
+            raise ConfigError(f"policy rules file {p}: signature verification failed: {result.reason}")
+        signed = result.verified
+        signer_public_key = result.signer_public_key if result.verified else None
+        policy_doc = doc["policy"]
+        if not isinstance(policy_doc, dict):
+            raise ConfigError(f"policy rules file {p}: \"policy\" must be an object")
+    elif "rules" in doc:
+        if require_signed_policy:
+            raise ConfigError(f"policy rules file {p}: unsigned bundle rejected — require_signed_policy is set")
+        policy_doc = doc
+    else:
+        raise ConfigError(f"policy rules file {p} must be a JSON object with a top-level \"rules\" array or a signed \"policy\" object")
+
+    raw_rules = policy_doc.get("rules")
+    if raw_rules is None:
+        raise ConfigError(f"policy rules file {p} must contain a \"rules\" array")
     if not isinstance(raw_rules, list):
         raise ConfigError(f"policy rules file {p}: \"rules\" must be an array, got {type(raw_rules).__name__}")
 
@@ -84,11 +127,17 @@ def load_policy_bundle(path: Path | str) -> PolicyBundle:
         except TypeError as exc:
             raise ConfigError(f"policy rules file {p}: rules[{i}] has an invalid shape: {exc}") from exc
 
-    version = str(doc.get("policy_version", doc.get("version", "")))
-    revision = doc.get("policy_revision")
+    version = str(policy_doc.get("policy_version", policy_doc.get("version", "")))
+    revision = policy_doc.get("policy_revision")
     if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 0):
         raise ConfigError(f"policy rules file {p}: \"policy_revision\" must be a non-negative integer")
-    return PolicyBundle(rules=rules, version=version, hash=f"sha256:{hashlib.sha256(raw_bytes).hexdigest()}", revision=revision)
+    expires_at = policy_doc.get("expires_at")
+    if expires_at is not None and not isinstance(expires_at, str):
+        raise ConfigError(f"policy rules file {p}: \"expires_at\" must be a string")
+    return PolicyBundle(
+        rules=rules, version=version, hash=f"sha256:{hashlib.sha256(raw_bytes).hexdigest()}", revision=revision,
+        signed=signed, signer_public_key=signer_public_key, expires_at=expires_at,
+    )
 
 
 def load_policy_rules(path: Path | str) -> list[PolicyRule]:
@@ -119,6 +168,11 @@ class DeviceConfig:
     sensitive_paths: list[str] = field(default_factory=list)
     trusted_policy_hashes: list[str] = field(default_factory=list)
     reject_policy_downgrades: bool = False
+    # Signer-based trust (see shield/config/signing.py), alongside the exact-hash
+    # allowlist above rather than replacing it -- empty list preserves today's
+    # hash-allowlist-only behavior for existing deployments that haven't opted in.
+    trusted_signing_keys: list[str] = field(default_factory=list)
+    require_signed_policy: bool = False
 
     def flag(self, name: str, default: bool = False) -> bool:
         return self.feature_flags.get(name, default)
@@ -148,6 +202,8 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "sensitive_paths",
         "trusted_policy_hashes",
         "reject_policy_downgrades",
+        "trusted_signing_keys",
+        "require_signed_policy",
     }
     unknown = set(doc.keys()) - known_fields
     if unknown:
@@ -165,4 +221,10 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         raise ConfigError(f"device config file {p}: \"trusted_policy_hashes\" must be an array")
     if any(not isinstance(policy_hash, str) for policy_hash in kwargs.get("trusted_policy_hashes", [])):
         raise ConfigError(f"device config file {p}: every \"trusted_policy_hashes\" entry must be a string")
+    if "trusted_signing_keys" in kwargs and not isinstance(kwargs["trusted_signing_keys"], list):
+        raise ConfigError(f"device config file {p}: \"trusted_signing_keys\" must be an array")
+    if any(not isinstance(key, str) for key in kwargs.get("trusted_signing_keys", [])):
+        raise ConfigError(f"device config file {p}: every \"trusted_signing_keys\" entry must be a string")
+    if "require_signed_policy" in kwargs and not isinstance(kwargs["require_signed_policy"], bool):
+        raise ConfigError(f"device config file {p}: \"require_signed_policy\" must be a boolean")
     return DeviceConfig(**kwargs)

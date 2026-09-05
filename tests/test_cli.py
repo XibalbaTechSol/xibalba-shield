@@ -423,3 +423,108 @@ def test_codex_analyze_is_advisory_only(tmp_path, monkeypatch, capsys):
     output = json.loads(capsys.readouterr().out)
     assert output["enforcement"] == "advisory_only"
     assert output["classification"] == "unknown"
+
+
+def test_sign_policy_generates_a_keypair_and_signs_a_bundle(tmp_path, capsys):
+    key_path = tmp_path / "signing_key.pem"
+    input_path = _write(tmp_path / "rules.json", {
+        "rules": [{"rule_id": "a", "name": "A", "version": "1.0.0", "conditions": [], "actions": []}]
+    })
+    output_path = tmp_path / "signed.json"
+
+    code = main(["sign-policy", "--key", str(key_path), "--in", str(input_path), "--out", str(output_path)])
+
+    assert code == 0
+    assert key_path.exists()
+    out = capsys.readouterr().out
+    assert "generated a new signing keypair" in out
+    assert "OK" in out and "signer_public_key=" in out
+
+    signed = json.loads(output_path.read_text())
+    assert "signature" in signed and "signer_public_key" in signed
+    bundle = load_policy_bundle(output_path)
+    assert bundle.signed is True
+
+
+def test_sign_policy_reuses_an_existing_key(tmp_path, capsys):
+    key_path = tmp_path / "signing_key.pem"
+    input_path = _write(tmp_path / "rules.json", {
+        "rules": [{"rule_id": "a", "name": "A", "version": "1.0.0", "conditions": [], "actions": []}]
+    })
+
+    main(["sign-policy", "--key", str(key_path), "--in", str(input_path), "--out", str(tmp_path / "signed1.json")])
+    first_pubkey = json.loads((tmp_path / "signed1.json").read_text())["signer_public_key"]
+    capsys.readouterr()
+
+    code = main(["sign-policy", "--key", str(key_path), "--in", str(input_path), "--out", str(tmp_path / "signed2.json")])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "generated a new signing keypair" not in out  # reused, not regenerated
+    second_pubkey = json.loads((tmp_path / "signed2.json").read_text())["signer_public_key"]
+    assert second_pubkey == first_pubkey
+
+
+def test_sign_policy_with_expires_at_produces_an_expiring_bundle(tmp_path):
+    key_path = tmp_path / "signing_key.pem"
+    input_path = _write(tmp_path / "rules.json", {
+        "rules": [{"rule_id": "a", "name": "A", "version": "1.0.0", "conditions": [], "actions": []}]
+    })
+    output_path = tmp_path / "signed.json"
+
+    main(["sign-policy", "--key", str(key_path), "--in", str(input_path), "--out", str(output_path), "--expires-at", "2026-12-01T00:00:00Z"])
+
+    bundle = load_policy_bundle(output_path)
+    assert bundle.expires_at == "2026-12-01T00:00:00Z"
+
+
+def test_policy_history_reports_empty_before_any_reload(tmp_path, capsys):
+    rules_path = tmp_path / "rules.json"
+
+    code = main(["policy-history", "--rules", str(rules_path)])
+
+    assert code == 0
+    assert "no retained policy history" in capsys.readouterr().out
+
+
+def test_policy_history_and_rollback_end_to_end(tmp_path, capsys):
+    from shield.config import PolicyHotReloader
+    from shield.policy_engine import PolicyEngine
+
+    rules_path = tmp_path / "rules.json"
+    _write(rules_path, {"policy_version": "v-1", "policy_revision": 1, "rules": [
+        {"rule_id": "a", "name": "A", "version": "1.0.0", "conditions": [], "actions": []}
+    ]})
+    reloader = PolicyHotReloader(PolicyEngine(), rules_path)
+    assert reloader.check_and_reload() is True
+    first_hash = reloader.status().active_policy_hash
+
+    import os
+    st = rules_path.stat()
+    os.utime(rules_path, (st.st_atime + 5, st.st_mtime + 5))
+    _write(rules_path, {"policy_version": "v-2", "policy_revision": 2, "rules": [
+        {"rule_id": "a", "name": "A", "version": "1.0.0", "conditions": [], "actions": []},
+        {"rule_id": "b", "name": "B", "version": "1.0.0", "conditions": [], "actions": []},
+    ]})
+    assert reloader.check_and_reload() is True
+
+    code = main(["policy-history", "--rules", str(rules_path)])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "v-2" in out and "v-1" in out
+
+    code = main(["policy-rollback", "--rules", str(rules_path), "--to-hash", first_hash])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "OK" in out and first_hash in out
+    assert load_policy_bundle(rules_path).version == "v-1"
+
+
+def test_policy_rollback_to_unknown_hash_fails_cleanly(tmp_path, capsys):
+    rules_path = tmp_path / "rules.json"
+    _write(rules_path, {"rules": []})
+
+    code = main(["policy-rollback", "--rules", str(rules_path), "--to-hash", "sha256:" + "0" * 64])
+
+    assert code == 1
+    assert "FAIL" in capsys.readouterr().err

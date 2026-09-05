@@ -67,7 +67,15 @@ Document trust boundaries and attack paths for a root attacker, a same-user atta
 
 - Define explicit `observe`, `enforce`, and emergency-containment modes.
 - Supervise OPA or provide a justified embedded/sidecar lifecycle design with health checks and bounded failure behavior.
-- Implement signed policy bundle verification, expiry, monotonic version checks, rollback, and atomic reload.
+- **Closed 2026-09-05:** signed policy bundle verification, expiry, monotonic version
+  checks (pre-existing via `reject_downgrades`/`revision`), real operator-triggered
+  rollback, and atomic reload (pre-existing swap-on-success pattern) are all now real.
+  `shield/config/signing.py` reuses `integrity_sdk.did`'s Ed25519 primitives rather than
+  a second signing scheme; `hot_reload.py` gained a bounded local history and
+  independent expiry re-checking (an unchanged-but-now-expired bundle no longer stays
+  silently "healthy" between file writes); three new `shield` subcommands
+  (`sign-policy`, `policy-history`, `policy-rollback`) give an operator the actual
+  workflow, not just the library primitives.
 - Add watchdog/self-health reporting and prevent stale “healthy” status after sensor or policy failure.
 - Test malformed policy, unavailable OPA, exporter outage, full disk, clock skew, duplicate events, and restart recovery.
 
@@ -215,7 +223,16 @@ Pass when the selected pilot fleet meets resource, availability, event-loss, dec
 
 ## 7. Immediate implementation sequence
 
-1. Add the explicit production policy profile and policy-bundle signing/rollback lifecycle.
+1. ~~Add the explicit production policy profile and policy-bundle signing/rollback
+   lifecycle.~~ — **closed 2026-09-05**: the three production-tier profiles
+   (`policies/defaults/{smb,professional-services,regulated}.json`, already distinct
+   from observe-only dev defaults) predate this item; the genuinely missing half —
+   cryptographic signing, expiry, and real operator-triggered rollback — is now built
+   (`shield/config/signing.py`, `hot_reload.py`'s history/expiry/rollback, three new
+   `shield` subcommands: `sign-policy`, `policy-history`, `policy-rollback`). Verified
+   with a real generated keypair against real CLI runs: a validly-signed bundle loads
+   and enforces with `require_signed_policy` set; a tampered bundle and an expired
+   bundle are both rejected with a specific diagnostic, not a silent failure.
 2. Add supervisor/watchdog and health/degraded-state telemetry for OPA, sensors, exporter, and queue.
 3. Complete live TCP verification on the selected Linux kernel matrix; record attach and event-loss evidence.
 4. Make the exporter durable and complete DID registration/readback preflight tooling.
