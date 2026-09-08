@@ -4,7 +4,7 @@
 > now — see the schema's "no aspirational content" rule. This is a focused core set covering
 > Shield's actual architecture, not an exhaustive catalog — contributions adding more pages are
 > welcome.
-> Last updated: 2026-08-28 | Total pages: 13 (8 concepts, 2 entities, 2 architecture, 1 query)
+> Last updated: 2026-09-08 | Total pages: 14 (9 concepts, 2 entities, 2 architecture, 1 query)
 
 ## Acronym glossary
 
@@ -19,13 +19,14 @@
 ## Concepts
 
 - [Event Router](concepts/event-router.md) — `EventRouter.handle()`'s exact step ordering: Tier 1 → optional Tier 2 → containment (before any network call) → guardrail hooks → two independent export paths → event log
-- [Policy Engine](concepts/policy-engine.md) — Tier 1; delegates evaluation to a local OPA sidecar today, **not** the table-driven in-process matcher README.md/CLAUDE.md still describe — documents that drift explicitly
+- [Policy Engine](concepts/policy-engine.md) — Tier 1; delegates evaluation to a local OPA sidecar with packaged, explicitly selected profile bundles
 - [Action Broker](concepts/action-broker.md) — real SIGSTOP/SIGCONT/cgroup-v2 containment, SIGKILL only via explicit timeout escalation, wired into `shield run`'s live loop by default
 - [Guardrail Hooks](concepts/guardrail-hooks.md) — the six real semantic hook points; explains why `shield run` never wires them in, and how that differs from Action Broker
 - [Integrity Exporter](concepts/integrity-exporter.md) — DID + signed BCC commitment + telemetry submission; restored 2026-08-12 after a 2026-08-07 regression
 - [Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md) — Shield ADR, false-positive rate, precision, time-to-contain, and export-success metrics derived from labeled Integrity-backed evidence
 - [SLM Cascade Tiers](concepts/slm-cascade-tiers.md) — the 3-tier Hybrid Cascading Architecture: Tier 1 real, Tier 2 has real inference code now wired via `--slm-backend`, Tier 3 `[PLANNED]`
 - [Sensor Model](concepts/sensor-model.md) — the `Sensor` protocol, the synthetic dev sensor, verified/pending Linux eBPF probes, and honest Windows/macOS stubs
+- [Exporter Remediation](concepts/exporter-remediation.md) — authenticated, bounded `retry`/`flush`/`reconnect` recovery jobs; not a remote shell
 
 ## Entities
 

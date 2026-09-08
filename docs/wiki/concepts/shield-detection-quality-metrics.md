@@ -2,7 +2,7 @@
 title: Shield Detection Quality Metrics
 acronyms: [ADR, DID, BCC, AIS]
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-09-08
 type: concept
 tags: [compliance]
 confidence: high

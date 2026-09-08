@@ -2,7 +2,7 @@
 title: Compliance Evidence Trail
 acronyms: [DID, BCC, SIEM]
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-09-08
 type: query
 tags: [compliance]
 confidence: medium
@@ -63,10 +63,11 @@ resolved.
   actually reach and be accepted by `bcc_middleware` — export is best-effort and can fail
   silently from a compliance reviewer's perspective unless they also check `ExportStatus`/export
   logs, not just the decision log itself.
-- **The Tier-1 decision's own provenance has an open gap.** [Policy Engine](../concepts/policy-engine.md)
-  delegates matching to a local OPA sidecar whose policy source is undefined in this repository —
-  a compliance reviewer asking "which rule, sourced from where, produced this decision" cannot
-  currently answer that from anything checked into `xibalba-shield` or `integrity-core`.
+- **Policy selection must remain explicit.** [Policy Engine](../concepts/policy-engine.md)
+  delegates matching to one packaged OPA profile and carries the selected bundle hash/version
+  into decision metadata. A reviewer can identify that selected artifact, but this does not
+  prove who authorized its deployment or that the running sidecar loaded the intended bytes
+  unless runtime status/evidence is also retained.
 
 ## The other half of this story lives in `xibalba-cortex`
 

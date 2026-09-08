@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import hashlib
 import json
 import secrets
@@ -465,15 +466,29 @@ class ShieldStore:
 
     def request_password_reset(self, *, email: str, ttl_minutes: int = 30) -> str | None:
         normalized = email.strip().lower()
-        row = self._conn.execute('SELECT account_id,tenant_id FROM accounts WHERE email=? AND status="active"', (normalized,)).fetchone()
+        row = self._conn.execute("SELECT account_id,tenant_id,email FROM accounts WHERE email=? AND status=\"active\"", (normalized,)).fetchone()
         if row is None:
             self.record_auth_event(event_type="password_reset_requested", email=normalized, detail="unknown account")
             return None
         raw = secrets.token_urlsafe(32)
+        token_id = secrets.token_hex(16)
         now = datetime.now(timezone.utc)
         with self._conn:
-            self._conn.execute("INSERT INTO password_reset_tokens(id,account_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)", (secrets.token_hex(16), row["account_id"], _hash_token(raw), (now + timedelta(minutes=ttl_minutes)).isoformat(), _now()))
-        self.record_auth_event(event_type="password_reset_requested", email=normalized, tenant_id=row["tenant_id"])
+            self._conn.execute("INSERT INTO password_reset_tokens(id,account_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)", (token_id, row["account_id"], _hash_token(raw), (now + timedelta(minutes=ttl_minutes)).isoformat(), _now()))
+        from .email_delivery import send_email
+        reset_url = os.environ.get("SHIELD_PASSWORD_RESET_URL", "").strip()
+        if not reset_url:
+            with self._conn:
+                self._conn.execute("DELETE FROM password_reset_tokens WHERE id=?", (token_id,))
+            raise RuntimeError("SHIELD_PASSWORD_RESET_URL is required for password reset delivery")
+        separator = "&" if "?" in reset_url else "?"
+        try:
+            send_email(row["email"], "Reset your Xibalba Shield password", f"Use this time-limited link to reset your password:\n\n{reset_url}{separator}token={raw}\n")
+        except Exception as exc:
+            with self._conn:
+                self._conn.execute("DELETE FROM password_reset_tokens WHERE id=?", (token_id,))
+            raise RuntimeError("password reset email delivery failed") from exc
+        self.record_auth_event(event_type="password_reset_requested", email=normalized, tenant_id=row["tenant_id"], detail="email delivered")
         return raw
 
     def reset_password(self, *, reset_token: str, new_password: str) -> bool:

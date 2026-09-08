@@ -14,6 +14,7 @@ Governance/conventions live in `WIKI_SCHEMA.md`; the full catalog with one-line 
 [Enforcement Pipeline](architecture/enforcement-pipeline.md) (the end-to-end flow) →
 [Policy Engine](concepts/policy-engine.md) (Tier 1, and an important OPA-delegation caveat) →
 [Action Broker](concepts/action-broker.md) (real OS-level containment) →
+[Exporter Remediation](concepts/exporter-remediation.md) (bounded exporter recovery) →
 [Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md) (ADR and
 false-positive measurements from labeled evidence) →
 [SLM Cascade Tiers](concepts/slm-cascade-tiers.md) (what's real vs. `[PLANNED]` in the 3-tier
@@ -45,6 +46,7 @@ flowchart TD
 - [Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md)
 - [SLM Cascade Tiers](concepts/slm-cascade-tiers.md)
 - [Sensor Model](concepts/sensor-model.md)
+- [Exporter Remediation](concepts/exporter-remediation.md)
 
 ### Entities
 - [Device Context & Agent Registry](entities/device-context.md)

@@ -118,3 +118,17 @@
 - Verification: focused regression `1 passed`; full root-free suite `181 passed, 7 skipped`; all
   three default JSON policy packs validated; a built wheel installed under `/tmp` and processed
   one real `smb` profile event with Open Policy Agent 1.18.2; wiki table-of-contents check passed.
+
+## [2026-09-08] update | README, remediation, reset delivery, and evidence boundaries
+
+- Reconciled `README.md`, `SPECIFICATION.md`, and the canonical wiki with the current source
+  and tests, without treating uncommitted implementation work as released capability.
+- Added `concepts/exporter-remediation.md` for the authenticated queued lifecycle and the only
+  supported endpoint actions: retry, flush, and reconnect. Arbitrary endpoint command execution
+  remains out of scope.
+- Documented SMTP password-reset configuration and its fail-closed API behavior: no raw reset
+  token is returned, and failed delivery deletes the issued token and returns unavailable.
+- Corrected the Linux sensor heading to match the archived Ubuntu 24.04 root evidence, while
+  preserving the per-kernel support boundary in `docs/SUPPORTED_MATRIX.md`.
+- Refreshed source-reviewed page dates, policy-profile provenance language, wiki counts, and
+  navigation. Current test and table-of-contents results are recorded after validation below.

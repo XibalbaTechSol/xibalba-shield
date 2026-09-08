@@ -2,7 +2,7 @@
 title: Sensor Model
 acronyms: [eBPF]
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-09-08
 type: concept
 tags: [sensors, infrastructure]
 confidence: high
@@ -18,7 +18,7 @@ source_files:
 
 - [Overview](#overview)
 - [DevModeSensor — real code, synthetic data, never claimed as telemetry](#devmodesensor-real-code-synthetic-data-never-claimed-as-telemetry)
-- [Linux eBPF sensors — two verified, one blocked](#linux-ebpf-sensors-two-verified-one-blocked)
+- [Linux eBPF sensors — verified on the recorded Ubuntu target](#linux-ebpf-sensors-verified-on-the-recorded-ubuntu-target)
 - [Windows/macOS — honest interface-boundary stubs](#windows-macos-honest-interface-boundary-stubs)
 - [Related pages](#related-pages)
 
@@ -57,7 +57,7 @@ machine. This module's docstring is explicit that pointing it at production poli
 mistaking its output for real telemetry would be exactly the kind of silent-mock claim this
 project's ground rules forbid.
 
-## Linux eBPF sensors — two verified, one blocked
+## Linux eBPF sensors — verified on the recorded Ubuntu target
 
 `shield/sensors/linux_sensor.py` and `shield/sensors/ebpf/` are real Linux kprobe/kretprobe
 implementations, not stubs:

@@ -49,7 +49,6 @@ systemd-run --pty --wait --collect \
   --property=ProtectSystem=strict \
   --property=ProtectHome=read-only \
   --property=ProtectKernelTunables=true \
-  --property=ProtectKernelModules=true \
   --property=ProtectControlGroups=true \
   --property=ProtectClock=true \
   --property=ProtectHostname=true \

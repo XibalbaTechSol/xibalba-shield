@@ -18,6 +18,7 @@ import urllib.request
 
 from ..config import ConfigError
 from .store import ShieldStore
+from . import remediation
 from ..transaction_gateway import TransactionIntent, TransactionPolicy, evaluate_transaction_intent
 from ..transaction_simulator import SimulationError, simulate_transaction_intent
 
@@ -129,11 +130,18 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"exporter_status": store.list_exporter_status(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/exporter-remediation/next":
+                tenant_id = query.get("tenant_id", [""])[0]
+                device_id = query.get("device_id", [""])[0]
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                self._send_json({"request": remediation.claim_next(store, tenant_id=tenant_id, device_id=device_id)})
+                return
             if parsed.path == "/api/shield/exporter-remediation":
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
-                self._send_json({"requests": store.list_exporter_remediation_requests(tenant_id=tenant_id, device_id=query.get("device_id", [None])[0])})
+                self._send_json({"requests": store.list_exporter_remediation_requests(tenant_id=tenant_id, device_id=query.get("device_id", [None])[0]), "attempts": remediation.list_attempts(store, tenant_id=tenant_id, device_id=query.get("device_id", [None])[0])})
                 return
             if parsed.path == "/api/shield/integrations":
                 tenant_id = self._tenant_from_query_or_error(query)
@@ -237,8 +245,12 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 if not auth_allowed(f"password-reset:{email.strip().lower()}:{self.client_address[0]}"):
                     self._send_error(HTTPStatus.TOO_MANY_REQUESTS, "too many password reset attempts; try again later")
                     return
-                token = store.request_password_reset(email=email)
-                self._send_json({"ok": True, "reset_token": token, "delivery": "local_only"})
+                try:
+                    store.request_password_reset(email=email)
+                except RuntimeError:
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "password reset delivery is unavailable")
+                    return
+                self._send_json({"ok": True, "delivery": "email"})
                 return
 
             if parsed.path == "/api/shield/auth/password-reset/confirm":
@@ -248,6 +260,22 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json({"ok": changed} if changed else {"error": "reset token is invalid or expired"}, status=HTTPStatus.OK if changed else HTTPStatus.BAD_REQUEST)
+                return
+
+            if parsed.path == "/api/shield/exporter-remediation/complete":
+                tenant_id = str(body.get("tenant_id") or "")
+                device_id = str(body.get("device_id") or "")
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                try:
+                    result = remediation.complete(store, tenant_id=tenant_id, device_id=device_id, request_id=int(body.get("request_id")), status=str(body.get("status") or ""), detail=body.get("detail") if isinstance(body.get("detail"), dict) else {})
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                self._send_json({"request": result})
                 return
 
             if parsed.path == "/api/shield/exporter-remediation":

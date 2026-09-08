@@ -270,6 +270,7 @@ def _run(args: argparse.Namespace) -> int:
     # --no-exporter. Imported lazily so commands that don't run the enforcement loop
     # (status/events/validate/etc.) never pull in integrity-sdk's heavier dependencies.
     exporter = None
+    remediation_worker = None
     did_preflight_status = None
     if not args.no_exporter:
         from .integrity_exporter import IntegrityExporter, check_did_preflight
@@ -293,6 +294,8 @@ def _run(args: argparse.Namespace) -> int:
             # turn "start the agent" into a multi-second hang on a real production host.
             timeout=2.0,
         )
+        from .remediation_worker import RemediationWorker
+        remediation_worker = RemediationWorker(device_config=device_config, exporter=exporter)
 
     # Real OS-level containment, on by default -- this is what makes a "contain" decision
     # actually do something (freeze the offending process) instead of only being logged and
@@ -339,6 +342,7 @@ def _run(args: argparse.Namespace) -> int:
         exporter=exporter,
         sensor=sensor,
         did_preflight_status=did_preflight_status,
+        remediation_worker=remediation_worker,
     )
     watchdog.start()
 

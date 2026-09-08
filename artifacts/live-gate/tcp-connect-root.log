@@ -1,4 +1,4 @@
-In file included from /virtual/main.c:35:
+In file included from /virtual/main.c:42:
 In file included from include/linux/sched.h:12:
 arch/x86/include/asm/current.h:23:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
    23 |                 return this_cpu_read_const(const_current_task);
@@ -22,7 +22,7 @@ include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
 <built-in>:358:33: note: expanded from macro '__seg_gs'
   358 | #define __seg_gs __attribute__((address_space(256)))
       |                                 ^
-In file included from /virtual/main.c:35:
+In file included from /virtual/main.c:42:
 In file included from include/linux/sched.h:12:
 arch/x86/include/asm/current.h:23:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
 arch/x86/include/asm/percpu.h:560:36: note: expanded from macro 'this_cpu_read_const'
@@ -44,7 +44,7 @@ include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
 <built-in>:358:33: note: expanded from macro '__seg_gs'
   358 | #define __seg_gs __attribute__((address_space(256)))
       |                                 ^
-In file included from /virtual/main.c:35:
+In file included from /virtual/main.c:42:
 In file included from include/linux/sched.h:13:
 arch/x86/include/asm/processor.h:554:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
   554 |                 return this_cpu_read_const(const_cpu_current_top_of_stack);
@@ -68,7 +68,7 @@ include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
 <built-in>:358:33: note: expanded from macro '__seg_gs'
   358 | #define __seg_gs __attribute__((address_space(256)))
       |                                 ^
-In file included from /virtual/main.c:35:
+In file included from /virtual/main.c:42:
 In file included from include/linux/sched.h:13:
 arch/x86/include/asm/processor.h:554:10: warning: multiple identical address spaces specified for type [-Wduplicate-decl-specifier]
 arch/x86/include/asm/percpu.h:560:36: note: expanded from macro 'this_cpu_read_const'
@@ -92,19 +92,8 @@ include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
       |                                 ^
 4 warnings generated.
 [self-test:tcp_connect] loading (requires root)...
-[self-test:tcp_connect] connecting to 127.0.0.1:38467 from this process (pid 105082), watching...
-[self-test:tcp_connect] PASS — observed this process's real connect to port 38467.
-{
-  "check": "tcp_connect_root_verification",
-  "command": "python3 scripts/verify_tcp_connect_root.py",
-  "reason": "observed real localhost TCP connect",
-  "requires_root": true,
-  "returncode": 0,
-  "status": "pass"
-}
-[self-test:tcp_connect] loading (requires root)...
-[self-test:tcp_connect] connecting to 127.0.0.1:35619 from this process (pid 675369), watching...
-[self-test:tcp_connect] PASS — observed this process's real connect to port 35619.
+[self-test:tcp_connect] connecting to 127.0.0.1:35141 from this process (pid 1662908), watching...
+[self-test:tcp_connect] PASS — observed this process's real connect to port 35141.
 {
   "check": "tcp_connect_root_verification",
   "command": "python3 scripts/verify_tcp_connect_root.py",

@@ -2,10 +2,10 @@
 title: Enforcement Pipeline
 acronyms: [OPA, DID, BCC]
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-09-08
 type: architecture
 tags: [enforcement, containment]
-confidence: medium
+confidence: high
 source_files:
   - shield/agent_core/router.py
   - shield/policy_engine/engine.py
@@ -27,8 +27,9 @@ This is the single place that ties [Event Router](../concepts/event-router.md),
 [Integrity Exporter](../concepts/integrity-exporter.md) together end to end — one normalized
 event, in, to one logged, exported `PolicyDecision`, out. Confidence on this page is `medium`
 rather than `high` because it inherits [Policy Engine](../concepts/policy-engine.md)'s own
-`medium` confidence: the diagram's Tier-1 box delegates to a local OPA sidecar whose actual
-policy source is undefined in this repository (see that page's "Documented drift" section).
+`high` confidence: the Tier-1 box delegates to a local OPA sidecar using one explicitly
+selected packaged profile. Loading every profile together is unsupported because their
+default rules conflict.
 
 ```mermaid
 flowchart TD

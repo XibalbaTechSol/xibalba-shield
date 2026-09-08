@@ -2,7 +2,7 @@
 title: SLM Cascade Tiers
 acronyms: [SLM, A2A]
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-09-08
 type: concept
 tags: [slm, enforcement]
 confidence: high
@@ -35,8 +35,8 @@ capability must never be documented as if it were live.
 
 [Policy Engine](policy-engine.md) evaluates every event first. It is real and wired into
 [Event Router](event-router.md). Its determinism is *given a loaded OPA policy* — see
-policy-engine.md's "Documented drift" section for the important caveat that the OPA sidecar's
-actual policy source is undefined in this repository today.
+policy-engine.md for the important caveat that exactly one packaged OPA profile must be
+selected; loading all profiles together would create conflicting defaults.
 
 ## Tier 2 — real inference code exists; two disconnected implementations, one now wired
 

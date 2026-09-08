@@ -840,7 +840,7 @@ def test_backend_exporter_status_carries_real_watchdog_fields_through_to_the_api
         server.shutdown()
         store.close()
 
-def test_backend_account_signup_login_and_logout_revokes_session(tmp_path):
+def test_backend_account_signup_login_and_logout_revokes_session(tmp_path, monkeypatch):
     server, store, base = _start_backend(tmp_path)
     try:
         status, signup = _request(
@@ -884,9 +884,12 @@ def test_backend_account_signup_login_and_logout_revokes_session(tmp_path):
         status, relogin = _request(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "new correct horse battery"})
         assert status == 200
         token = relogin["admin_token"]
-        status, reset = _request(f"{base}/api/shield/auth/password-reset/request", method="POST", token="", body={"email": "operator@example.com"})
-        assert status == 200 and reset["reset_token"]
-        status, confirmed = _request(f"{base}/api/shield/auth/password-reset/confirm", method="POST", token="", body={"reset_token": reset["reset_token"], "new_password": "reset correct horse battery"})
+        monkeypatch.setenv("SHIELD_PASSWORD_RESET_URL", "https://shield.example/reset")
+        with patch("shield.backend.email_delivery.send_email") as delivery:
+            status, reset = _request(f"{base}/api/shield/auth/password-reset/request", method="POST", token="", body={"email": "operator@example.com"})
+        assert status == 200 and reset == {"ok": True, "delivery": "email"}
+        reset_token = delivery.call_args.args[2].split("token=", 1)[1].strip()
+        status, confirmed = _request(f"{base}/api/shield/auth/password-reset/confirm", method="POST", token="", body={"reset_token": reset_token, "new_password": "reset correct horse battery"})
         assert status == 200 and confirmed["ok"] is True
         status, relogin = _request(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "reset correct horse battery"})
         assert status == 200

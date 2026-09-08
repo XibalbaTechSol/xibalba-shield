@@ -42,6 +42,7 @@ class Watchdog:
         exporter: Any | None,
         sensor: Any,
         did_preflight_status: dict[str, Any] | None = None,
+        remediation_worker: Any | None = None,
     ) -> None:
         self._interval = interval
         self._device_config = device_config
@@ -54,6 +55,7 @@ class Watchdog:
         # integrity_exporter.check_did_preflight -- republished unchanged on every tick
         # rather than re-checked, since DID load/reachability isn't tick-timescale state.
         self._did_preflight_status = did_preflight_status
+        self._remediation_worker = remediation_worker
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -120,6 +122,12 @@ class Watchdog:
                 sensors_status = {"attached": False, "error": str(exc)}
         else:
             sensors_status = {"attached": True}
+
+        if self._remediation_worker is not None:
+            try:
+                self._remediation_worker.run_once()
+            except Exception:  # noqa: BLE001
+                logger.exception("watchdog: remediation worker poll failed")
 
         exporter_status: dict[str, Any] | None
         if self._exporter is not None:

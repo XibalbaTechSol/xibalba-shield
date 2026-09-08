@@ -17,7 +17,7 @@ This specification defines what Shield must do, how the current repository is or
 
 ## Current audit and implementation boundary
 
-The current audit status is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md), corrected by later update notes at the top of that file. The root-free suite reports **138 tests passed, 9 skipped** (2026-08-21; grew from 103/7 after ActionBroker, Tier-2 `SlmBackend`, Rego-profile, and CLI wiring tests landed). Historical repository evidence records Linux process-exec and file-write eBPF verification; the audit did not reproduce live eBPF/exporter verification and TCP-connect remains blocked. Two closed since the 2026-08-06 audit boundary: the Integrity Exporter (deleted 2026-08-07, restored 2026-08-12, see `docs/archive/2026-08/IMPLEMENTATION_PLAN.md`) and the Action Broker (existed but was never called from `shield run`'s live loop; wired 2026-08-12). This specification is normative for behavior, but README, the archived implementation plan, SECURITY, and the audit ledger determine observed implementation status.
+The dated audit baseline is [`docs/audits/2026-08-06-status.md`](docs/audits/2026-08-06-status.md), corrected by later append-only evidence and the production-readiness plan. Current root-free counts belong in test output rather than this normative document. Process-exec, file-write, and TCP-connect eBPF probes have recorded live Ubuntu evidence, but the supported-host matrix is not complete; deployment and production claims remain separate. This specification is normative for behavior, while README, SECURITY, the readiness plan, and audit artifacts determine observed implementation status.
 
 ## 1. Source Of Truth And Scope
 
@@ -374,7 +374,7 @@ The CLI must fail with clean errors and no Python traceback for expected operati
 
 The backend MVP is a tenant control plane for demos and pilots. It must not become the local enforcement authority; endpoint allow/deny decisions remain local. Its minimum API surface is enrollment, device inventory, policy distribution, decision ingestion, burn-in metrics ingestion, exporter status, integration configuration, dashboard summary, and synthetic demo seeding with explicit synthetic labels.
 
-The backend stores tenant/device state, policy bundles, decision summaries, metrics, exporter status, and SIEM/SOAR integration config in SQLite for the MVP. Production hosting may replace SQLite only if tenant isolation, device-token authentication, and policy-fetch compatibility are preserved.
+The backend stores tenant/device state, policy bundles, decision summaries, metrics, exporter status, bounded exporter-remediation requests/attempts, account state, and SIEM/SOAR integration config in SQLite for the MVP. Admins may queue only `retry`, `flush`, or `reconnect`; the matching authenticated device atomically claims and completes its own work. This is not a general remote-command channel. Production hosting may replace SQLite only if tenant isolation, device-token authentication, atomic claim semantics, and policy-fetch compatibility are preserved.
 
 ## 11.2 Detection Quality Metrics
 
@@ -434,7 +434,8 @@ In regulated environments, Shield must tag PHI-bearing resources by class and ac
 - Full packet inspection and DNS attribution.
 - Content exfiltration detection by payload inspection.
 - Windows/macOS endpoint parity.
-- Automatic remediation beyond implemented deny/contain hooks.
+- Automatic endpoint remediation beyond deny/contain and the bounded exporter-recovery
+  actions (`retry`, `flush`, `reconnect`). Arbitrary remote command execution is out of scope.
 
 ## 14. Compliance Reporting
 

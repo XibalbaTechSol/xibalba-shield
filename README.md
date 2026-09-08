@@ -217,16 +217,14 @@ Legend: real and tested means there is code and a test or live verification path
 | Metadata DLP classifier | Real and tested | Classifies labels, paths, data-source names, and model endpoints without storing raw content. Not a deep content scanner. |
 | SIEM/SOAR export | Real and tested | JSONL normalization and generic webhook POST adapters. |
 | Local tamper evidence | Real and tested | Optional HMAC hash chain for decision logs via `--log-integrity-key`; root can still delete/disable local state. |
+| Exporter remediation queue | Local pilot implementation, tested | An admin may queue only `retry`, `flush`, or `reconnect`; the authenticated device atomically claims one job per watchdog tick and reports a terminal result. This is exporter recovery, not arbitrary endpoint command execution. |
+| Password-reset delivery | SMTP path implemented, deployment configuration required | Reset tokens are no longer returned by the API. Delivery requires `SHIELD_PASSWORD_RESET_URL`, `SHIELD_SMTP_HOST`, and `SHIELD_SMTP_FROM`; STARTTLS is used and username/password auth is optional. Failed delivery deletes the newly issued token and returns 503. |
 | Windows/macOS sensors | Interface boundary only | Status helpers document ETW/EndpointSecurity target sources; native sensors need target systems. See `docs/SUPPORTED_MATRIX.md`'s Windows track for real scope and why it isn't started (no Windows host available to write against, compile, or verify). |
 | Customer installer/updater | Partial | Linux install and policy-update scripts exist. Signed release tooling (`shield/release/`, `scripts/sign_release.py`/`release_manager.py`) is built and tested (2026-09-05) -- verified wheel signing, versioned releases, atomic symlink rollback -- but not yet wired into the live systemd unit's `ExecStart` or `install_linux_agent.sh`'s upgrade path; see `docs/runbooks/linux-agent.md`'s Rollback section. |
 
-Current root-free validation:
-
-```text
-pytest -q
-138 passed, 9 skipped (2026-08-21)
-Root-free tests currently pass locally; root/live-service tests skip unless their real dependencies exist.
-```
+Current root-free validation is obtained with `.venv/bin/python -m pytest`; do not
+freeze a count in this README because the suite changes frequently. Root/live-service
+tests skip unless their real dependencies exist.
 
 Skipped tests are root-gated eBPF verification or live-stack exporter checks. They are skipped honestly; there are no fake sensor or fake Integrity-service substitutes.
 
@@ -470,11 +468,17 @@ POST /api/shield/detection-quality
 POST /api/shield/detection-quality/report
 POST /api/shield/exporter-status
 GET  /api/shield/exporter-status?tenant_id=...
+POST /api/shield/exporter-remediation
+GET  /api/shield/exporter-remediation?tenant_id=...
+GET  /api/shield/exporter-remediation/next?tenant_id=...&device_id=...
+POST /api/shield/exporter-remediation/complete
 POST /api/shield/integrations
 GET  /api/shield/integrations?tenant_id=...
 GET  /api/shield/dashboard-summary?tenant_id=...
 POST /api/shield/demo/seed
 POST /api/shield/admin-tokens
+POST /api/shield/auth/password-reset/request
+POST /api/shield/auth/password-reset/confirm
 ```
 
 Admin endpoints require `Authorization: Bearer <token>` — either the global `SHIELD_BACKEND_TOKEN`
@@ -482,6 +486,27 @@ super-admin token, or a token minted per tenant via `POST /api/shield/admin-toke
 only), which is bound to that one `tenant_id` and cannot read or write another tenant's data.
 There is no built-in default token; auth fails closed if none is configured. Device ingestion
 endpoints require the per-device bearer token returned by enrollment.
+
+Remediation requests are deliberately bounded to exporter recovery. Admin authentication
+queues a request; the matching device token is required to claim and complete it. Claims
+transition `queued → running` atomically, attempts are retained in SQLite, and completion
+accepts only `completed` or `failed`. The worker executes no shell command and supports
+only exporter `retry`, `flush`, and request-scoped `reconnect`.
+
+Password reset is delivery-backed. Configure:
+
+```bash
+export SHIELD_PASSWORD_RESET_URL=https://shield.example/reset
+export SHIELD_SMTP_HOST=smtp.example.com
+export SHIELD_SMTP_PORT=587
+export SHIELD_SMTP_FROM=security@example.com
+# Optional authenticated SMTP:
+export SHIELD_SMTP_USERNAME=...
+export SHIELD_SMTP_PASSWORD=...
+```
+
+The SMTP client requires STARTTLS. The public request response is enumeration-resistant and
+never contains the raw reset token.
 
 ## Guardrail Hooks
 

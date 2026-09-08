@@ -2,7 +2,7 @@
 title: Event Log
 acronyms: []
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-09-08
 type: entity
 tags: [compliance, infrastructure]
 confidence: high
