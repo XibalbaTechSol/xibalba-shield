@@ -8,7 +8,7 @@ import secrets
 import sqlite3
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +22,20 @@ def _now() -> str:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _password_hash(password: str, salt: bytes | None = None) -> tuple[str, str]:
+    if len(password) < 10:
+        raise ValueError("password must be at least 10 characters")
+    salt = salt or secrets.token_bytes(16)
+    return salt.hex(), hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1).hex()
+
+def _password_matches(password: str, salt_hex: str, digest_hex: str) -> bool:
+    try:
+        _, candidate = _password_hash(password, bytes.fromhex(salt_hex))
+        return secrets.compare_digest(candidate, digest_hex)
+    except (ValueError, TypeError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -55,10 +69,58 @@ class ShieldStore:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS accounts (
+                account_id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                password_salt TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT "active",
+                role TEXT NOT NULL DEFAULT "tenant_admin",
+                email_verified INTEGER NOT NULL DEFAULT 1,
+                approval_status TEXT NOT NULL DEFAULT "approved",
+                failed_attempts INTEGER NOT NULL DEFAULT 0,
+                locked_until TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS account_tenant_memberships (
+                account_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'tenant_admin',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (account_id, tenant_id),
+                FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS auth_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT,
+                email TEXT,
+                event_type TEXT NOT NULL,
+                detail TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS tenant_admin_tokens (
                 tenant_id TEXT PRIMARY KEY,
                 token_hash TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                expires_at TEXT,
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
             );
 
@@ -82,6 +144,17 @@ class ShieldStore:
                 policy_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (tenant_id, device_id),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS policy_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
+                policy_hash TEXT NOT NULL,
+                policy_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
             );
 
@@ -129,6 +202,17 @@ class ShieldStore:
                 status_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (tenant_id, device_id),
+                FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS exporter_remediation_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                reason TEXT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                created_at TEXT NOT NULL,
                 FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
             );
 
@@ -197,6 +281,25 @@ class ShieldStore:
             );
             """
         )
+        columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(tenant_admin_tokens)")}
+        if "last_used_at" not in columns:
+            self._conn.execute("ALTER TABLE tenant_admin_tokens ADD COLUMN last_used_at TEXT")
+        if "expires_at" not in columns:
+            self._conn.execute("ALTER TABLE tenant_admin_tokens ADD COLUMN expires_at TEXT")
+        account_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(accounts)")}
+        if "role" not in account_columns:
+            self._conn.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'tenant_admin'")
+        if "failed_attempts" not in account_columns:
+            self._conn.execute("ALTER TABLE accounts ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0")
+        if "locked_until" not in account_columns:
+            self._conn.execute("ALTER TABLE accounts ADD COLUMN locked_until TEXT")
+        if "email_verified" not in account_columns:
+            self._conn.execute("ALTER TABLE accounts ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
+        if "approval_status" not in account_columns:
+            self._conn.execute("ALTER TABLE accounts ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved'")
+        self._conn.commit()
+        # Backfill membership rows for accounts created before the membership table existed.
+        self._conn.execute("INSERT OR IGNORE INTO account_tenant_memberships(account_id,tenant_id,role,created_at) SELECT account_id,tenant_id,role,created_at FROM accounts")
         self._conn.commit()
 
     def enroll_device(
@@ -256,11 +359,141 @@ class ShieldStore:
         ).fetchone()
         return bool(row and secrets.compare_digest(row["device_token_hash"], _hash_token(token)))
 
-    def mint_tenant_admin_token(self, *, tenant_id: str) -> str:
+    def create_account(self, *, tenant_id: str, email: str, password: str, display_name: str) -> dict[str, Any]:
+        tenant_id = tenant_id.strip()
+        email = email.strip().lower()
+        display_name = display_name.strip()
+        if not tenant_id or "@" not in email or not display_name:
+            raise ValueError("valid email and display name are required")
+        salt, digest = _password_hash(password)
+        account_id = secrets.token_hex(16)
+        now = _now()
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO tenants (tenant_id, created_at) VALUES (?, ?)", (tenant_id, now))
+            try:
+                self._conn.execute("INSERT INTO accounts(account_id,tenant_id,email,display_name,password_hash,password_salt,created_at) VALUES(?,?,?,?,?,?,?)", (account_id, tenant_id, email, display_name, digest, salt, now))
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("an account with that email already exists") from exc
+            self._conn.execute("INSERT INTO account_tenant_memberships(account_id,tenant_id,role,created_at) VALUES(?,?,?,?)", (account_id, tenant_id, "tenant_admin", now))
+        return {"id": account_id, "tenant_id": tenant_id, "email": email, "display_name": display_name, "role": "tenant_admin", "status": "active", "email_verified": True, "approval_status": "approved", "created_at": now, "tenants": [{"tenant_id": tenant_id, "role": "tenant_admin", "created_at": now}]}
+
+    def record_auth_event(self, *, event_type: str, email: str | None = None, tenant_id: str | None = None, detail: str | None = None) -> None:
+        with self._conn:
+            self._conn.execute("INSERT INTO auth_events(tenant_id,email,event_type,detail,created_at) VALUES(?,?,?,?,?)", (tenant_id, email.strip().lower() if email else None, event_type, detail, _now()))
+
+    def list_auth_events(self, *, tenant_id: str, email: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        query = "SELECT event_type,email,detail,created_at FROM auth_events WHERE tenant_id=?"
+        params: list[Any] = [tenant_id]
+        if email:
+            query += " AND email=?"
+            params.append(email.strip().lower())
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
+        return [dict(row) for row in self._conn.execute(query, tuple(params)).fetchall()]
+
+    def authenticate_account(self, *, email: str, password: str) -> tuple[dict[str, Any], str] | None:
+        normalized = email.strip().lower()
+        row = self._conn.execute('SELECT * FROM accounts WHERE email=? AND status="active"', (normalized,)).fetchone()
+        now = datetime.now(timezone.utc)
+        if row is None:
+            self.record_auth_event(event_type="login_failed", email=normalized, detail="unknown account")
+            return None
+        if not row["email_verified"] or row["approval_status"] != "approved":
+            self.record_auth_event(event_type="login_blocked", email=normalized, tenant_id=row["tenant_id"], detail="verification or administrator approval required")
+            return None
+        locked_until = row["locked_until"]
+        if locked_until:
+            try:
+                if datetime.fromisoformat(locked_until.replace("Z", "+00:00")) > now:
+                    self.record_auth_event(event_type="login_blocked", email=normalized, tenant_id=row["tenant_id"], detail="account lockout")
+                    return None
+            except ValueError:
+                pass
+        if not _password_matches(password, row["password_salt"], row["password_hash"]):
+            attempts = int(row["failed_attempts"] or 0) + 1
+            lock = (now + timedelta(minutes=15)).isoformat() if attempts >= 5 else None
+            with self._conn:
+                self._conn.execute("UPDATE accounts SET failed_attempts=?, locked_until=? WHERE account_id=?", (attempts, lock, row["account_id"]))
+            self.record_auth_event(event_type="login_failed", email=normalized, tenant_id=row["tenant_id"], detail="locked" if lock else "invalid password")
+            return None
+        with self._conn:
+            self._conn.execute("UPDATE accounts SET failed_attempts=0, locked_until=NULL WHERE account_id=?", (row["account_id"],))
+        self.record_auth_event(event_type="login_succeeded", email=normalized, tenant_id=row["tenant_id"])
+        account = {"id": row["account_id"], "tenant_id": row["tenant_id"], "email": row["email"], "display_name": row["display_name"], "role": row["role"], "status": row["status"], "email_verified": bool(row["email_verified"]), "approval_status": row["approval_status"], "created_at": row["created_at"], "tenants": self.list_account_tenants(account_id=row["account_id"])}
+        return account, self.mint_tenant_admin_token(tenant_id=row["tenant_id"])
+
+    def get_account_for_tenant(self, *, tenant_id: str, email: str) -> dict[str, Any] | None:
+        row = self._conn.execute("SELECT account_id,tenant_id,email,display_name,status,role,created_at FROM accounts WHERE tenant_id=? AND email=?", (tenant_id, email.strip().lower())).fetchone()
+        return dict(row) if row else None
+
+    def list_account_tenants(self, *, account_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute("SELECT tenant_id,role,created_at FROM account_tenant_memberships WHERE account_id=? ORDER BY tenant_id", (account_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def approve_account(self, *, tenant_id: str, email: str, verified: bool = True) -> bool:
+        row = self._conn.execute("SELECT account_id FROM accounts WHERE tenant_id=? AND email=?", (tenant_id, email.strip().lower())).fetchone()
+        if row is None:
+            return False
+        with self._conn:
+            self._conn.execute("UPDATE accounts SET email_verified=?,approval_status='approved' WHERE account_id=?", (1 if verified else 0, row["account_id"]))
+        self.record_auth_event(event_type="account_approved", email=email, tenant_id=tenant_id)
+        return True
+
+    def switch_account_tenant(self, *, current_tenant_id: str, email: str, target_tenant_id: str) -> tuple[dict[str, Any], str] | None:
+        account = self.get_account_for_tenant(tenant_id=current_tenant_id, email=email)
+        if account is None:
+            return None
+        membership = self._conn.execute("SELECT role FROM account_tenant_memberships WHERE account_id=? AND tenant_id=?", (account["account_id"], target_tenant_id)).fetchone()
+        if membership is None:
+            return None
+        account["tenant_id"] = target_tenant_id
+        account["role"] = membership["role"]
+        self.record_auth_event(event_type="tenant_switched", email=account["email"], tenant_id=target_tenant_id, detail=f"from={current_tenant_id}")
+        return account, self.mint_tenant_admin_token(tenant_id=target_tenant_id)
+
+    def change_account_password(self, *, tenant_id: str, email: str, current_password: str, new_password: str) -> bool:
+        normalized = email.strip().lower()
+        row = self._conn.execute('SELECT * FROM accounts WHERE tenant_id=? AND email=? AND status="active"', (tenant_id, normalized)).fetchone()
+        if row is None or not _password_matches(current_password, row["password_salt"], row["password_hash"]):
+            self.record_auth_event(event_type="password_change_failed", email=normalized, tenant_id=tenant_id, detail="invalid current password")
+            return False
+        salt, digest = _password_hash(new_password)
+        with self._conn:
+            self._conn.execute("UPDATE accounts SET password_hash=?, password_salt=?, failed_attempts=0, locked_until=NULL WHERE account_id=?", (digest, salt, row["account_id"]))
+        self.record_auth_event(event_type="password_changed", email=normalized, tenant_id=tenant_id)
+        return True
+
+    def request_password_reset(self, *, email: str, ttl_minutes: int = 30) -> str | None:
+        normalized = email.strip().lower()
+        row = self._conn.execute('SELECT account_id,tenant_id FROM accounts WHERE email=? AND status="active"', (normalized,)).fetchone()
+        if row is None:
+            self.record_auth_event(event_type="password_reset_requested", email=normalized, detail="unknown account")
+            return None
+        raw = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        with self._conn:
+            self._conn.execute("INSERT INTO password_reset_tokens(id,account_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)", (secrets.token_hex(16), row["account_id"], _hash_token(raw), (now + timedelta(minutes=ttl_minutes)).isoformat(), _now()))
+        self.record_auth_event(event_type="password_reset_requested", email=normalized, tenant_id=row["tenant_id"])
+        return raw
+
+    def reset_password(self, *, reset_token: str, new_password: str) -> bool:
+        row = self._conn.execute("SELECT id,account_id,expires_at FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL", (_hash_token(reset_token),)).fetchone()
+        if row is None or datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00")) <= datetime.now(timezone.utc):
+            return False
+        salt, digest = _password_hash(new_password)
+        with self._conn:
+            self._conn.execute("UPDATE accounts SET password_hash=?,password_salt=?,failed_attempts=0,locked_until=NULL WHERE account_id=?", (digest, salt, row["account_id"]))
+            self._conn.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?", (_now(), row["id"]))
+            account = self._conn.execute("SELECT email,tenant_id FROM accounts WHERE account_id=?", (row["account_id"],)).fetchone()
+        self.record_auth_event(event_type="password_reset_completed", email=account["email"] if account else None, tenant_id=account["tenant_id"] if account else None)
+        return True
+
+    def mint_tenant_admin_token(self, *, tenant_id: str, ttl_hours: int | None = 24) -> str:
         """Issue a fresh admin token scoped to one tenant, replacing any prior token."""
         self._validate_id("tenant_id", tenant_id)
         token = secrets.token_urlsafe(32)
         now = _now()
+        expires_at = None if ttl_hours is None else (datetime.now(timezone.utc) + timedelta(hours=ttl_hours)).isoformat()
         with self._conn:
             self._conn.execute(
                 "INSERT OR IGNORE INTO tenants (tenant_id, created_at) VALUES (?, ?)",
@@ -268,23 +501,42 @@ class ShieldStore:
             )
             self._conn.execute(
                 """
-                INSERT INTO tenant_admin_tokens (tenant_id, token_hash, created_at)
-                VALUES (?, ?, ?)
+                INSERT INTO tenant_admin_tokens (tenant_id, token_hash, created_at, last_used_at, expires_at)
+                VALUES (?, ?, ?, NULL, ?)
                 ON CONFLICT(tenant_id) DO UPDATE SET
                     token_hash=excluded.token_hash,
-                    created_at=excluded.created_at
+                    created_at=excluded.created_at,
+                    last_used_at=NULL,
+                    expires_at=excluded.expires_at
                 """,
-                (tenant_id, _hash_token(token), now),
+                (tenant_id, _hash_token(token), now, expires_at),
             )
         return token
 
     def authenticate_tenant_admin(self, *, tenant_id: str, token: str) -> bool:
         """Check a tenant-scoped admin token. Never grants access to a different tenant_id."""
         row = self._conn.execute(
-            "SELECT token_hash FROM tenant_admin_tokens WHERE tenant_id=?",
-            (tenant_id,),
+            "SELECT token_hash FROM tenant_admin_tokens WHERE tenant_id=? AND (expires_at IS NULL OR expires_at > ?)",
+            (tenant_id, _now()),
         ).fetchone()
-        return bool(row and secrets.compare_digest(row["token_hash"], _hash_token(token)))
+        valid = bool(row and secrets.compare_digest(row["token_hash"], _hash_token(token)))
+        if valid:
+            with self._conn:
+                self._conn.execute("UPDATE tenant_admin_tokens SET last_used_at=? WHERE tenant_id=?", (_now(), tenant_id))
+        return valid
+
+    def list_tenant_admin_sessions(self, *, tenant_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute("SELECT tenant_id,created_at,last_used_at,expires_at FROM tenant_admin_tokens WHERE tenant_id=?", (tenant_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def tenant_admin_token_expiry(self, *, tenant_id: str) -> str | None:
+        row = self._conn.execute("SELECT expires_at FROM tenant_admin_tokens WHERE tenant_id=?", (tenant_id,)).fetchone()
+        return row["expires_at"] if row else None
+
+    def revoke_tenant_admin_token(self, *, tenant_id: str, token: str) -> bool:
+        with self._conn:
+            cur = self._conn.execute("DELETE FROM tenant_admin_tokens WHERE tenant_id=? AND token_hash=?", (tenant_id, _hash_token(token)))
+        return cur.rowcount > 0
 
     def put_policy(self, *, tenant_id: str, device_id: str, policy_doc: dict[str, Any]) -> PolicyBundle:
         self._validate_id("tenant_id", tenant_id)
@@ -302,6 +554,9 @@ class ShieldStore:
                 "INSERT OR IGNORE INTO tenants (tenant_id, created_at) VALUES (?, ?)",
                 (tenant_id, _now()),
             )
+            previous = self._conn.execute("SELECT policy_version,policy_hash,policy_json,created_at FROM policies WHERE tenant_id=? AND device_id=?", (tenant_id, device_id)).fetchone()
+            if previous:
+                self._conn.execute("INSERT INTO policy_history(tenant_id,device_id,policy_version,policy_hash,policy_json,created_at) VALUES(?,?,?,?,?,?)", (tenant_id, device_id, previous["policy_version"], previous["policy_hash"], previous["policy_json"], previous["created_at"]))
             self._conn.execute(
                 """
                 INSERT INTO policies (tenant_id, device_id, policy_version, policy_hash, policy_json, created_at)
@@ -314,6 +569,17 @@ class ShieldStore:
                 """,
                 (tenant_id, device_id, bundle.version, bundle.hash, raw.decode("utf-8"), _now()),
             )
+        return bundle
+
+    def list_policy_history(self, *, tenant_id: str, device_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute("SELECT id,device_id,policy_version,policy_hash,created_at FROM policy_history WHERE tenant_id=? AND device_id=? ORDER BY id DESC", (tenant_id, device_id)).fetchall()
+        return [dict(row) for row in rows]
+
+    def rollback_policy(self, *, tenant_id: str, device_id: str, history_id: int) -> PolicyBundle:
+        row = self._conn.execute("SELECT policy_version,policy_hash,policy_json FROM policy_history WHERE id=? AND tenant_id=? AND device_id=?", (history_id, tenant_id, device_id)).fetchone()
+        if row is None:
+            raise ValueError("policy history record not found")
+        bundle = self.put_policy(tenant_id=tenant_id, device_id=device_id, policy_doc=json.loads(row["policy_json"]))
         return bundle
 
     def get_policy_doc(self, *, tenant_id: str, device_id: str) -> dict[str, Any] | None:
@@ -537,6 +803,25 @@ class ShieldStore:
             {"device_id": row["device_id"], "status": json.loads(row["status_json"]), "updated_at": row["updated_at"]}
             for row in rows
         ]
+
+    def request_exporter_remediation(self, *, tenant_id: str, device_id: str, action: str, reason: str = "") -> dict[str, Any]:
+        if action not in {"retry", "reconnect", "flush"}:
+            raise ValueError("unsupported exporter remediation action")
+        self._validate_id("tenant_id", tenant_id)
+        self._validate_id("device_id", device_id)
+        now = _now()
+        with self._conn:
+            cur = self._conn.execute("INSERT INTO exporter_remediation_requests(tenant_id,device_id,action,reason,status,created_at) VALUES(?,?,?,?,?,?)", (tenant_id, device_id, action, reason.strip(), "queued", now))
+        return {"id": cur.lastrowid, "tenant_id": tenant_id, "device_id": device_id, "action": action, "reason": reason.strip(), "status": "queued", "created_at": now, "execution": "queued_for_exporter_worker"}
+
+    def list_exporter_remediation_requests(self, *, tenant_id: str, device_id: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT id,tenant_id,device_id,action,reason,status,created_at FROM exporter_remediation_requests WHERE tenant_id=?"
+        params: tuple[Any, ...] = (tenant_id,)
+        if device_id:
+            query += " AND device_id=?"
+            params += (device_id,)
+        query += " ORDER BY id DESC"
+        return [dict(row) for row in self._conn.execute(query, params).fetchall()]
 
     def put_integration(
         self,

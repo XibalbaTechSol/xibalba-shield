@@ -58,6 +58,18 @@ def test_backend_enrolls_device_and_serves_policy_to_existing_client_shape(tmp_p
         status, policy = _request(enrolled["device_config"]["tenant_policy_url"], token=enrolled["device_token"])
         assert status == 200
         assert policy["policy_version"] == "tenant-a-v1"
+        status, _ = _request(f"{base}/api/shield/policies/tenant-a/dev-1", method="POST", body={"policy_version": "tenant-a-v2", "rules": []})
+        assert status == 200
+        status, history = _request(f"{base}/api/shield/policy-history?tenant_id=tenant-a&device_id=dev-1")
+        assert status == 200 and history["history"]
+        status, rolled = _request(f"{base}/api/shield/policy-history/rollback", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1", "history_id": history["history"][0]["id"]})
+        assert status == 200 and rolled["ok"] is True
+        status, policy = _request(enrolled["device_config"]["tenant_policy_url"], token=enrolled["device_token"])
+        assert status == 200 and policy["policy_version"] == "tenant-a-v1"
+        status, remediation = _request(f"{base}/api/shield/exporter-remediation", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1", "action": "retry", "reason": "queue is stale"})
+        assert status == 202 and remediation["status"] == "queued"
+        status, requests = _request(f"{base}/api/shield/exporter-remediation?tenant_id=tenant-a&device_id=dev-1")
+        assert status == 200 and requests["requests"][0]["action"] == "retry"
     finally:
         server.shutdown()
         store.close()
@@ -595,6 +607,42 @@ def test_backend_records_exporter_status_and_integrations(tmp_path):
         store.close()
 
 
+def test_backend_records_and_lists_enforcement_outcomes(tmp_path):
+    """`/api/shield/enforcement-outcomes` had no test coverage at all before this --
+    it's the real backend endpoint the console's new Containment Outcomes panel
+    (item 7) reads from, so its actual data contract needs to be verified, not assumed."""
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-1"},
+        )
+        token = enrolled["device_token"]
+
+        status, _result = _request(
+            f"{base}/api/shield/enforcement-outcomes",
+            method="POST",
+            token=token,
+            body={
+                "tenant_id": "tenant-a",
+                "device_id": "dev-1",
+                "outcome": {
+                    "event_id": "evt-1", "device_id": "dev-1", "action": "contain",
+                    "completed": False, "escalated": False, "error": "no such process: 4242",
+                },
+            },
+        )
+        assert status == 201
+
+        _status, outcomes = _request(f"{base}/api/shield/enforcement-outcomes?tenant_id=tenant-a")
+        assert outcomes["enforcement_outcomes"][0]["outcome"]["completed"] is False
+        assert outcomes["enforcement_outcomes"][0]["outcome"]["error"] == "no such process: 4242"
+    finally:
+        server.shutdown()
+        store.close()
+
+
 def test_backend_demo_seed_populates_console_data(tmp_path):
     server, store, base = _start_backend(tmp_path)
     try:
@@ -726,6 +774,169 @@ def test_backend_serves_xibalba_shield_console(tmp_path):
         assert response.status == 200
         assert "Xibalba Shield" in html
         assert "Latest Decisions" in html
+        # Device Health & Exporter Status panel (PRODUCTION_READINESS_PLAN.md §7 item 7) --
+        # regression guard against silently dropping the exporter-status wiring; doesn't
+        # execute the JS (no headless browser here), just confirms the fetch call, the
+        # target element, and the did_preflight-vs-legacy-demo-field branch are present.
+        assert 'id="exporterStatus"' in html
+        assert "loadExporterStatus" in html
+        assert "/api/shield/exporter-status" in html
+        assert "did_preflight" in html
+        # Containment Outcomes panel (item 7's "containment contracts" half) --
+        # /api/shield/enforcement-outcomes existed as a real endpoint but was never
+        # called from this console before this session.
+        assert 'id="containmentOutcomes"' in html
+        assert "loadContainmentOutcomes" in html
+        assert "/api/shield/enforcement-outcomes" in html
     finally:
         server.shutdown()
+        store.close()
+
+
+def test_backend_exporter_status_carries_real_watchdog_fields_through_to_the_api(tmp_path):
+    """Confirms the full real shape `shield.watchdog.Watchdog.tick()`/`publish_runtime_status`
+    actually sends -- policy/sensors/exporter/did_preflight, including this session's new
+    spool_pending/spool_oldest_age_seconds and check_did_preflight() fields -- round-trips
+    through the store unmodified. The console's rendering of this shape is covered manually
+    (browser-verified); this is the data-layer contract it depends on."""
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-1"},
+        )
+        token = enrolled["device_token"]
+
+        real_shaped_status = {
+            "policy": {"healthy": True, "active_policy_hash": "sha256:abc"},
+            "opa": {"healthy": True},
+            "sensors": {"attached": True, "lost_events": 2, "last_event_at": "2026-09-06T00:00:00Z"},
+            "exporter": {
+                "export_failures": 1, "queue_depth": 3,
+                "spool_pending": 1, "spool_oldest_age_seconds": 42.7,
+            },
+            "did_preflight": {
+                "did": "did:integrity:abc123", "did_loaded": True,
+                "bcc_middleware_reachable": True, "oracle_configured": True,
+                "oracle_reachable": True, "oracle_registered": False,
+            },
+        }
+        status, _result = _request(
+            f"{base}/api/shield/exporter-status",
+            method="POST",
+            token=token,
+            body={"tenant_id": "tenant-a", "device_id": "dev-1", "status": real_shaped_status},
+        )
+        assert status == 200
+
+        _status, exporter_status = _request(f"{base}/api/shield/exporter-status?tenant_id=tenant-a")
+        stored = exporter_status["exporter_status"][0]["status"]
+        assert stored["exporter"]["spool_pending"] == 1
+        assert stored["exporter"]["spool_oldest_age_seconds"] == 42.7
+        assert stored["did_preflight"]["oracle_registered"] is False
+        assert stored["sensors"]["lost_events"] == 2
+    finally:
+        server.shutdown()
+        store.close()
+
+def test_backend_account_signup_login_and_logout_revokes_session(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, signup = _request(
+            f"{base}/api/shield/auth/signup",
+            method="POST",
+            token="",
+            body={"tenant_id": "account-tenant", "email": "operator@example.com", "password": "correct horse battery staple", "display_name": "Account Operator"},
+        )
+        assert status == 201
+        assert signup["account"]["email"] == "operator@example.com"
+        assert signup["session_expires_at"]
+        token = signup["admin_token"]
+        status, login = _request(
+            f"{base}/api/shield/auth/login",
+            method="POST",
+            token="",
+            body={"email": "operator@example.com", "password": "correct horse battery staple"},
+        )
+        assert status == 200
+        assert login["tenant_id"] == "account-tenant"
+        assert login["session_expires_at"]
+        token = login["admin_token"]
+        with store._conn:
+            store._conn.execute("INSERT INTO tenants(tenant_id,created_at) VALUES(?,?)", ("second-tenant", "now"))
+            store._conn.execute("INSERT INTO account_tenant_memberships(account_id,tenant_id,role,created_at) SELECT account_id,?,role,created_at FROM accounts WHERE email=?", ("second-tenant", "operator@example.com"))
+        status, switched = _request(f"{base}/api/shield/auth/switch-tenant", method="POST", token=token, body={"current_tenant_id": "account-tenant", "target_tenant_id": "second-tenant", "email": "operator@example.com"})
+        assert status == 200 and switched["tenant_id"] == "second-tenant"
+        status, _ = _request(f"{base}/api/shield/dashboard-summary?tenant_id=account-tenant", token=token)
+        assert status == 200
+        status, audit = _request(f"{base}/api/shield/auth/events?tenant_id=account-tenant", token=token)
+        assert status == 200 and any(event["event_type"] == "login_succeeded" for event in audit["events"])
+        status, sessions = _request(f"{base}/api/shield/auth/sessions?tenant_id=account-tenant", token=token)
+        assert status == 200 and sessions["sessions"][0]["last_used_at"]
+        status, changed = _request(
+            f"{base}/api/shield/auth/password",
+            method="POST",
+            token=token,
+            body={"tenant_id": "account-tenant", "email": "operator@example.com", "current_password": "correct horse battery staple", "new_password": "new correct horse battery"},
+        )
+        assert status == 200 and changed["ok"] is True
+        status, relogin = _request(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "new correct horse battery"})
+        assert status == 200
+        token = relogin["admin_token"]
+        status, reset = _request(f"{base}/api/shield/auth/password-reset/request", method="POST", token="", body={"email": "operator@example.com"})
+        assert status == 200 and reset["reset_token"]
+        status, confirmed = _request(f"{base}/api/shield/auth/password-reset/confirm", method="POST", token="", body={"reset_token": reset["reset_token"], "new_password": "reset correct horse battery"})
+        assert status == 200 and confirmed["ok"] is True
+        status, relogin = _request(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "reset correct horse battery"})
+        assert status == 200
+        token = relogin["admin_token"]
+        status, logged_out = _request(
+            f"{base}/api/shield/auth/logout",
+            method="POST",
+            token=token,
+            body={"tenant_id": "account-tenant"},
+        )
+        assert status == 200 and logged_out["ok"] is True
+        try:
+            _request(f"{base}/api/shield/dashboard-summary?tenant_id=account-tenant", token=token)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+        else:
+            raise AssertionError("revoked account session was accepted")
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+
+def test_backend_account_auth_rate_limits_repeated_attempts(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        statuses = []
+        for _ in range(9):
+            try:
+                status, _ = _request(
+                    f"{base}/api/shield/auth/login",
+                    method="POST",
+                    token="",
+                    body={"email": "rate@example.com", "password": "wrong password"},
+                )
+                statuses.append(status)
+            except urllib.error.HTTPError as exc:
+                statuses.append(exc.code)
+        assert statuses[-1] == 429
+    finally:
+        server.shutdown(); server.server_close(); store.close()
+
+def test_account_failed_logins_lock_account_and_record_audit(tmp_path):
+    store = ShieldStore(tmp_path / "shield.sqlite3")
+    try:
+        store.create_account(tenant_id="lock-tenant", email="lock@example.com", password="correct horse battery staple", display_name="Lock User")
+        for _ in range(5):
+            assert store.authenticate_account(email="lock@example.com", password="wrong password") is None
+        assert store.authenticate_account(email="lock@example.com", password="correct horse battery staple") is None
+        events = store._conn.execute("SELECT event_type, detail FROM auth_events WHERE email=? ORDER BY id", ("lock@example.com",)).fetchall()
+        assert events[-1]["event_type"] == "login_blocked"
+        assert any(row["detail"] == "locked" for row in events)
+    finally:
         store.close()

@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import sys
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,6 +25,18 @@ DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
 
 
 def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*"):
+    auth_attempts: dict[str, list[float]] = {}
+
+    def auth_allowed(identity: str) -> bool:
+        now = time.monotonic()
+        recent = [stamp for stamp in auth_attempts.get(identity, []) if now - stamp < 60.0]
+        if len(recent) >= 8:
+            auth_attempts[identity] = recent
+            return False
+        recent.append(now)
+        auth_attempts[identity] = recent
+        return True
+
     class ShieldBackendHandler(BaseHTTPRequestHandler):
         server_version = "XibalbaShieldBackend/0.1"
 
@@ -47,6 +60,33 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
             if parsed.path == "/api/shield/health":
                 self._send_json({"ok": True, "service": "xibalba-shield-backend"})
+                return
+            if parsed.path == "/api/shield/auth/me":
+                if not self._require_admin():
+                    return
+                tenant_id = query.get("tenant_id", [""])[0]
+                email = query.get("email", [""])[0]
+                account = store.get_account_for_tenant(tenant_id=tenant_id, email=email) if tenant_id and email else None
+                self._send_json({"account": account})
+                return
+            if parsed.path == "/api/shield/auth/sessions":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"sessions": store.list_tenant_admin_sessions(tenant_id=tenant_id)})
+                return
+            if parsed.path == "/api/shield/auth/events":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"events": store.list_auth_events(tenant_id=tenant_id, email=query.get("email", [None])[0])})
+                return
+            if parsed.path == "/api/shield/policy-history":
+                tenant_id = self._tenant_from_query_or_error(query)
+                device_id = query.get("device_id", [""])[0]
+                if tenant_id is None or not device_id or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"history": store.list_policy_history(tenant_id=tenant_id, device_id=device_id)})
                 return
             if parts[:3] == ["api", "shield", "devices"]:
                 tenant_id = self._tenant_from_query_or_error(query)
@@ -89,6 +129,12 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"exporter_status": store.list_exporter_status(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/exporter-remediation":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"requests": store.list_exporter_remediation_requests(tenant_id=tenant_id, device_id=query.get("device_id", [None])[0])})
+                return
             if parsed.path == "/api/shield/integrations":
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
@@ -130,6 +176,113 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 body = self._read_json()
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+
+            if parsed.path == "/api/shield/auth/logout":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                auth = self.headers.get("Authorization", "")
+                token = auth[len("Bearer "):] if auth.startswith("Bearer ") else ""
+                revoked = store.revoke_tenant_admin_token(tenant_id=tenant_id, token=token)
+                store.record_auth_event(event_type="logout", tenant_id=tenant_id, detail="revoked" if revoked else "already revoked")
+                self._send_json({"ok": revoked})
+                return
+
+            if parsed.path == "/api/shield/auth/password":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                email = str(body.get("email") or "").strip().lower()
+                try:
+                    changed = store.change_account_password(
+                        tenant_id=tenant_id,
+                        email=email,
+                        current_password=str(body.get("current_password") or ""),
+                        new_password=str(body.get("new_password") or ""),
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                if not changed:
+                    self._send_error(HTTPStatus.UNAUTHORIZED, "current password is incorrect")
+                    return
+                self._send_json({"ok": True})
+                return
+
+            if parsed.path == "/api/shield/auth/switch-tenant":
+                current_tenant = str(body.get("current_tenant_id") or "")
+                target_tenant = str(body.get("target_tenant_id") or "")
+                if not self._require_admin(tenant_id=current_tenant):
+                    return
+                result = store.switch_account_tenant(current_tenant_id=current_tenant, email=str(body.get("email") or ""), target_tenant_id=target_tenant)
+                if result is None:
+                    self._send_error(HTTPStatus.FORBIDDEN, "account is not a member of the target tenant")
+                    return
+                account, token = result
+                account["id"] = account.pop("account_id")
+                self._send_json({"account": account, "tenant_id": target_tenant, "tenants": store.list_account_tenants(account_id=account["id"]), "admin_token": token, "session_expires_at": store.tenant_admin_token_expiry(tenant_id=target_tenant)})
+                return
+
+            if parsed.path == "/api/shield/auth/admin/approve":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                approved = store.approve_account(tenant_id=tenant_id, email=str(body.get("email") or ""), verified=bool(body.get("verified", True)))
+                self._send_json({"ok": approved}, status=HTTPStatus.OK if approved else HTTPStatus.NOT_FOUND)
+                return
+
+            if parsed.path == "/api/shield/auth/password-reset/request":
+                email = str(body.get("email") or "")
+                if not auth_allowed(f"password-reset:{email.strip().lower()}:{self.client_address[0]}"):
+                    self._send_error(HTTPStatus.TOO_MANY_REQUESTS, "too many password reset attempts; try again later")
+                    return
+                token = store.request_password_reset(email=email)
+                self._send_json({"ok": True, "reset_token": token, "delivery": "local_only"})
+                return
+
+            if parsed.path == "/api/shield/auth/password-reset/confirm":
+                try:
+                    changed = store.reset_password(reset_token=str(body.get("reset_token") or ""), new_password=str(body.get("new_password") or ""))
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"ok": changed} if changed else {"error": "reset token is invalid or expired"}, status=HTTPStatus.OK if changed else HTTPStatus.BAD_REQUEST)
+                return
+
+            if parsed.path == "/api/shield/exporter-remediation":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                try:
+                    request = store.request_exporter_remediation(tenant_id=tenant_id, device_id=str(body.get("device_id") or ""), action=str(body.get("action") or "retry"), reason=str(body.get("reason") or ""))
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(request, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path in ("/api/shield/auth/signup", "/api/shield/auth/login"):
+                try:
+                    email = str(body.get("email") or "")
+                    if not auth_allowed(f"{parsed.path}:{email.strip().lower()}:{self.client_address[0]}"):
+                        self._send_error(HTTPStatus.TOO_MANY_REQUESTS, "too many authentication attempts; try again later")
+                        return
+                    password = str(body.get("password") or "")
+                    if parsed.path.endswith("signup"):
+                        tenant_id = str(body.get("tenant_id") or "")
+                        account = store.create_account(tenant_id=tenant_id, email=email, password=password, display_name=str(body.get("display_name") or ""))
+                        store.record_auth_event(event_type="account_created", email=email, tenant_id=tenant_id)
+                        token = store.mint_tenant_admin_token(tenant_id=tenant_id)
+                    else:
+                        result = store.authenticate_account(email=email, password=password)
+                        if result is None:
+                            raise ValueError("invalid email or password")
+                        account, token = result
+                        tenant_id = account["tenant_id"]
+                    self._send_json({"account": account, "tenant_id": tenant_id, "tenants": store.list_account_tenants(account_id=account["id"]), "admin_token": token, "session_expires_at": store.tenant_admin_token_expiry(tenant_id=tenant_id)}, status=HTTPStatus.CREATED if parsed.path.endswith("signup") else HTTPStatus.OK)
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                 return
 
             if parsed.path == "/api/shield/enroll":
@@ -245,6 +398,19 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json({"policy_version": bundle.version, "policy_hash": bundle.hash, "rules": len(bundle.rules)})
+                return
+
+            if parsed.path == "/api/shield/policy-history/rollback":
+                tenant_id = str(body.get("tenant_id") or "")
+                device_id = str(body.get("device_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                try:
+                    bundle = store.rollback_policy(tenant_id=tenant_id, device_id=device_id, history_id=int(body.get("history_id")))
+                except (TypeError, ValueError, ConfigError) as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"ok": True, "policy_version": bundle.version, "policy_hash": bundle.hash})
                 return
 
             if parsed.path == "/api/shield/transaction-intents":
@@ -585,6 +751,10 @@ def _seed_demo(store: ShieldStore, body: dict[str, Any], *, base_url: str) -> di
         tenant_id=tenant_id,
         device_id=device_id,
         status={
+            # Synthetic values for this demo fixture only -- a real device gets a real,
+            # checkable answer to these same three questions from `shield preflight`
+            # (shield/integrity_exporter/preflight.py, PRODUCTION_READINESS_PLAN.md §7
+            # item 4), not this hardcoded placeholder.
             "did_registered": False,
             "bcc_middleware": "not_checked",
             "oracle_readback": "blocked_until_rpc_credentials",
@@ -860,6 +1030,11 @@ def _console_html() -> str:
     .pill { display: inline-block; border-radius: 999px; padding: 3px 8px; background: #e9eef3; font-size: 12px; }
     .deny, .contain, .escalate { background: #ffe8e2; color: #82240f; }
     .allow, .log_only { background: #e6f4ea; color: #1f6b38; }
+    .health-ok { color: #1f6b38; }
+    .health-warn { color: #b45309; }
+    .health-bad { color: #82240f; }
+    .health-unknown { color: #5d6875; }
+    .health-cell { font-size: 12px; line-height: 1.5; }
     @media (max-width: 820px) { .grid, .split, .key { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
   </style>
 </head>
@@ -940,6 +1115,25 @@ def _console_html() -> str:
       </div>
     </section>
     <section>
+      <h2>Device Health &amp; Exporter Status</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Device</th><th>DID Preflight</th><th>Policy</th><th>Sensors</th>
+            <th>Exporter</th><th>Spool</th><th>Updated</th>
+          </tr>
+        </thead>
+        <tbody id="exporterStatus"></tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Containment Outcomes</h2>
+      <table>
+        <thead><tr><th>Device</th><th>Action</th><th>Result</th><th>Escalated</th><th>Error</th><th>When</th></tr></thead>
+        <tbody id="containmentOutcomes"></tbody>
+      </table>
+    </section>
+    <section>
       <h2>Latest Burn-In Metrics</h2>
       <div class="panel"><code id="metrics">No metrics yet.</code></div>
     </section>
@@ -953,6 +1147,7 @@ def _console_html() -> str:
     let graphState = { zoom: 1, panX: 0, panY: 0, background: 'light', edgeType: 'all' };
     let graphNodes = [];
     let graphEdges = [];
+    let containmentOutcomesData = [];
 
     async function loadSummary() {
       const tenant = document.getElementById('tenant').value;
@@ -980,8 +1175,84 @@ def _console_html() -> str:
       document.getElementById('metrics').textContent = data.latest_metrics ? JSON.stringify(data.latest_metrics, null, 2) : 'No metrics yet.';
       document.getElementById('detectionQuality').textContent = data.latest_detection_quality ? JSON.stringify(data.latest_detection_quality.aggregate, null, 2) : 'No detection-quality samples yet.';
       summaryData = data;
+      // Fetched before buildGraph() so containment-outcome nodes/edges (see buildGraph's
+      // own containment section) can be included in the same graph build, not bolted on
+      // as a separate, un-integrated fetch.
+      await loadContainmentOutcomes();
       buildGraph(data);
       drawGraph();
+      await loadExporterStatus();
+    }
+    function healthSpan(ok, label) {
+      // ok: true/false/null -- null means "not checked" (e.g. no oracle_url configured,
+      // or this device predates the real preflight/spool telemetry, e.g. --no-exporter).
+      const cls = ok === true ? 'health-ok' : ok === false ? 'health-bad' : 'health-unknown';
+      return `<span class="${cls}">${escapeHtml(label)}</span>`;
+    }
+    async function loadExporterStatus() {
+      const tenant = document.getElementById('tenant').value;
+      const token = document.getElementById('token').value;
+      const res = await fetch(`/api/shield/exporter-status?tenant_id=${encodeURIComponent(tenant)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) { return; }
+      document.getElementById('exporterStatus').innerHTML = (data.exporter_status || []).map(row => {
+        const s = row.status || {};
+        const pre = s.did_preflight || null;
+        // did_preflight (real, per-device check -- see shield/integrity_exporter/preflight.py)
+        // takes precedence; falls back to the older demo-seed did_registered/oracle_readback/
+        // bcc_middleware fields for devices/tenants that only have those (e.g. the demo seed).
+        let didCell;
+        if (pre) {
+          didCell = [
+            healthSpan(pre.did_loaded, pre.did_loaded ? `DID ${escapeHtml(pre.did || '')}` : 'DID load failed'),
+            healthSpan(pre.bcc_middleware_reachable, `bcc_middleware ${pre.bcc_middleware_reachable ? 'reachable' : 'unreachable'}`),
+            pre.oracle_configured
+              ? healthSpan(pre.oracle_registered, `oracle ${pre.oracle_registered === false ? 'not yet registered' : pre.oracle_registered === true ? 'registered' : 'reachable, registration unknown'}`)
+              : healthSpan(null, 'oracle not configured'),
+          ].join('<br>');
+        } else {
+          didCell = [
+            healthSpan(s.did_registered === true ? true : s.did_registered === false ? false : null, `DID ${s.did_registered === undefined ? 'unknown' : s.did_registered}`),
+            healthSpan(null, `oracle_readback ${escapeHtml(String(s.oracle_readback ?? 'unknown'))}`),
+          ].join('<br>');
+        }
+        const policy = s.policy || {};
+        const policyCell = healthSpan(policy.healthy, policy.healthy === undefined ? 'unknown' : (policy.healthy ? 'healthy' : 'unhealthy'))
+          + (policy.active_policy_hash ? `<br><code>${escapeHtml(String(policy.active_policy_hash).slice(0, 10))}…</code>` : '');
+        const sensors = s.sensors || {};
+        const sensorsCell = sensors.attached === undefined
+          ? healthSpan(null, 'no sensor data')
+          : healthSpan(sensors.attached, sensors.attached ? 'attached' : 'not attached')
+            + `<br>lost_events: ${sensors.lost_events ?? 0}`;
+        const exporter = s.exporter || {};
+        const exporterCell = exporter.export_failures === undefined
+          ? healthSpan(null, 'no exporter data')
+          : healthSpan(exporter.export_failures === 0, `export_failures: ${exporter.export_failures}`)
+            + `<br>queue_depth: ${exporter.queue_depth ?? 'n/a'}`;
+        const spoolCell = exporter.spool_pending === undefined
+          ? healthSpan(null, 'no spool data')
+          : healthSpan(exporter.spool_pending === 0, `pending: ${exporter.spool_pending}`)
+            + (exporter.spool_oldest_age_seconds != null ? `<br>oldest: ${Math.round(exporter.spool_oldest_age_seconds)}s` : '');
+        return `<tr class="health-cell"><td>${escapeHtml(row.device_id)}</td><td>${didCell}</td><td>${policyCell}</td><td>${sensorsCell}</td><td>${exporterCell}</td><td>${spoolCell}</td><td>${escapeHtml(row.updated_at || '')}</td></tr>`;
+      }).join('');
+      await loadContainmentOutcomes();
+    }
+    async function loadContainmentOutcomes() {
+      const tenant = document.getElementById('tenant').value;
+      const token = document.getElementById('token').value;
+      const res = await fetch(`/api/shield/enforcement-outcomes?tenant_id=${encodeURIComponent(tenant)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) { return; }
+      containmentOutcomesData = data.enforcement_outcomes || [];
+      document.getElementById('containmentOutcomes').innerHTML = containmentOutcomesData.map(row => {
+        const o = row.outcome || {};
+        const resultCell = healthSpan(o.completed, o.completed ? 'completed' : 'FAILED');
+        return `<tr class="health-cell"><td>${escapeHtml(o.device_id || '')}</td><td>${escapeHtml(o.action || '')}</td><td>${resultCell}</td><td>${o.escalated ? 'yes' : 'no'}</td><td>${escapeHtml(o.error || '')}</td><td>${escapeHtml(row.received_at || '')}</td></tr>`;
+      }).join('');
     }
     async function seedDemo() {
       const tenant = document.getElementById('tenant').value;
