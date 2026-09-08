@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .readiness import ProductionReadiness
+from .responders import ResponderCapabilities, ResponderDisabled
+
 
 @dataclass(frozen=True)
 class ActionResult:
@@ -36,10 +39,28 @@ class ActionBroker:
         kill: Callable[[int, int], None] = os.kill,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        enable_destructive: bool = False,
+        enable_cgroup: bool = False,
+        enable_network: bool = False,
+        block_network: Callable[[dict[str, object]], str] | None = None,
+        readiness: ProductionReadiness | None = None,
     ) -> None:
         self._kill = kill
         self._monotonic = monotonic
         self._sleep = sleep
+        self._enable_destructive = enable_destructive
+        self._enable_cgroup = enable_cgroup
+        self._block_network = block_network
+        self.readiness = readiness or ProductionReadiness.from_mapping()
+        self.capabilities = ResponderCapabilities(
+            kill_process=enable_destructive and self.readiness.allowed("kill_process"),
+            freeze_cgroup=enable_cgroup and self.readiness.allowed("freeze_cgroup"),
+            block_flow=enable_network and block_network is not None and self.readiness.allowed("block_flow"),
+        )
+
+    def status(self) -> dict[str, object]:
+        """Return the operator-visible gate and effective responder capabilities."""
+        return {"capabilities": self.capabilities.__dict__, "readiness": self.readiness.as_dict()}
 
     @staticmethod
     def _validate_pid(pid: int) -> None:
@@ -60,11 +81,43 @@ class ActionBroker:
         """Freeze a process, preferring cgroup v2 when explicitly requested."""
         self._validate_pid(pid)
         if cgroup_path is not None:
+            if not self.capabilities.freeze_cgroup:
+                raise ResponderDisabled("freeze_cgroup is disabled until every production readiness proof passes")
             freeze_file = self._cgroup_freeze_file(cgroup_path)
             freeze_file.write_text("1\n", encoding="ascii")
             return ActionResult(pid, "freeze", "cgroup.freeze", True, cgroup_path=str(freeze_file.parent))
         self._kill(pid, signal.SIGSTOP)
         return ActionResult(pid, "freeze", "SIGSTOP", True)
+
+    def freeze_process(self, pid: int) -> ActionResult:
+        """Validated responder entry point for process freezing."""
+        return self.freeze(pid)
+
+    def kill_process(self, pid: int) -> ActionResult:
+        """Destructive responder reserved until a live kill gate is approved."""
+        self._validate_pid(pid)
+        if not self.capabilities.kill_process:
+            raise ResponderDisabled("kill_process is disabled until every production readiness proof passes")
+        self._kill(pid, signal.SIGKILL)
+        return ActionResult(pid, "terminate", "SIGKILL", True)
+
+    def freeze_cgroup(self, cgroup_path: str | os.PathLike[str], *, pid: int = 0) -> ActionResult:
+        """Cgroup freeze responder reserved until its runtime gate passes."""
+        if not self.capabilities.freeze_cgroup:
+            raise ResponderDisabled("freeze_cgroup is disabled until every production readiness proof passes")
+        freeze_file = self._cgroup_freeze_file(cgroup_path)
+        freeze_file.write_text("1\n", encoding="ascii")
+        return ActionResult(pid, "freeze", "cgroup.freeze", True, cgroup_path=str(freeze_file.parent))
+
+    def block_flow(self, flow: dict[str, object]) -> ActionResult:
+        """Install a validated, scoped network block through the configured adapter."""
+        if not self.capabilities.block_flow or self._block_network is None:
+            raise ResponderDisabled("block_flow is disabled until every production readiness proof passes")
+        pid = flow.get("pid", 0)
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid < 0:
+            raise ValueError("flow pid must be a non-negative integer")
+        method = self._block_network(flow)
+        return ActionResult(pid, "block_flow", method, True)
 
     def resume(self, pid: int, *, cgroup_path: str | os.PathLike[str] | None = None) -> ActionResult:
         """Resume a previously frozen process without terminating it."""
@@ -90,6 +143,8 @@ class ActionBroker:
         SIGKILL fallback.
         """
         self._validate_pid(pid)
+        if not self.capabilities.kill_process:
+            raise ResponderDisabled("kill_process is disabled until every production readiness proof passes")
         if timeout_seconds < 0:
             raise ValueError("timeout_seconds must be non-negative")
         deadline = self._monotonic() + timeout_seconds

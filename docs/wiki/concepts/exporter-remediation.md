@@ -8,6 +8,7 @@ confidence: high
 source_files:
  - shield/backend/remediation.py
  - shield/remediation_worker.py
+ - shield/config/tls.py
  - shield/backend/api.py
  - shield/watchdog.py
  - tests/test_remediation_api.py
@@ -44,6 +45,12 @@ The admin listing returns both requests and attempts.
 The [watchdog](../architecture/enforcement-pipeline.md) asks
 `RemediationWorker.run_once()` to claim at most one request per tick. Poll failures
 are logged and do not terminate local enforcement.
+
+When the device backend URL is HTTPS, `_request()` builds the same verified client context as
+the runtime-status publisher and policy distributor. A configured CA bundle establishes server
+trust and the configured client certificate/key establish mTLS; incomplete certificate pairs or
+TLS settings on an HTTP URL fail closed. The local development CA used in the 2026-09-08 live
+gate is not production trust material.
 
 ## Supported actions
 

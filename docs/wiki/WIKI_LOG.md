@@ -132,3 +132,52 @@
   preserving the per-kernel support boundary in `docs/SUPPORTED_MATRIX.md`.
 - Refreshed source-reviewed page dates, policy-profile provenance language, wiki counts, and
   navigation. Current test and table-of-contents results are recorded after validation below.
+
+## [2026-09-08] update | Local mTLS and split-helper runtime repair
+
+- Updated `README.md` and `docs/runbooks/linux-agent.md` with the local development mTLS
+  control-plane procedure, credential boundaries, authenticated status readback, and the
+  root-owned split-helper service relationship.
+- Recorded the live gate in `docs/live-gate/split-helper-2026-09-08.md`: runtime status and
+  remediation requests succeeded through `https://127.0.0.1:8443`; the endpoint then reported
+  real process events, `sensors.attached=true`, `lost_events=0`, OPA healthy, and zero exporter
+  failures.
+- Updated the sensor and exporter-remediation wiki concepts with the verified TLS context and
+  the runtime-directory ownership failure/fix. No new wiki pages were required.
+- Remaining boundary: this is local Ubuntu/kernel evidence with a development CA, not a
+  production PKI, reboot, or multi-kernel qualification.
+
+## [2026-09-08] update | Proof-gated cgroup, kill, and network responders
+
+- Added fail-closed configuration for cgroup v2 freeze, explicit process kill, and narrowly
+  scoped nftables destination blocks. Flags cannot bypass missing assurance or runtime proofs.
+- Added a fresh, root-owned, device-bound proof artifact contract and a disposable privileged
+  runner that kills only its own canary, freezes and resumes only its own temporary cgroup, and
+  creates then removes a unique nftables table.
+- Published effective capabilities and the precise missing-proof count in the live responder UI;
+  the console remains observational and cannot invoke or unlock destructive actions.
+- Verification: 55 focused backend/responder tests passed; UI lint and production build passed;
+  all 3 Chromium flows passed. Privileged host execution remains required before these three
+  capabilities may be reported as ready.
+
+## [2026-09-08] update | Comprehensive landing architecture and automated local access
+
+- Expanded the landing journey with code-native Mermaid diagrams for the local decision path
+  and fail-closed responder lifecycle, plus detailed operational-assurance content. Claims remain
+  limited to implemented or explicitly proof-gated behavior.
+- Added persistent first-boot generation for the backend super-admin token. Its value is stored
+  mode `0600`, reused across restarts, and never printed.
+- Added a development-only Vite authorization proxy and one-click local connection. The browser
+  retains only a non-secret marker while the local server reads the tenant token and injects the
+  authorization header; production builds do not expose this helper.
+
+## [2026-09-08] update | Comprehensive landing architecture and automated local access
+
+- Expanded the landing journey with code-native Mermaid diagrams for the local decision path
+  and fail-closed responder lifecycle, plus detailed operational-assurance content. Claims remain
+  limited to implemented or explicitly proof-gated behavior.
+- Added persistent first-boot generation for the backend super-admin token. Its value is stored
+  mode `0600`, reused across restarts, and never printed.
+- Added a development-only Vite authorization proxy and one-click local connection. The browser
+  retains only a non-secret marker while the local server reads the tenant token and injects the
+  authorization header; production builds do not expose this helper.

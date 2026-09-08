@@ -15,6 +15,7 @@ export function ContainmentView({ outcomes, api, data }) {
   const [message, setMessage] = useState('')
   const live = useMemo(() => (data.exporter || []).find((row) => row.status?.responders)?.status || {}, [data.exporter])
   const capabilities = live.responders?.capabilities || {}
+  const readiness = live.responders?.readiness || {}
 
   useEffect(() => {
     let cancelled = false
@@ -43,7 +44,7 @@ export function ContainmentView({ outcomes, api, data }) {
       <div className="settings-fields-grid"><div className="field-group"><label htmlFor="containment-mode">Response mode</label><select id="containment-mode" value={mode} onChange={(event) => setMode(event.target.value)}><option value="approval">Human approval for proposals</option><option value="autonomous">Autonomous policy-approved freeze</option><option value="audit">Audit only</option></select></div><div className="field-group"><label htmlFor="containment-cooldown">Cooldown between actions</label><select id="containment-cooldown" value={cooldown} onChange={(event) => setCooldown(event.target.value)}><option value="30">30 seconds</option><option value="60">60 seconds</option><option value="300">5 minutes</option></select></div></div>
       <div className="settings-actions-footer"><button type="submit" className="primary-btn"><Save size={14} /> Save containment policy</button>{message && <span className="form-message" aria-live="polite">{message}</span>}</div>
     </form>
-    <section className="settings-card"><div className="settings-card-header"><div className="settings-card-title"><Activity size={18} /><h3>Responder readiness</h3></div><span className="live-status-pill">Live agent report</span></div><div className="responder-grid">{ACTIONS.map(([key, label, description, fallback]) => { const enabled = capabilities[key] ?? fallback; return <article className={`responder-card ${enabled ? 'enabled' : 'disabled'}`} key={key}><div className="responder-card-top"><span className={`responder-status ${enabled ? 'ready' : 'locked'}`}>{enabled ? <><CheckCircle2 size={13} /> Ready</> : <><LockKeyhole size={13} /> Proof required</>}</span></div><h4>{label}</h4><p>{description}</p></article> })}</div></section>
+    <section className="settings-card"><div className="settings-card-header"><div className="settings-card-title"><Activity size={18} /><h3>Responder readiness</h3></div><span className="live-status-pill">Live agent report</span></div><div className="responder-grid">{ACTIONS.map(([key, label, description, fallback]) => { const enabled = capabilities[key] ?? fallback; const missing = readiness.missing?.[key] || []; return <article className={`responder-card ${enabled ? 'enabled' : 'disabled'}`} key={key}><div className="responder-card-top"><span className={`responder-status ${enabled ? 'ready' : 'locked'}`}>{enabled ? <><CheckCircle2 size={13} /> Ready</> : <><LockKeyhole size={13} /> Proof required</>}</span></div><h4>{label}</h4><p>{description}</p>{!enabled && missing.length > 0 && <small className="responder-missing" title={missing.join(', ')}>{missing.length} missing proof{missing.length === 1 ? '' : 's'} · {missing.slice(0, 2).map((item) => item.replaceAll('_', ' ')).join(' · ')}</small>}</article> })}</div></section>
     <OutcomeTable outcomes={outcomes} />
   </div>
 }

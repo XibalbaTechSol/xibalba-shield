@@ -31,6 +31,7 @@ from ..schemas.events import (
     PolicyDecision,
     RuleRef,
 )
+from .risk import assess_event
 
 logger = logging.getLogger("shield.policy_engine")
 
@@ -126,6 +127,41 @@ class PolicyEngine:
             rule_id = raw.get("rule_id", "_no_match")
             name = raw.get("name", "No rule matched")
             version = raw.get("version", "0")
+
+            assessment = assess_event(event)
+            # OPA remains authoritative for explicit deny/contain decisions.  The
+            # local assessment may only harden an otherwise permissive result when
+            # observable evidence crosses the containment threshold.
+            if action in {"allow", "log_only"} and assessment.suggested_action == "contain":
+                action = "contain"
+                reason = "local risk gate: " + "; ".join(signal.reason for signal in assessment.signals)
+                rule_id = "_local-risk-containment"
+                name = "High-confidence local risk evidence"
+                version = "1.0.0"
+            elif action in {"allow", "log_only"} and assessment.suggested_action == "escalate":
+                action = "escalate"
+                reason = "local risk gate requires review: " + "; ".join(signal.reason for signal in assessment.signals)
+                rule_id = "_local-risk-review"
+                name = "Local risk evidence requires review"
+
+            # An explicit OPA enforcement verdict is itself high-quality evidence,
+            # even when the normalized event has no optional risk fields populated.
+            # Do not report a policy deny as confidence=0 merely because the risk
+            # enrichment layer had nothing additional to score.
+            decision_confidence = assessment.confidence
+            decision_human_required = assessment.human_required
+            decision_evidence = [signal.reason for signal in assessment.signals]
+            if action == "contain":
+                decision_confidence = max(decision_confidence, 0.95)
+                decision_human_required = False
+                decision_evidence.append(f"OPA enforcement rule: {rule_id}")
+            elif action == "deny":
+                decision_confidence = max(decision_confidence, 0.90)
+                decision_human_required = False
+                decision_evidence.append(f"OPA denial rule: {rule_id}")
+            elif action == "escalate":
+                decision_confidence = max(decision_confidence, 0.75)
+                decision_evidence.append(f"OPA escalation rule: {rule_id}")
             
             # If not allowed and no specific reason given by OPA, default to "deny" logic
             if not opa_decision.allow and action == "log_only":
@@ -142,6 +178,10 @@ class PolicyEngine:
                     action=action,
                     reason=reason,
                     severity=_event_severity(event),
+                    confidence=decision_confidence,
+                    risk_score=assessment.score,
+                    human_required=decision_human_required,
+                    evidence=decision_evidence,
                 ),
             )
         except OPAUnavailableError as exc:

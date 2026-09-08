@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec /opt/xibalba-shield/venv/bin/python /usr/local/libexec/xibalba-shield-ebpf-helper \
+  --socket /run/xibalba-shield/ebpf.sock \
+  --device-id "${SHIELD_DEVICE_ID:?SHIELD_DEVICE_ID is required}" \
+  --tenant-id "${SHIELD_TENANT_ID:-}"

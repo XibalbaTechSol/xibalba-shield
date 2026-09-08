@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .config import DeviceConfig
+from .config.tls import build_client_context
 
 logger = logging.getLogger("shield.remediation_worker")
 
@@ -81,7 +82,9 @@ class RemediationWorker:
             headers={"Authorization": f"Bearer {self._config.device_token}", "Content-Type": "application/json"},
         )
         try:
-            with urlopen(request, timeout=self._timeout) as response:  # noqa: S310 -- configured control plane
+            context = build_client_context(self._config)
+            kwargs = {"context": context} if context is not None else {}
+            with urlopen(request, timeout=self._timeout, **kwargs) as response:  # noqa: S310 -- configured control plane
                 return json.load(response)
         except (HTTPError, URLError, TimeoutError) as exc:
             raise RuntimeError(f"remediation control-plane request failed: {exc}") from exc

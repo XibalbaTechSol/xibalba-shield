@@ -12,6 +12,10 @@ source_files:
   - shield/sensors/linux_sensor.py
   - shield/sensors/windows.py
   - shield/sensors/macos.py
+  - shield/sensors/privileged_socket.py
+  - scripts/shield_ebpf_helper.py
+  - packaging/systemd/xibalba-shield.service
+  - packaging/systemd/xibalba-shield-ebpf-helper.service
 ---
 
 ## Table of contents
@@ -19,6 +23,7 @@ source_files:
 - [Overview](#overview)
 - [DevModeSensor — real code, synthetic data, never claimed as telemetry](#devmodesensor-real-code-synthetic-data-never-claimed-as-telemetry)
 - [Linux eBPF sensors — verified on the recorded Ubuntu target](#linux-ebpf-sensors-verified-on-the-recorded-ubuntu-target)
+- [Privileged split-helper runtime](#privileged-split-helper-runtime)
 - [Windows/macOS — honest interface-boundary stubs](#windows-macos-honest-interface-boundary-stubs)
 - [Related pages](#related-pages)
 
@@ -71,6 +76,21 @@ implementations, not stubs:
 No eBPF sensor in this repo should be marked verified unless it was loaded as root and observed a
 real event on the target kernel — "historically live-verified" specifically means that
 verification happened at some point in the past, not that it is re-checked on every change.
+
+## Privileged split-helper runtime
+
+`shield/sensors/privileged_socket.py` is the non-root endpoint client for the root-owned
+`scripts/shield_ebpf_helper.py` bridge. The helper loads the real `LinuxEbpfSensor`, owns the
+kernel capabilities, and streams process events plus heartbeats over
+`/run/xibalba-shield/ebpf.sock`. The endpoint reports `attach_mode=privileged-helper`,
+`attached`, `last_event_at`, `last_heartbeat_at`, and `lost_events` from that stream.
+
+The systemd units deliberately have different runtime-directory ownership: only
+`xibalba-shield-ebpf-helper.service` declares `RuntimeDirectory=xibalba-shield`; the endpoint
+requires and starts after it. Sharing the declaration causes an endpoint restart to remove the
+helper's socket pathname while the helper remains alive, producing a detached sensor until both
+services are restarted in order. This was reproduced and fixed on the local Ubuntu host on
+2026-09-08.
 
 ## Windows/macOS — honest interface-boundary stubs
 

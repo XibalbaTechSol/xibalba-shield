@@ -7,11 +7,22 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 
-from shield.backend.api import make_handler
+from shield.backend.api import load_or_create_admin_token, make_handler, run_server
 from shield.backend.store import ShieldStore
 
 
 ADMIN = "test-admin-token"
+
+
+def test_backend_admin_token_is_generated_once_without_logging_value(tmp_path):
+    path = tmp_path / "state" / "admin.token"
+    first, created = load_or_create_admin_token(path)
+    second, recreated = load_or_create_admin_token(path)
+    assert created is True
+    assert recreated is False
+    assert first == second
+    assert len(first) >= 32
+    assert path.stat().st_mode & 0o777 == 0o600
 
 
 def _start_backend(tmp_path):
@@ -736,6 +747,42 @@ def test_backend_tenant_scoped_admin_token_cannot_read_another_tenant(tmp_path):
     finally:
         server.shutdown()
         store.close()
+
+
+def test_backend_rejects_legacy_dev_bypass_token(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        request = urllib.request.Request(
+            f"{base}/api/shield/devices?tenant_id=tenant-a",
+            headers={"Authorization": "Bearer dev"},
+        )
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+        else:
+            raise AssertionError("legacy dev token must not bypass authentication")
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_tls_requires_a_certificate_and_key_pair(tmp_path):
+    try:
+        run_server(host="127.0.0.1", port=0, db_path=tmp_path / "tls.sqlite3", admin_token=ADMIN, tls_cert=tmp_path / "server.crt")
+    except ValueError as exc:
+        assert "both --tls-cert and --tls-key" in str(exc)
+    else:
+        raise AssertionError("partial TLS configuration must fail closed")
+
+
+def test_backend_dedicated_tls_port_requires_certificates(tmp_path):
+    try:
+        run_server(host="127.0.0.1", port=0, tls_port=0, db_path=tmp_path / "tls-port.sqlite3", admin_token=ADMIN)
+    except ValueError as exc:
+        assert "--tls-port" in str(exc)
+    else:
+        raise AssertionError("dedicated TLS listener must fail closed without certificates")
 
 
 def test_backend_minting_admin_token_requires_super_admin_token(tmp_path):

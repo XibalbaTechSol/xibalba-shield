@@ -38,8 +38,12 @@ def _make_sensor(
     tenant_id: str,
     dev_interval: float,
     sensitive_paths: list[str],
+    privileged_socket: str | None = None,
 ):
     if name == "process-exec":
+        if privileged_socket:
+            from .sensors.privileged_socket import PrivilegedProcessSensor
+            return PrivilegedProcessSensor(privileged_socket)
         from .sensors.ebpf.loader import LinuxEbpfSensor
 
         return LinuxEbpfSensor(device_id=device_id, tenant_id=tenant_id)
@@ -265,6 +269,12 @@ def _run(args: argparse.Namespace) -> int:
                            device_role=device_config.device_role)
     registry = AgentRegistry()
     event_log = EventLog(args.log_path, integrity_key_path=args.log_integrity_key)
+    from .runtime_status import BackendEvidencePublisher
+
+    # The local control plane receives decisions/outcomes through a separate bounded
+    # publisher. It is useful even when --no-exporter is selected and never sits on the
+    # enforcement critical path.
+    evidence_publisher = BackendEvidencePublisher(device_config)
 
     # Build a real Integrity Exporter unless the operator explicitly opted out with
     # --no-exporter. Imported lazily so commands that don't run the enforcement loop
@@ -281,6 +291,10 @@ def _run(args: argparse.Namespace) -> int:
             agent_label=args.agent_label,
             chain_id=device_config.chain_id,
             verifying_contract=device_config.verifying_contract,
+            # Never let an unavailable remote exporter stall the eBPF event loop. Local
+            # policy evaluation and containment stay synchronous; signed BCC delivery is
+            # handled by the exporter's bounded durable queue and watchdog retries.
+            async_export=True,
         )
         # A one-time startup check (docs/PRODUCTION_READINESS_PLAN.md §7 item 4), not a
         # per-tick recheck -- Watchdog republishes this same value on every tick rather
@@ -302,7 +316,29 @@ def _run(args: argparse.Namespace) -> int:
     # exported as evidence after the fact. --no-containment exists for the same reason
     # --no-exporter does: local-only observation/dev use without taking real enforcement
     # action on this machine.
-    action_broker = None if args.no_containment else ActionBroker()
+    action_broker = None
+    if not args.no_containment:
+        from .agent_core import NftFlowBlocker, ProductionReadiness
+
+        readiness = ProductionReadiness.from_mapping()
+        if args.responder_readiness:
+            try:
+                readiness = ProductionReadiness.from_artifact(
+                    args.responder_readiness,
+                    device_id=device_config.device_id,
+                    max_age_seconds=args.responder_proof_max_age,
+                    require_root_owner=True,
+                )
+            except (OSError, ValueError, TypeError) as exc:
+                print(f"shield run: invalid responder readiness artifact: {exc}", file=sys.stderr)
+                return 1
+        action_broker = ActionBroker(
+            enable_destructive=args.enable_kill_process,
+            enable_cgroup=args.enable_freeze_cgroup,
+            enable_network=args.enable_block_flow,
+            block_network=NftFlowBlocker() if args.enable_block_flow else None,
+            readiness=readiness,
+        )
 
     try:
         from .agent_core.slm_backend import build_slm_backend
@@ -314,7 +350,9 @@ def _run(args: argparse.Namespace) -> int:
 
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
-                         slm_backend=slm_backend)
+                         slm_backend=slm_backend,
+                         decision_sink=evidence_publisher.publish_decision,
+                         enforcement_outcome_sink=evidence_publisher.publish_outcome)
 
     try:
         sensor = _make_sensor(
@@ -323,6 +361,7 @@ def _run(args: argparse.Namespace) -> int:
             device_config.tenant_id,
             args.dev_interval,
             device_config.sensitive_paths,
+            getattr(args, "privileged_socket", None),
         )
     except PermissionError as exc:
         print(f"shield run: {exc}", file=sys.stderr)
@@ -343,6 +382,8 @@ def _run(args: argparse.Namespace) -> int:
         sensor=sensor,
         did_preflight_status=did_preflight_status,
         remediation_worker=remediation_worker,
+        evidence_publisher=evidence_publisher,
+        responder_status=action_broker.status() if action_broker is not None else {"capabilities": {}, "readiness": {"ready": {}, "proofs": {}, "missing": {}}},
     )
     watchdog.start()
 
@@ -621,9 +662,21 @@ def main(argv: list[str] | None = None) -> int:
                              "unconfigurable, breaking any deployment where OPA isn't reachable "
                              "at localhost, e.g. a container where it's a separate service)")
     p_run.add_argument("--agent-label", default="xibalba-shield")
+    p_run.add_argument("--privileged-socket", default=None,
+                       help="consume process events from a root-owned eBPF bridge socket")
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
     p_run.add_argument("--no-containment", action="store_true",
                        help="observe/decide/log/export only -- never actually freeze a process")
+    p_run.add_argument("--responder-readiness", type=Path, default=None,
+                       help="device-bound live-gate proof JSON used to unlock gated responders")
+    p_run.add_argument("--responder-proof-max-age", type=int, default=86400,
+                       help="maximum responder proof age in seconds (default: 86400)")
+    p_run.add_argument("--enable-kill-process", action="store_true",
+                       help="enable SIGKILL only when its readiness proofs pass")
+    p_run.add_argument("--enable-freeze-cgroup", action="store_true",
+                       help="enable cgroup v2 freeze only when its readiness proofs pass")
+    p_run.add_argument("--enable-block-flow", action="store_true",
+                       help="enable scoped nftables blocks only when readiness proofs pass")
     p_run.add_argument("--slm-backend", choices=("none", "simulated", "local"), default="none",
                        help="Tier-2 escalation backend for Tier-1 'escalate' decisions: 'none' "
                             "(default, unchanged behavior), 'simulated' (deterministic, synthetic "

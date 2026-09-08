@@ -1,0 +1,35 @@
+[Unit]
+Description=Xibalba Shield authenticated control plane
+Documentation=README.md docs/runbooks/linux-agent.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/xibalba-shield/backend.env
+ExecStart=/opt/xibalba-shield/venv/bin/shield-backend --host 127.0.0.1 --port 8421 --db-path /home/xibalba/.xibalba-shield/backend.sqlite3 --admin-token-file /home/xibalba/.xibalba-shield/backend-admin.token
+Restart=on-failure
+RestartSec=3s
+User=xibalba
+Group=xibalba
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/xibalba/.xibalba-shield
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=default
+ProcSubset=all
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

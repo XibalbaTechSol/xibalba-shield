@@ -161,13 +161,15 @@ def test_verify_post_action_mismatched_hashes_raises_when_a_rule_flags_it(mock_o
         )
 
 
-def test_verify_post_action_mismatch_without_a_matching_rule_still_returns_a_decision(mock_opa):
-    """No exception when nothing is configured to react to the mismatch -- the hook still
-    reports it (policy_violation would be visible in the exported event), it just doesn't
-    force an exception on a caller who hasn't asked to be told."""
+def test_verify_post_action_mismatch_is_caught_by_local_risk_gate(mock_opa):
+    """A mismatch is actionable even when OPA has no matching rule.
+
+    The local risk gate treats the hook's policy-violation signal as high-confidence
+    containment evidence, and the post-action hook surfaces that decision as an anomaly.
+    """
     router = _router()
-    decision = verify_post_action(
-        router, agent_id="a1", agent_name="Agent", tool_name="write_file",
-        expected_state_hash="0xabc", actual_state_hash="0xdef",
-    )
-    assert decision.decision.action == "allow"  # no rule matched -> default allow, per engine's own rule
+    with pytest.raises(PostActionAnomaly, match="local risk gate"):
+        verify_post_action(
+            router, agent_id="a1", agent_name="Agent", tool_name="write_file",
+            expected_state_hash="0xabc", actual_state_hash="0xdef",
+        )

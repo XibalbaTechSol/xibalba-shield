@@ -73,6 +73,7 @@ class EventRouter:
         event_log: EventLog | None = None,
         slm_backend: SlmBackend | None = None,
         enforcement_outcome_sink: Callable[[EnforcementOutcome], None] | None = None,
+        decision_sink: Callable[[PolicyDecision], None] | None = None,
     ) -> None:
         self.device = device
         self.registry = registry
@@ -88,6 +89,7 @@ class EventRouter:
         # shield/backend/store.py's enforcement_outcomes table); router.py never persists
         # anything itself.
         self.enforcement_outcome_sink = enforcement_outcome_sink
+        self.decision_sink = decision_sink
 
     def _context(self) -> EvaluationContext:
         return EvaluationContext(
@@ -310,5 +312,11 @@ class EventRouter:
 
         if self.event_log is not None:
             self.event_log.append(decision)
+
+        if self.decision_sink is not None:
+            try:
+                self.decision_sink(decision)
+            except Exception:  # noqa: BLE001 -- backend evidence is downstream of enforcement
+                logger.exception("failed to publish decision evidence for %s", decision.event_ref.event_id)
 
         return decision

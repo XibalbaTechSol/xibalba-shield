@@ -37,6 +37,10 @@ install -d -m 0755 "$PREFIX"
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$CONFIG_DIR" "$POLICY_DIR" "$LOG_DIR" "$STATE_DIR"
 "$PYTHON_BIN" -m pip install --upgrade .
 install -m 0644 packaging/systemd/xibalba-shield.service "$SERVICE_DIR/xibalba-shield.service"
+install -m 0644 packaging/systemd/xibalba-shield-ebpf-helper.service "$SERVICE_DIR/xibalba-shield-ebpf-helper.service"
+install -d -m 0755 /usr/local/libexec
+install -m 0755 scripts/shield_ebpf_helper.py /usr/local/libexec/xibalba-shield-ebpf-helper
+install -m 0755 packaging/systemd/xibalba-shield-ebpf-helper-run /usr/local/libexec/xibalba-shield-ebpf-helper-run
 if [ ! -f "$CONFIG_DIR/shield.env" ]; then
   install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" packaging/systemd/shield.env.example "$CONFIG_DIR/shield.env"
 fi

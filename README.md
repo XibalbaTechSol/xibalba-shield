@@ -114,14 +114,20 @@ This gives Shield two complementary control planes:
 The policy engine remains local and deterministic. Enforcement does not require a cloud round trip. Export is downstream evidence propagation, not the authority that decides whether an action is allowed.
 
 The bounded Action Broker is implemented in `shield/agent_core/action_broker.py`. It uses
-resumable `SIGSTOP`/`SIGCONT` for ordinary process containment, supports explicit cgroup v2
-freezing for containerized agents, and only sends `SIGKILL` from an explicit timeout escalation.
+resumable `SIGSTOP`/`SIGCONT` for ordinary process containment and implements proof-gated
+cgroup v2 freeze, explicit `SIGKILL`, and destination-scoped nftables blocking. These three
+responders require both an explicit startup flag and a fresh, root-owned, device-bound live-gate
+artifact; neither configuration nor the UI can unlock them alone.
 The broker does not make policy decisions; callers must supply the already-authorized action.
 The verification record is [`docs/audits/2026-08-07-action-broker.md`](docs/audits/2026-08-07-action-broker.md).
 Wired into the live enforcement loop as of 2026-08-12: `agent_core/router.py`'s `handle()` calls
 `ActionBroker.contain()` as its very first step for any `contain` decision on a process-related
 event — before any network call, so containment speed is never affected by evidence-export
 latency. `shield run` constructs a real broker by default (`--no-containment` opts out).
+Use `scripts/verify_responder_gates.py` against disposable targets on the deployment host, then
+follow [`docs/runbooks/linux-agent.md`](docs/runbooks/linux-agent.md) to install the proof. Code
+and root-free contract tests are complete; the current checkout does not claim privileged proof
+for the three gated responders until that host run succeeds.
 
 ## The Xibalba Agent: Hybrid Cascading Architecture (A2A)
 
@@ -199,6 +205,12 @@ This layered control system is designed to ensure privacy by default and reserve
 ## Current Status
 
 ### Tenant settings and agent adoption
+
+The packaged backend bootstraps a persistent random super-admin token on first
+start when no explicit token is configured. The value is stored in a mode-`0600`
+state file, reused across restarts, and never written to logs. Tenant-scoped
+browser tokens are still minted separately so routine UI access does not expose
+the cross-tenant credential.
 
 Operational settings are validated server-side and assigned a deterministic `sha256:` configuration version. Every write is recorded in `tenant_settings_audit`. Sensor/evidence preferences can be saved directly; containment and agent-guardrail changes use the authenticated change-request workflow (`pending` → `approved`/`rejected`), with explicit rollback for approved changes.
 

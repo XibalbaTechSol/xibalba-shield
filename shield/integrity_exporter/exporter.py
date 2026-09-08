@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import inspect
 import logging
+import queue
+import threading
 from typing import Any
 
 from pathlib import Path
@@ -74,6 +76,8 @@ class IntegrityExporter:
         chain_id: int = 84532,
         verifying_contract: str = "0x72e21e44AdD6d6e7CAa02eaedF078630afC40819",
         spool_db_path: Path | str | None = None,
+        async_export: bool = False,
+        async_queue_size: int = 1024,
     ) -> None:
         # Bootstraps (or reuses) a real local DID/keypair the same way pretool_gate.py's
         # load_bridged_identity does — one identity per device/deployment, persisted under
@@ -100,6 +104,18 @@ class IntegrityExporter:
             background_flush=True,
         )
         self._export_failures = 0
+        self._async_export = bool(async_export)
+        self._decision_queue: queue.Queue[dict[str, Any]] | None = None
+        self._decision_queue_dropped = 0
+        if getattr(self, "_async_export", False):
+            if async_queue_size < 1:
+                raise ValueError("async_queue_size must be positive")
+            self._decision_queue = queue.Queue(maxsize=async_queue_size)
+            threading.Thread(
+                target=self._decision_export_loop,
+                name="shield-decision-exporter",
+                daemon=True,
+            ).start()
 
     def export_decision(self, decision: PolicyDecision) -> dict[str, Any]:
         intent_type = _intent_type_for(decision)
@@ -123,18 +139,47 @@ class IntegrityExporter:
             commitment_kwargs["invocation_id"] = decision.invocation_id
 
         commitment = bcc.build_bcc_commitment(**commitment_kwargs)
+        if getattr(self, "_async_export", False):
+            assert self._decision_queue is not None
+            try:
+                self._decision_queue.put_nowait(commitment)
+            except queue.Full:
+                self._decision_queue_dropped += 1
+                spool.enqueue(
+                    self._spool_db_path,
+                    kind="decision",
+                    payload=commitment,
+                    error="asynchronous decision export queue is full",
+                )
+                return {
+                    "authorized": False,
+                    "queued": False,
+                    "reason": "decision export queue full; commitment spooled",
+                    "invocation_id": decision.invocation_id,
+                    "invocation_id_signed": "invocation_id" in commitment,
+                }
+            return {
+                "authorized": False,
+                "queued": True,
+                "reason": "decision queued for asynchronous export",
+                "invocation_id": decision.invocation_id,
+                "invocation_id_signed": "invocation_id" in commitment,
+            }
+        return self._submit_commitment(commitment, decision.invocation_id, decision.event_ref.event_id)
+
+    def _submit_commitment(self, commitment: dict[str, Any], invocation_id: str, event_id: str) -> dict[str, Any]:
         try:
             result = bcc.submit_commitment(commitment, self.bcc_middleware_url)
             if isinstance(result, dict):
                 returned_invocation_id = result.get("invocation_id")
-                if returned_invocation_id not in (None, decision.invocation_id):
+                if returned_invocation_id not in (None, invocation_id):
                     raise RuntimeError(
                         "BCC response invocation_id does not match the signed commitment"
                     )
                 result.setdefault("agent_id", commitment["agent_id"])
                 result.setdefault("nonce", commitment["nonce"])
                 result.setdefault("intended_state_hash", commitment["intended_state_hash"])
-                result.setdefault("invocation_id", decision.invocation_id)
+                result.setdefault("invocation_id", invocation_id)
                 result.setdefault("invocation_id_signed", "invocation_id" in commitment)
             return result
         except Exception as exc:  # noqa: BLE001
@@ -142,7 +187,7 @@ class IntegrityExporter:
             # block enforcement) — a real decision was already made and acted on upstream;
             # losing the evidence submission must not be silently invisible, so it's logged
             # loudly rather than swallowed.
-            logger.warning("BCC submission failed for decision %s: %r", decision.event_ref.event_id, exc)
+            logger.warning("BCC submission failed for decision %s: %r", event_id, exc)
             self._export_failures += 1
             # Spool the already-built, already-signed commitment for later replay --
             # see spool.py's module docstring for why this is safe to resend as-is
@@ -151,9 +196,26 @@ class IntegrityExporter:
             return {
                 "authorized": False,
                 "reason": f"submission failed: {exc}",
-                "invocation_id": decision.invocation_id,
+                "invocation_id": invocation_id,
                 "invocation_id_signed": False,
             }
+
+    def _decision_export_loop(self) -> None:
+        assert self._decision_queue is not None
+        while True:
+            commitment = self._decision_queue.get()
+            try:
+                # build_bcc_commitment emits a flat wire object. The decision
+                # payload is hashed into intended_state_hash; it is not retained
+                # under an intent_payload key. Reading that nonexistent nested
+                # object passed an empty ID to the correlation check and turned
+                # valid async responses into false mismatch retries.
+                invocation_id = str(commitment.get("invocation_id", ""))
+                self._submit_commitment(commitment, invocation_id, "")
+            except Exception:  # pragma: no cover - defensive worker boundary
+                logger.exception("asynchronous decision export worker failed")
+            finally:
+                self._decision_queue.task_done()
 
     def replay_pending(self) -> spool.RetryCycleResult:
         """One retry pass over the durable spool -- called periodically by
@@ -193,9 +255,15 @@ class IntegrityExporter:
             except AttributeError:
                 queue_depth = None
         spool_status = spool.status(self._spool_db_path)
-        return {
+        result = {
             "export_failures": self._export_failures,
             "queue_depth": queue_depth,
             "spool_pending": spool_status["pending"],
             "spool_oldest_age_seconds": spool_status["oldest_age_seconds"],
         }
+        if self._async_export:
+            result.update({
+                "decision_queue_depth": self._decision_queue.qsize() if self._decision_queue is not None else 0,
+                "decision_queue_dropped": self._decision_queue_dropped,
+            })
+        return result

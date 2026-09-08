@@ -31,6 +31,23 @@ from ..transaction_simulator import SimulationError, simulate_transaction_intent
 
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
 
+
+def load_or_create_admin_token(path: Path) -> tuple[str, bool]:
+    """Return a persistent admin token, creating it atomically with mode 0600."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        token = path.read_text(encoding="ascii").strip()
+        if not token:
+            raise ValueError("admin token file is empty")
+        return token, False
+    except FileNotFoundError:
+        token = secrets.token_urlsafe(32)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        descriptor = os.open(path, flags, 0o600)
+        with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+            handle.write(token + "\n")
+        return token, True
+
 def _integration_probe(config: dict[str, Any], *, tenant_id: str, integration_id: str) -> dict[str, Any]:
     """Send a bounded, non-redirecting delivery probe to a configured integration."""
     endpoint = str(config.get("endpoint_url") or config.get("endpoint") or config.get("url") or config.get("webhook_url") or config.get("hec_url") or "").strip()
@@ -621,7 +638,14 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 except ValueError as exc:
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
-                self._send_json({"ok": True, "settings": saved})
+                settings_version = saved.pop("settings_version")
+                updated_at = saved.pop("updated_at")
+                self._send_json({
+                    "ok": True,
+                    "settings": saved,
+                    "settings_version": settings_version,
+                    "updated_at": updated_at,
+                })
                 return
 
             if parsed.path == "/api/shield/settings/change-requests":
@@ -1328,6 +1352,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=int(os.getenv("SHIELD_BACKEND_PORT", "8765")))
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", ""))
+    parser.add_argument("--admin-token-file", type=Path, default=Path(os.getenv("SHIELD_BACKEND_TOKEN_FILE", str(Path.home() / ".xibalba-shield" / "backend-admin.token"))))
     parser.add_argument("--public-base-url", default=os.getenv("SHIELD_PUBLIC_BASE_URL", ""))
     parser.add_argument("--allowed-origin", default=os.getenv("SHIELD_BACKEND_ALLOWED_ORIGIN", "*"), help="CORS origin for browser callers (e.g. the dashboard)")
     parser.add_argument("--tls-cert", type=Path, default=os.getenv("SHIELD_BACKEND_TLS_CERT") or None, help="PEM server certificate; must be paired with --tls-key")
@@ -1337,13 +1362,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.admin_token:
-        args.admin_token = secrets.token_urlsafe(32)
-        print(
-            "shield-backend: no SHIELD_BACKEND_TOKEN/--admin-token set — generated a random "
-            f"super-admin token for this run (save it, it will not be shown again):\n"
-            f"  {args.admin_token}",
-            file=sys.stderr,
-        )
+        try:
+            args.admin_token, created = load_or_create_admin_token(args.admin_token_file)
+        except (OSError, ValueError) as exc:
+            parser.error(f"cannot load or create admin token: {exc}")
+        state = "generated" if created else "loaded"
+        print(f"shield-backend: {state} persistent admin token at {args.admin_token_file} (value not printed)", file=sys.stderr)
 
     server = run_server(
         host=args.host,

@@ -39,3 +39,28 @@ def test_worker_records_terminal_failure(request):
     assert result.status == "failed"
     assert request.call_args_list[1].args[2]["status"] == "failed"
     assert request.call_args_list[1].args[2]["detail"] == {"error": "offline"}
+
+
+@patch("shield.remediation_worker.json.load", return_value={"request": None})
+@patch("shield.remediation_worker.urlopen")
+@patch("shield.remediation_worker.build_client_context")
+def test_worker_uses_configured_mtls_context(build_context, urlopen, _json_load):
+    config = DeviceConfig(
+        device_id="dev-1",
+        tenant_id="tenant-a",
+        device_token="secret",
+        backend_url="https://backend:8443",
+        backend_ca_file="/etc/shield/ca.crt",
+        backend_client_cert="/etc/shield/client.crt",
+        backend_client_key="/etc/shield/client.key",
+    )
+    context = object()
+    build_context.return_value = context
+    response = urlopen.return_value.__enter__.return_value
+
+    RemediationWorker(device_config=config, exporter=Mock())._claim()
+
+    build_context.assert_called_once_with(config)
+    assert urlopen.call_args.kwargs["context"] is context
+    assert urlopen.call_args.kwargs["timeout"] == 2.0
+    assert response is not None

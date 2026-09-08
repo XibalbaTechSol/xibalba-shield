@@ -2,15 +2,16 @@
 Description=Xibalba Shield endpoint agent
 Documentation=README.md docs/runbooks/linux-agent.md
 After=network-online.target
+Requires=xibalba-shield-ebpf-helper.service
+After=xibalba-shield-ebpf-helper.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 EnvironmentFile=-/etc/xibalba-shield/shield.env
-ExecStart=/usr/local/bin/shield --log-path /var/log/xibalba-shield/decisions.jsonl run --sensor ${SHIELD_SENSOR} --device-config /etc/xibalba-shield/device.json --rules /etc/xibalba-shield/policies/current.json ${SHIELD_EXPORTER_ARGS} ${SHIELD_OPA_ARGS}
+ExecStart=/usr/local/bin/xibalba-shield-run
 Restart=on-failure
 RestartSec=5s
-RuntimeDirectory=xibalba-shield
 StateDirectory=xibalba-shield
 LogsDirectory=xibalba-shield
 # Dedicated non-root system account (created by scripts/install_linux_agent.sh), not root
@@ -27,13 +28,18 @@ PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/var/log/xibalba-shield /var/lib/xibalba-shield /etc/xibalba-shield
-ProtectKernelTunables=true
-ProtectKernelModules=true
+# BCC attaches kprobes through /sys/kernel/tracing/kprobe_events.
+# Keep this writable/readable for the capability-scoped agent.
+ProtectKernelTunables=false
+# BCC must read /lib/modules/<kernel>/build to compile the embedded probe.
+# Keep module loading itself constrained by the capability bounding set below.
+ProtectKernelModules=false
 ProtectControlGroups=true
 ProtectClock=true
 ProtectHostname=true
-ProtectProc=invisible
-ProcSubset=pid
+# BCC resolves the architecture-specific syscall symbol through /proc.
+ProtectProc=default
+ProcSubset=all
 LockPersonality=true
 RestrictSUIDSGID=true
 RestrictNamespaces=true
@@ -41,8 +47,10 @@ RestrictRealtime=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 UMask=0077
-CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
-AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
+# The main process consumes events from the root helper and needs only the
+# narrowly-scoped signal capability to freeze a process owned by another UID.
+CapabilityBoundingSet=CAP_KILL
+AmbientCapabilities=CAP_KILL
 # SystemCallFilter=/MemoryDenyWriteExecute= are deliberately NOT set here: BCC's
 # BPF(text=...) JIT-compiles the eBPF C source via an embedded LLVM in this process's own
 # userspace before loading it via the bpf() syscall, and guessing which syscall-filter

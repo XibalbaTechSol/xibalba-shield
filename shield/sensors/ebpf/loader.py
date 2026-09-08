@@ -77,16 +77,40 @@ from ...schemas.events import (
 )
 
 _BPF_SOURCE = Path(__file__).with_name("process_exec.bpf.c")
+_PROCESS_EXEC_TRACEPOINT_SOURCE = Path(__file__).with_name("process_exec_tracepoint.bpf.c")
 _FILE_WRITE_SOURCE = Path(__file__).with_name("file_write.bpf.c")
 _TCP_CONNECT_SOURCE = Path(__file__).with_name("tcp_connect.bpf.c")
+# BCC defaults to a small per-CPU perf ring.  A busy workstation can overflow that ring
+# while the agent is handling an event, especially during a downstream exporter outage.
+# Keep this tunable for constrained hosts, but use a larger safe default so observation does
+# not silently lose the very events the enforcement loop is meant to catch.
+try:
+    _PERF_BUFFER_PAGES = max(8, int(os.environ.get("SHIELD_EBPF_PERF_PAGES", "64")))
+except ValueError:
+    _PERF_BUFFER_PAGES = 64
 
 
 def _require_root(class_name: str) -> None:
+    if os.geteuid() == 0:
+        return
+    # systemd can grant the narrowly-scoped capabilities needed by bpf() without
+    # making the agent UID 0.  CAP_BPF is bit 39; CAP_SYS_ADMIN (bit 21) is the
+    # legacy fallback on kernels that do not expose CAP_BPF separately.
+    try:
+        cap_eff = int(next(
+            line.split(":", 1)[1].strip()
+            for line in Path("/proc/self/status").read_text().splitlines()
+            if line.startswith("CapEff:")
+        ), 16)
+    except (OSError, StopIteration, ValueError):
+        cap_eff = 0
+    if cap_eff & ((1 << 39) | (1 << 21)):
+        return
     if os.geteuid() != 0:
         raise PermissionError(
-            f"{class_name} requires root (CAP_BPF) to load its BPF program — "
-            "this machine has kernel.unprivileged_bpf_disabled=2, so there is no "
-            "non-root path. Run under sudo."
+            f"{class_name} requires root or CAP_BPF/CAP_SYS_ADMIN to load its BPF program — "
+            "this machine has kernel.unprivileged_bpf_disabled=2, so run with the "
+            "service capabilities or under sudo."
         )
 
 
@@ -98,6 +122,23 @@ def _matches_sensitive_path(path: str, patterns: list[str]) -> bool:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _recover_exec_path(pid: int, recorded: str) -> str:
+    """Recover an empty kprobe filename from the process's argv without reading content.
+
+    On some syscall-wrapper/BCC combinations ``bpf_probe_read_user*`` can return an empty
+    filename even though the event itself is valid.  The first argv entry is the executable
+    path supplied to execve (and is bounded to one small read), so it is a safe metadata-only
+    fallback.  Races with a short-lived process simply leave the original value unchanged.
+    """
+    if recorded:
+        return recorded
+    try:
+        raw = Path(f"/proc/{int(pid)}/cmdline").read_bytes().split(b"\0", 1)[0]
+        return raw.decode("utf-8", errors="replace")[:255]
+    except (OSError, ValueError):
+        return recorded
 
 
 class SensorAttachError(RuntimeError):
@@ -134,6 +175,7 @@ class LinuxEbpfSensor:
         self._pending: list[ProcessActivity] = []
         self._lost_events = 0
         self._last_event_at: str | None = None
+        self._attach_mode = "kprobe"
 
         try:
             self._bpf = BPF(text=_BPF_SOURCE.read_text())
@@ -143,15 +185,29 @@ class LinuxEbpfSensor:
         try:
             self._bpf.attach_kprobe(event=execve_fnname, fn_name="on_execve")
         except Exception as exc:
-            raise SensorAttachError("kprobe", exc) from exc
+            # A few distro kernels expose no traceable syscall wrapper (for
+            # example this host rejects sys_execve), while sched_process_exec
+            # remains available and carries the same execution fact.  Retry
+            # with the tracepoint before declaring the sensor unavailable.
+            try:
+                cleanup = getattr(self._bpf, "cleanup", None)
+                if cleanup is not None:
+                    cleanup()
+                self._bpf = BPF(text=_PROCESS_EXEC_TRACEPOINT_SOURCE.read_text())
+                self._attach_mode = "tracepoint"
+            except Exception as fallback_exc:
+                raise SensorAttachError("kprobe", exc) from fallback_exc
         try:
-            self._bpf["process_exec_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+            self._bpf["process_exec_events"].open_perf_buffer(
+                self._on_perf_event, lost_cb=self._on_lost, page_cnt=_PERF_BUFFER_PAGES
+            )
         except Exception as exc:
             raise SensorAttachError("perf_buffer", exc) from exc
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002 — perf_buffer callback signature
         rec = self._bpf["process_exec_events"].event(data)
         self._last_event_at = _now_iso()
+        exe_path = _recover_exec_path(rec.pid, rec.filename.decode("utf-8", errors="replace"))
         self._pending.append(
             ProcessActivity(
                 device_id=self._device_id,
@@ -159,7 +215,7 @@ class LinuxEbpfSensor:
                 process=ProcessInfo(
                     pid=rec.pid,
                     name=rec.comm.decode("utf-8", errors="replace"),
-                    exe_path=rec.filename.decode("utf-8", errors="replace"),
+                    exe_path=exe_path,
                     ppid=rec.ppid,
                 ),
                 activity=Activity(type="launch", severity="medium", outcome="success"),
@@ -175,6 +231,7 @@ class LinuxEbpfSensor:
     def health(self) -> dict:
         return {
             "attached": True,
+            "attach_mode": self._attach_mode,
             "lost_events": self._lost_events,
             "last_event_at": self._last_event_at,
         }
@@ -227,7 +284,9 @@ class LinuxFileWriteSensor:
         except Exception as exc:
             raise SensorAttachError("kretprobe", exc) from exc
         try:
-            self._bpf["file_write_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+            self._bpf["file_write_events"].open_perf_buffer(
+                self._on_perf_event, lost_cb=self._on_lost, page_cnt=_PERF_BUFFER_PAGES
+            )
         except Exception as exc:
             raise SensorAttachError("perf_buffer", exc) from exc
 
@@ -308,7 +367,9 @@ class LinuxTcpConnectSensor:
         except Exception as exc:
             raise SensorAttachError("kretprobe", exc) from exc
         try:
-            self._bpf["tcp_connect_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+            self._bpf["tcp_connect_events"].open_perf_buffer(
+                self._on_perf_event, lost_cb=self._on_lost, page_cnt=_PERF_BUFFER_PAGES
+            )
         except Exception as exc:
             raise SensorAttachError("perf_buffer", exc) from exc
 

@@ -2457,6 +2457,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
+]
+
+[package.optional-dependencies]
+crypto = [
+    { name = "cryptography" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2699,6 +2713,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+]
+
+[[package]]
+name = "resend"
+version = "2.43.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/6b/e588fb353a968dcdc6f51837059aed017970784888d5d12a97f30f3b811d/resend-2.43.0.tar.gz", hash = "sha256:9fbee451329d12d7ba3f75eed40373847ea6b8cdef1f1475f554f0ea21fecc6d", size = 61007, upload-time = "2026-09-04T11:43:19.928Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/ad/3a3e024b4842df64865abf33ae41a945f30c34024f7d387c2098770eb95a/resend-2.43.0-py2.py3-none-any.whl", hash = "sha256:efeee831c08e41018f7227ad988d3fc74ac38b3b8975270855a781c5d86ea8b9", size = 92764, upload-time = "2026-09-04T11:43:18.645Z" },
 ]
 
 [[package]]
@@ -3075,6 +3102,9 @@ source = { editable = "." }
 dependencies = [
     { name = "integrity-sdk" },
     { name = "mlflow" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "requests" },
+    { name = "resend" },
 ]
 
 [package.optional-dependencies]
@@ -3087,8 +3117,11 @@ dev = [
 requires-dist = [
     { name = "integrity-sdk", git = "https://github.com/XibalbaTechSol/integrity-core.git?subdirectory=integrity-sdk&rev=08dcd9485e21cc4370d10668ed246eb7810c31e2" },
     { name = "mlflow", specifier = ">=3.15.1" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.13.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "requests", specifier = ">=2.34.2" },
+    { name = "resend", specifier = ">=2.43.0" },
 ]
 provides-extras = ["dev"]
 

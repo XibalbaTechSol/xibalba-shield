@@ -51,7 +51,11 @@ int on_execve(struct pt_regs *ctx, const char __user *filename)
     rec.ppid = task->real_parent->tgid;
 
     bpf_get_current_comm(&rec.comm, sizeof(rec.comm));
-    bpf_probe_read_user_str(&rec.filename, sizeof(rec.filename), filename);
+    /* The syscall kprobe can observe a userspace pointer whose string helper returns
+     * zero on this kernel/BCC combination.  Read the bounded argv bytes directly (the
+     * zero-initialized record still guarantees NUL termination when the path is shorter
+     * than the field), matching the proven execsnoop-bpfcc approach. */
+    bpf_probe_read_user(&rec.filename, sizeof(rec.filename), filename);
 
     process_exec_events.perf_submit(ctx, &rec, sizeof(rec));
     return 0;

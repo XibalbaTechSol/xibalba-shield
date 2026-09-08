@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+build/
+test-results/
+ui/playwright-report/
+ui/test-results/
 *.jsonl
 .xibalba-shield/
 models/

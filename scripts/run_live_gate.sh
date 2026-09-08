@@ -34,3 +34,5 @@ echo "[4/4] pilot-gate JSON report"
   2>&1 | tee "${ARTIFACT_DIR}/e2e-validate.json"
 
 echo "Live-gate artifacts written to ${ARTIFACT_DIR}"
+echo "Responder gates remain separate: run scripts/verify_responder_gates.py with"
+echo "device-bound base evidence, then configure SHIELD_RESPONDER_ARGS."

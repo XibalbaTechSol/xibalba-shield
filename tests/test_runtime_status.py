@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from shield.config import DeviceConfig
+from shield.config.tls import build_client_context
 from shield.runtime_status import publish_runtime_status
 
 
@@ -88,3 +89,25 @@ def test_runtime_status_omits_sensors_and_exporter_when_not_given(mock_urlopen):
     body = json.loads(request.data)
     assert "sensors" not in body["status"]
     assert "exporter" not in body["status"]
+
+
+@patch("shield.runtime_status.urlopen", return_value=_Response())
+def test_runtime_status_includes_responder_gate(mock_urlopen):
+    import json
+
+    config = DeviceConfig(device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend")
+    gate = {"capabilities": {"freeze_process": True, "kill_process": False}, "readiness": {"ready": {"kill_process": False}}}
+    assert publish_runtime_status(device_config=config, policy_status={}, opa_status={}, responder_status=gate) is True
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["status"]["responders"] == gate
+
+
+def test_client_tls_settings_require_https_and_complete_key_pair():
+    assert build_client_context(DeviceConfig(device_id="dev-1", backend_url="http://backend")) is None
+    config = DeviceConfig(device_id="dev-1", backend_url="http://backend", backend_client_cert="client.crt")
+    try:
+        build_client_context(config)
+    except ValueError as exc:
+        assert "requires both backend_client_cert" in str(exc)
+    else:
+        raise AssertionError("partial client credentials must fail closed")

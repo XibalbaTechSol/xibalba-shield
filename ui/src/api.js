@@ -3,6 +3,7 @@ export class ShieldApi {
     this.baseUrl = String(baseUrl || window.location.origin).replace(/\/+$/, '')
     this.tenantId = String(tenantId || '').trim()
     this.adminToken = String(adminToken || '').trim()
+    this.devProxy = this.adminToken === '__shield_local_proxy__'
   }
 
   async request(endpoint, { method = 'GET', body, tenant = true, token } = {}) {
@@ -10,7 +11,8 @@ export class ShieldApi {
     if (tenant && this.tenantId) url.searchParams.set('tenant_id', this.tenantId)
     const headers = { Accept: 'application/json' }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
-    if (token || this.adminToken) headers.Authorization = `Bearer ${token || this.adminToken}`
+    if (this.devProxy && !token) headers['X-Shield-Dev-Auth'] = '1'
+    else if (token || this.adminToken) headers.Authorization = `Bearer ${token || this.adminToken}`
     const response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload.error || payload.message || `${response.status} ${response.statusText}`)

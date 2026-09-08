@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -171,11 +171,15 @@ export function AuditEvents({ api, email }) {
 function SettingsChangeQueue({ api }) {
   const [requests, setRequests] = useState([])
   const [message, setMessage] = useState('')
-  const refresh = () => api.settingsChangeRequests().then((result) => setRequests(result.requests || [])).catch(() => setRequests([]))
-  useEffect(() => { refresh() }, [api])
+  const refresh = useCallback(
+    () => api.settingsChangeRequests().then((result) => setRequests(result.requests || [])).catch(() => setRequests([])),
+    [api],
+  )
+  useEffect(() => { refresh() }, [refresh])
   const decide = async (requestId, action) => {
     setMessage(`${action}ing change…`)
-    try { await api.decideSettingsChangeRequest(requestId, action); await refresh(); setMessage(`Change ${action}d.`) }
+    const completed = { approve: 'approved', reject: 'rejected', rollback: 'rolled back' }
+    try { await api.decideSettingsChangeRequest(requestId, action); await refresh(); setMessage(`Change ${completed[action] || action}.`) }
     catch (error) { setMessage(error instanceof Error ? error.message : String(error)) }
   }
   return <article className="settings-card"><div className="settings-card-header"><div className="settings-card-title"><ShieldAlert size={18} /><h3>Containment & guardrail approvals</h3></div><span className="live-status-pill">Two-step change control</span></div><p className="field-hint">High-impact settings are queued for explicit approval and can be rolled back without editing raw configuration.</p>{requests.length === 0 ? <p className="empty-state">No pending or historical change requests.</p> : <div className="audit-event-list">{requests.slice(0, 8).map((request) => <div className="audit-event" key={request.request_id}><b>{request.category} · {request.status}</b><small>{request.request_id} · {request.created_at}</small><div className="settings-actions-footer">{request.status === 'pending' && <><button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'approve')}>Approve</button><button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'reject')}>Reject</button></>}{request.status === 'approved' && <button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'rollback')}>Rollback</button>}</div></div>)}</div>}{message && <span className="form-message" aria-live="polite">{message}</span>}</article>
@@ -194,7 +198,7 @@ export function SettingsView({ connection, logout, data = {} }) {
   const [governanceTier, setGovernanceTier] = useState(() => savedPosture.governanceTier || 'tier1')
   const [ringBufferInterval, setRingBufferInterval] = useState(() => savedPosture.ringBufferInterval || '50')
   const [retentionDays, setRetentionDays] = useState(() => savedPosture.retentionDays || '90')
-  const [postureSaved, setPostureSaved] = useState(false)
+  const [postureSaved, setPostureSaved] = useState('')
   const [processSensor, setProcessSensor] = useState(true)
   const [fileSensor, setFileSensor] = useState(true)
   const [networkSensor, setNetworkSensor] = useState(false)
@@ -268,18 +272,24 @@ export function SettingsView({ connection, logout, data = {} }) {
 
   const handleSavePosture = async (e) => {
     e.preventDefault()
-    const next = { ...savedPosture, containmentMode, governanceTier, ringBufferInterval, retentionDays, notifyContain, notifyDeny, notifySensorDrop, smtpHost, smtpPort, smtpRecipient, realOnly, sensorProcess: processSensor, sensorFile: fileSensor, sensorNetwork: networkSensor, sensorCadence, autoReconnect }
+    const next = { governanceTier, ringBufferInterval, retentionDays, notifyContain, notifyDeny, notifySensorDrop, smtpHost, smtpPort, smtpRecipient, realOnly, sensorProcess: processSensor, sensorFile: fileSensor, sensorNetwork: networkSensor, sensorCadence, autoReconnect }
     try {
+      setMessage('')
       const result = await api.saveSettings(next)
       const saved = result.settings || next
+      let feedback = 'Security posture saved to the tenant control plane.'
+      if (containmentMode !== savedPosture.containmentMode) {
+        const request = await api.createSettingsChangeRequest('containment', { ...saved, containmentMode })
+        feedback = `Operational settings saved. Containment change queued for approval (${request.request_id}).`
+      }
       sessionStorage.setItem('shield-posture', JSON.stringify(saved))
       setSavedPosture(saved)
       sessionStorage.setItem('shield-real-only', String(realOnly))
       window.dispatchEvent(new CustomEvent('shield-telemetry-mode', { detail: realOnly }))
-      setPostureSaved(true)
-      setTimeout(() => setPostureSaved(false), 3000)
+      setPostureSaved(feedback)
+      setTimeout(() => setPostureSaved(''), 5000)
     } catch (error) {
-      setPostureSaved(false)
+      setPostureSaved('')
       setMessage(error instanceof Error ? `Could not save settings: ${error.message}` : 'Could not save settings.')
     }
   }
@@ -597,9 +607,10 @@ export function SettingsView({ connection, logout, data = {} }) {
                 {postureSaved && (
                   <span className="save-feedback-pill">
                     <CheckCircle2 size={14} />
-                    <span>Saved locally in this browser; control-plane persistence is not available.</span>
+                    <span>{postureSaved}</span>
                   </span>
                 )}
+                {message && <span className="form-message" role="alert">{message}</span>}
               </div>
             </article>
           </form>

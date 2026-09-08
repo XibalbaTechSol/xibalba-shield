@@ -1,8 +1,22 @@
 # Linux Agent Runbook
 
-This runbook turns the existing `shield run` loop into a supervised Linux process. It does not remove the remaining pilot blockers: TCP-connect still needs root verification on the target kernel, and live Integrity exporter identity still needs funded registration/readback validation.
+This runbook turns the existing `shield run` loop into a supervised Linux process. It does not remove the remaining pilot blockers: TCP-connect still needs root verification on every supported target kernel, and live Integrity exporter identity still needs funded registration/readback validation.
 
 ## Install
+
+The backend automatically creates a persistent cryptographic super-admin token
+at `~/.xibalba-shield/backend-admin.token` (mode `0600`) when neither
+`SHIELD_BACKEND_TOKEN` nor `--admin-token` is supplied. It reuses that token on
+restart and never prints its value. For tenant operator access, use
+`scripts/rotate_tenant_admin_token.sh`; do not copy the global token into a
+browser profile.
+
+For local UI development, Vite reads the tenant token server-side from
+`~/.xibalba-shield/<tenant>-admin-token` and exposes a one-click **Connect to
+local Shield** action. The browser stores only a non-secret proxy marker; Vite
+adds the real authorization header while forwarding `/api` requests. Override
+the tenant or file with `SHIELD_DEV_TENANT` and
+`SHIELD_DEV_ADMIN_TOKEN_FILE`. This helper does not exist in production builds.
 
 1. Build and install the package in the target Python environment:
 
@@ -89,6 +103,61 @@ This runbook turns the existing `shield run` loop into a supervised Linux proces
    — the CLI flag takes one-or-more arguments (`nargs="+"`), so it cannot be left in the
    unit's fixed `ExecStart` line with nothing following it when this is unset, the same
    reason `SHIELD_EXPORTER_ARGS` carries its whole flag rather than just a value.
+
+### Local mTLS control plane and split helper
+
+For local development, the backend can expose a dedicated mTLS listener on
+`https://127.0.0.1:8443`. The HTTP listener on `127.0.0.1:8421` remains useful for the
+operator UI and authenticated readback. The local CA is not a production trust root.
+
+Generate the local-only credentials and install the helper's client credentials:
+
+```bash
+./scripts/generate_local_mtls_ca.sh
+./scripts/repair_device_config_tls.sh
+```
+
+The repair script updates `/etc/xibalba-shield/device.json` with the HTTPS backend URL,
+CA bundle, client certificate, and client key, then restarts the endpoint. It preserves
+the device token and policy settings. The remediation worker, runtime-status publisher,
+and policy distributor all use the same verified TLS client context; a TLS handshake
+failure must not be worked around by disabling certificate verification.
+
+The privileged helper owns the BCC/eBPF capabilities and `/run/xibalba-shield/ebpf.sock`;
+the endpoint runs as `xibalba-shield` and consumes that socket. Keep the unit relationship
+intact:
+
+```bash
+sudo systemctl enable --now xibalba-shield-ebpf-helper.service
+sudo systemctl enable --now xibalba-shield.service
+systemctl is-active xibalba-shield-ebpf-helper.service xibalba-shield.service
+```
+
+Only the helper declares `RuntimeDirectory=xibalba-shield`. The endpoint requires and starts
+after the helper but must not declare the same runtime directory: systemd can remove a shared
+runtime directory during an endpoint restart while the helper is still listening on an orphaned
+file descriptor. If the socket disappears, reload the units and restart the helper before the
+endpoint:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart xibalba-shield-ebpf-helper.service
+sudo systemctl restart xibalba-shield.service
+```
+
+Validate transport and live telemetry through the authenticated backend status endpoint:
+
+```bash
+token_file="$HOME/.xibalba-shield/tenant-a-admin-token"
+token="$(< "$token_file")"
+curl -fsS -H "Authorization: Bearer ${token}" \
+  'http://127.0.0.1:8421/api/shield/exporter-status?tenant_id=tenant-a'
+unset token
+```
+
+The current local verification reached `sensors.attached=true`, observed real process events,
+reported `lost_events=0`, and showed OPA healthy and zero exporter failures. Do not treat those
+local values as multi-kernel or production deployment qualification.
 
 ## Diagnose
 
@@ -254,3 +323,33 @@ python3 -m pip uninstall xibalba-shield
 ```
 
 Remove `/etc/xibalba-shield`, `/var/log/xibalba-shield`, and `/var/lib/xibalba-shield` only after exporting or preserving local decision logs needed for incident review.
+### Proving and enabling gated responders
+
+`freeze_cgroup`, `kill_process`, and `block_flow` are fail-closed. An enable
+flag alone is insufficient: the agent also requires a fresh proof artifact
+bound to its device ID. On the deployment host, run the disposable probe as
+root and provide a non-empty evidence reference for each base proof:
+
+```bash
+sudo uv run python scripts/verify_responder_gates.py \
+  --device-id DEVICE_ID \
+  --output /etc/xibalba-shield/responder-readiness.json \
+  --base-proof policy_signature_verified=POLICY_BUNDLE_HASH \
+  --base-proof agent_identity_verified=ENROLLMENT_RECORD_ID \
+  --base-proof kernel_probe_verified=LIVE_GATE_ARTIFACT \
+  --base-proof audit_receipt_verified=RECEIPT_ID \
+  --base-proof rollback_verified=ROLLBACK_TEST_ID \
+  --base-proof operator_approval=CHANGE_REQUEST_ID
+```
+
+The runner writes a root-owned, service-group-readable (`0640`) artifact, kills
+only a disposable `sleep`, freezes and resumes only its own
+temporary cgroup, and creates then deletes a uniquely named nftables table.
+After reviewing the JSON, configure:
+
+```bash
+SHIELD_RESPONDER_ARGS=--responder-readiness /etc/xibalba-shield/responder-readiness.json --enable-kill-process --enable-freeze-cgroup --enable-block-flow
+```
+
+Proof artifacts expire after 24 hours by default. The live agent report exposes
+effective capabilities and missing proofs; the UI cannot override either gate.

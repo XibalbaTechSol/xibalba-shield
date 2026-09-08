@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+args=(
+  --log-path /var/log/xibalba-shield/decisions.jsonl
+  run
+  --sensor "${SHIELD_SENSOR:?SHIELD_SENSOR is required}"
+  --device-config /etc/xibalba-shield/device.json
+  --rules /etc/xibalba-shield/policies/current.json
+  --opa-url "${SHIELD_OPA_URL:-http://127.0.0.1:8181}"
+)
+if [[ -n "${SHIELD_PRIVILEGED_SOCKET:-}" ]]; then
+  args+=(--privileged-socket "$SHIELD_PRIVILEGED_SOCKET")
+fi
+
+# Optional argument groups must be expanded conditionally.  Passing an empty
+# EnvironmentFile variable through ExecStart creates a literal empty argv entry,
+# which argparse rejects and causes an unnecessary restart loop.
+if [[ -n "${SHIELD_EXPORTER_ARGS:-}" ]]; then
+  read -r -a exporter_args <<<"$SHIELD_EXPORTER_ARGS"
+  args+=("${exporter_args[@]}")
+fi
+if [[ -n "${SHIELD_OPA_ARGS:-}" ]]; then
+  read -r -a opa_args <<<"$SHIELD_OPA_ARGS"
+  args+=("${opa_args[@]}")
+fi
+if [[ -n "${SHIELD_RESPONDER_ARGS:-}" ]]; then
+  read -r -a responder_args <<<"$SHIELD_RESPONDER_ARGS"
+  args+=("${responder_args[@]}")
+fi
+
+exec /usr/local/bin/shield "${args[@]}"

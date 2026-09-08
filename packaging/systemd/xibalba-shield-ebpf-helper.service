@@ -1,0 +1,40 @@
+[Unit]
+Description=Xibalba Shield privileged eBPF probe bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/xibalba-shield/shield.env
+ExecStart=/usr/local/libexec/xibalba-shield-ebpf-helper-run
+Restart=on-failure
+RestartSec=5s
+RuntimeDirectory=xibalba-shield
+RuntimeDirectoryMode=0750
+User=root
+Group=xibalba-shield
+NoNewPrivileges=false
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=false
+ProtectKernelModules=false
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=default
+ProcSubset=all
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# BCC needs the kernel BPF/perf capabilities to create maps and attach kprobes.
+# Keep the helper isolated from the unprivileged endpoint process; do not grant
+# a blanket capability set.
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_SYS_RESOURCE
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_SYS_RESOURCE
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

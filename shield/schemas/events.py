@@ -223,6 +223,10 @@ class Decision:
     # that doesn't set this explicitly -- Tier 1 is the first (and, until now, often only)
     # evaluator every event sees.
     tier: Literal["tier1", "tier2", "tier2_unresolved"] = "tier1"
+    confidence: float = 1.0
+    risk_score: float = 0.0
+    human_required: bool = False
+    evidence: list[str] = field(default_factory=list)
 
 
 @dataclass
