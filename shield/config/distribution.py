@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import os
 import tempfile
+import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .loader import ConfigError, DeviceConfig, PolicyBundle, load_policy_bundle
+from .tls import build_client_context
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,44 @@ class PolicyFetchResult:
     path: Path
     bundle: PolicyBundle
     source_url: str
+
+
+@dataclass(frozen=True)
+class DeviceSettingsFetchResult:
+    settings: dict[str, Any]
+    settings_version: str
+    updated_at: str | None
+    source_url: str
+
+
+def fetch_device_settings(*, device_config: DeviceConfig, timeout_sec: float = 2.0) -> DeviceSettingsFetchResult:
+    """Fetch validated tenant settings using the enrolled device credential."""
+    if not device_config.backend_url or not device_config.device_token:
+        raise ConfigError("device config does not set backend_url and device_token")
+    url = f"{device_config.backend_url.rstrip('/')}/api/shield/device-settings?tenant_id={urllib.parse.quote(device_config.tenant_id, safe='')}&device_id={urllib.parse.quote(device_config.device_id, safe='')}"
+    request = urllib.request.Request(url, headers={
+        "Accept": "application/json",
+        "Authorization": f"Bearer {device_config.device_token}",
+        "X-Shield-Device-ID": device_config.device_id,
+        "X-Shield-Tenant-ID": device_config.tenant_id,
+    })
+    try:
+        context = build_client_context(device_config)
+        with urllib.request.urlopen(request, timeout=timeout_sec, **({"context": context} if context else {})) as response:
+            status = getattr(response, "status", 200)
+            payload = json.load(response)
+    except (urllib.error.URLError, ValueError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"failed to fetch device settings from {url}: {exc}") from exc
+    if status < 200 or status >= 300:
+        raise ConfigError(f"device settings endpoint returned HTTP {status}")
+    if not isinstance(payload, dict) or not isinstance(payload.get("settings"), dict):
+        raise ConfigError("device settings response must contain a settings object")
+    from ..backend.settings import settings_version, validate_settings
+    settings = validate_settings(payload["settings"])
+    version = str(payload.get("settings_version") or settings_version(settings))
+    if version != settings_version(settings):
+        raise ConfigError("device settings version does not match its contents")
+    return DeviceSettingsFetchResult(settings, version, payload.get("updated_at"), url)
 
 
 def fetch_tenant_policy(
@@ -45,7 +87,8 @@ def fetch_tenant_policy(
         headers["Authorization"] = f"Bearer {device_config.device_token}"
     request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
+        context = build_client_context(device_config)
+        with urllib.request.urlopen(request, timeout=timeout_sec, **({"context": context} if context else {})) as response:
             status = getattr(response, "status", 200)
             content_type = response.headers.get("Content-Type", "")
             raw = response.read()

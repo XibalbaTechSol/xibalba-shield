@@ -157,6 +157,9 @@ class DeviceConfig:
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
     backend_url: str = ""
+    backend_ca_file: str = ""
+    backend_client_cert: str = ""
+    backend_client_key: str = ""
     # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
     # every BCC commitment this device's exporter signs must now bind chain_id +
     # verifying_contract. Defaults match Base Sepolia (CLAUDE.md's "Live deployment").
@@ -173,6 +176,11 @@ class DeviceConfig:
     # hash-allowlist-only behavior for existing deployments that haven't opted in.
     trusted_signing_keys: list[str] = field(default_factory=list)
     require_signed_policy: bool = False
+    # Populated only after authenticated tenant-settings synchronization; never loaded
+    # from the device JSON file.
+    effective_settings: dict[str, Any] = field(default_factory=dict, repr=False)
+    settings_version: str = ""
+    settings_updated_at: str | None = None
 
     def flag(self, name: str, default: bool = False) -> bool:
         return self.feature_flags.get(name, default)
@@ -194,6 +202,9 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "bcc_middleware_url",
         "oracle_url",
         "backend_url",
+        "backend_ca_file",
+        "backend_client_cert",
+        "backend_client_key",
         "chain_id",
         "verifying_contract",
         "tenant_policy_url",

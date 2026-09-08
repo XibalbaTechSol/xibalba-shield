@@ -23,6 +23,7 @@ import threading
 from typing import Any
 
 from .config import DeviceConfig
+from .config import fetch_device_settings
 from .runtime_status import publish_runtime_status
 
 logger = logging.getLogger("shield.watchdog")
@@ -43,6 +44,8 @@ class Watchdog:
         sensor: Any,
         did_preflight_status: dict[str, Any] | None = None,
         remediation_worker: Any | None = None,
+        evidence_publisher: Any | None = None,
+        responder_status: dict[str, Any] | None = None,
     ) -> None:
         self._interval = interval
         self._device_config = device_config
@@ -56,6 +59,15 @@ class Watchdog:
         # rather than re-checked, since DID load/reachability isn't tick-timescale state.
         self._did_preflight_status = did_preflight_status
         self._remediation_worker = remediation_worker
+        self._evidence_publisher = evidence_publisher
+        self._responder_status = responder_status
+        self._settings_status: dict[str, Any] = {
+            "healthy": False,
+            "settings_version": device_config.settings_version or None,
+            "effective": dict(device_config.effective_settings),
+            "last_sync_at": None,
+            "error": "not synchronized",
+        }
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -152,6 +164,31 @@ class Watchdog:
         else:
             exporter_status = {"enabled": False}
 
+        if self._evidence_publisher is not None:
+            try:
+                exporter_status["backend_evidence"] = self._evidence_publisher.health()
+            except Exception as exc:  # noqa: BLE001
+                exporter_status["backend_evidence"] = {"error": str(exc)}
+
+        try:
+            result = fetch_device_settings(device_config=self._device_config)
+            self._device_config.effective_settings = dict(result.settings)
+            self._device_config.settings_version = result.settings_version
+            self._device_config.settings_updated_at = result.updated_at
+            self._settings_status = {
+                "healthy": True,
+                "settings_version": result.settings_version,
+                "effective": dict(result.settings),
+                "last_sync_at": result.updated_at,
+                "source_url": result.source_url,
+            }
+        except Exception as exc:  # noqa: BLE001 -- settings sync cannot stop local enforcement
+            self._settings_status = {
+                **self._settings_status,
+                "healthy": False,
+                "error": str(exc),
+            }
+
         policy_status = (
             self._reloader.status().__dict__
             if self._reloader is not None
@@ -169,4 +206,6 @@ class Watchdog:
             sensors_status=sensors_status,
             exporter_status_detail=exporter_status,
             did_preflight_detail=self._did_preflight_status,
+            responder_status=self._responder_status,
+            settings_status=self._settings_status,
         )

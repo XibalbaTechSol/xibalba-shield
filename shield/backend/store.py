@@ -8,6 +8,7 @@ import json
 import secrets
 import sqlite3
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
@@ -48,13 +49,62 @@ class Enrollment:
     device_config: dict[str, Any]
 
 
+class _ThreadSafeConnection:
+    """Thread-safe proxy for sqlite3.Connection under concurrent HTTP requests."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._raw_conn = conn
+        self._lock = threading.RLock()
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return self._raw_conn.execute(*args, **kwargs)
+
+    def executemany(self, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return self._raw_conn.executemany(*args, **kwargs)
+
+    def executescript(self, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return self._raw_conn.executescript(*args, **kwargs)
+
+    def commit(self) -> None:
+        with self._lock:
+            self._raw_conn.commit()
+
+    def close(self) -> None:
+        with self._lock:
+            self._raw_conn.close()
+
+    def cursor(self, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return self._raw_conn.cursor(*args, **kwargs)
+
+    def __enter__(self) -> _ThreadSafeConnection:
+        self._lock.acquire()
+        self._raw_conn.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
+        try:
+            return self._raw_conn.__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self._lock.release()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._raw_conn, name)
+
+
 class ShieldStore:
     def __init__(self, db_path: Path | str):
         self.db_path = Path(db_path)
         if self.db_path != Path(":memory:"):
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        raw = sqlite3.connect(self.db_path, check_same_thread=False, timeout=10.0)
+        raw.row_factory = sqlite3.Row
+        self._conn = _ThreadSafeConnection(raw)
+        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._conn.execute("PRAGMA busy_timeout = 5000")
         self.init_schema()
 
     def close(self) -> None:
@@ -131,6 +181,7 @@ class ShieldStore:
                 device_role TEXT NOT NULL DEFAULT '',
                 device_token_hash TEXT NOT NULL,
                 agent_label TEXT NOT NULL DEFAULT 'xibalba-shield',
+                synthetic INTEGER NOT NULL DEFAULT 0,
                 last_seen_at TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (tenant_id, device_id),
@@ -258,6 +309,40 @@ class ShieldStore:
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS tenant_settings (
+                tenant_id TEXT PRIMARY KEY,
+                settings_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS tenant_settings_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                settings_json TEXT NOT NULL,
+                settings_version TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS settings_change_requests (
+                request_id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                proposed_settings_json TEXT NOT NULL,
+                previous_settings_json TEXT NOT NULL,
+                proposed_version TEXT NOT NULL,
+                status TEXT NOT NULL,
+                requested_by TEXT NOT NULL,
+                approved_by TEXT,
+                created_at TEXT NOT NULL,
+                decided_at TEXT,
+                rolled_back_at TEXT,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS transaction_intents (
                 intent_hash TEXT PRIMARY KEY,
                 tenant_id TEXT NOT NULL,
@@ -288,6 +373,10 @@ class ShieldStore:
         if "expires_at" not in columns:
             self._conn.execute("ALTER TABLE tenant_admin_tokens ADD COLUMN expires_at TEXT")
         account_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(accounts)")}
+        device_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(devices)")}
+        if "synthetic" not in device_columns:
+            self._conn.execute("ALTER TABLE devices ADD COLUMN synthetic INTEGER NOT NULL DEFAULT 0")
+            self._conn.execute("UPDATE devices SET synthetic=1 WHERE EXISTS (SELECT 1 FROM decisions WHERE decisions.tenant_id=devices.tenant_id AND decisions.device_id=devices.device_id AND decisions.synthetic=1)")
         if "role" not in account_columns:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'tenant_admin'")
         if "failed_attempts" not in account_columns:
@@ -324,8 +413,8 @@ class ShieldStore:
             self._conn.execute(
                 """
                 INSERT INTO devices
-                    (tenant_id, device_id, device_role, device_token_hash, agent_label, last_seen_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (tenant_id, device_id, device_role, device_token_hash, agent_label, synthetic, last_seen_at, created_at)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?)
                 ON CONFLICT(tenant_id, device_id) DO UPDATE SET
                     device_role=excluded.device_role,
                     device_token_hash=excluded.device_token_hash,
@@ -612,7 +701,7 @@ class ShieldStore:
     def list_devices(self, *, tenant_id: str) -> list[dict[str, Any]]:
         rows = self._conn.execute(
             """
-            SELECT d.tenant_id, d.device_id, d.device_role, d.agent_label, d.last_seen_at,
+            SELECT d.tenant_id, d.device_id, d.device_role, d.agent_label, d.last_seen_at, d.synthetic,
                    p.policy_version, p.policy_hash
             FROM devices d
             LEFT JOIN policies p ON p.tenant_id=d.tenant_id AND p.device_id IN (d.device_id, '*')
@@ -627,6 +716,10 @@ class ShieldStore:
     def get_device(self, *, tenant_id: str, device_id: str) -> dict[str, Any] | None:
         rows = [row for row in self.list_devices(tenant_id=tenant_id) if row["device_id"] == device_id]
         return rows[0] if rows else None
+
+    def mark_device_synthetic(self, *, tenant_id: str, device_id: str, synthetic: bool = True) -> None:
+        with self._conn:
+            self._conn.execute("UPDATE devices SET synthetic=? WHERE tenant_id=? AND device_id=?", (int(synthetic), tenant_id, device_id))
 
     def record_decision(self, *, tenant_id: str, device_id: str, decision: dict[str, Any]) -> int:
         self._require_device(tenant_id, device_id)
@@ -708,6 +801,166 @@ class ShieldStore:
                 (tenant_id, agent_id, test_name, status, detail, json.dumps(metadata or {}, sort_keys=True), _now()),
             )
         return int(cursor.lastrowid)
+
+    def get_tenant_settings(self, *, tenant_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT settings_json FROM tenant_settings WHERE tenant_id=?",
+            (tenant_id,),
+        ).fetchone()
+        if not row:
+            return {}
+        try:
+            value = json.loads(row["settings_json"])
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def get_tenant_settings_record(self, *, tenant_id: str) -> dict[str, Any]:
+        settings = self.get_tenant_settings(tenant_id=tenant_id)
+        from .settings import settings_version
+        row = self._conn.execute(
+            "SELECT updated_at FROM tenant_settings WHERE tenant_id=?", (tenant_id,)
+        ).fetchone()
+        updated_at = row["updated_at"] if row else None
+        return {"settings": settings, "settings_version": settings_version(settings), "updated_at": updated_at}
+
+    def put_tenant_settings(
+        self, *, tenant_id: str, settings: dict[str, Any], actor_id: str = "control-plane", source: str = "ui"
+    ) -> dict[str, Any]:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        from .settings import settings_version, validate_settings
+        settings = validate_settings(settings)
+        now = _now()
+        version = settings_version(settings)
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO tenants (tenant_id, created_at) VALUES (?, ?) ON CONFLICT(tenant_id) DO NOTHING",
+                (tenant_id, now),
+            )
+            self._conn.execute(
+                """INSERT INTO tenant_settings (tenant_id, settings_json, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(tenant_id) DO UPDATE SET settings_json=excluded.settings_json, updated_at=excluded.updated_at""",
+                (tenant_id, json.dumps(settings, sort_keys=True), now),
+            )
+            self._conn.execute(
+                """INSERT INTO tenant_settings_audit
+                   (tenant_id, actor_id, source, settings_json, settings_version, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (tenant_id, actor_id, source, json.dumps(settings, sort_keys=True), version, now),
+            )
+        return {**settings, "settings_version": version, "updated_at": now}
+
+    def list_tenant_settings_audit(self, *, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """SELECT id, tenant_id, actor_id, source, settings_json, settings_version, created_at
+               FROM tenant_settings_audit WHERE tenant_id=? ORDER BY id DESC LIMIT ?""",
+            (tenant_id, limit),
+        ).fetchall()
+        return [
+            {
+                "id": row["id"], "tenant_id": row["tenant_id"], "actor_id": row["actor_id"],
+                "source": row["source"], "settings": json.loads(row["settings_json"]),
+                "settings_version": row["settings_version"], "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def create_settings_change_request(
+        self, *, tenant_id: str, category: str, proposed_settings: dict[str, Any], requested_by: str
+    ) -> dict[str, Any]:
+        if category not in {"containment", "guardrails"}:
+            raise ValueError("category must be containment or guardrails")
+        if not requested_by:
+            raise ValueError("requested_by is required")
+        from .settings import settings_version, validate_settings
+        proposed = validate_settings(proposed_settings)
+        previous = self.get_tenant_settings(tenant_id=tenant_id)
+        request_id = "settings-" + secrets.token_hex(12)
+        now = _now()
+        record = {
+            "request_id": request_id, "tenant_id": tenant_id, "category": category,
+            "proposed_settings": proposed, "previous_settings": previous,
+            "proposed_version": settings_version(proposed), "status": "pending",
+            "requested_by": requested_by, "approved_by": None, "created_at": now,
+            "decided_at": None, "rolled_back_at": None,
+        }
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO tenants (tenant_id, created_at) VALUES (?, ?) ON CONFLICT(tenant_id) DO NOTHING",
+                (tenant_id, now),
+            )
+            self._conn.execute(
+                """INSERT INTO settings_change_requests
+                   (request_id, tenant_id, category, proposed_settings_json, previous_settings_json,
+                    proposed_version, status, requested_by, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (request_id, tenant_id, category, json.dumps(proposed, sort_keys=True),
+                 json.dumps(previous, sort_keys=True), record["proposed_version"], "pending", requested_by, now),
+            )
+        return record
+
+    def list_settings_change_requests(self, *, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """SELECT request_id, tenant_id, category, proposed_settings_json, previous_settings_json,
+                      proposed_version, status, requested_by, approved_by, created_at, decided_at, rolled_back_at
+               FROM settings_change_requests WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?""",
+            (tenant_id, limit),
+        ).fetchall()
+        return [self._settings_change_request_row(row) for row in rows]
+
+    @staticmethod
+    def _settings_change_request_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "request_id": row["request_id"], "tenant_id": row["tenant_id"], "category": row["category"],
+            "proposed_settings": json.loads(row["proposed_settings_json"]),
+            "previous_settings": json.loads(row["previous_settings_json"]),
+            "proposed_version": row["proposed_version"], "status": row["status"],
+            "requested_by": row["requested_by"], "approved_by": row["approved_by"],
+            "created_at": row["created_at"], "decided_at": row["decided_at"],
+            "rolled_back_at": row["rolled_back_at"],
+        }
+
+    def decide_settings_change_request(self, *, tenant_id: str, request_id: str, approver_id: str, approve: bool) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM settings_change_requests WHERE request_id=? AND tenant_id=?", (request_id, tenant_id)
+        ).fetchone()
+        if row is None:
+            raise KeyError("settings change request not found")
+        if row["status"] != "pending":
+            raise ValueError("settings change request is no longer pending")
+        now = _now()
+        status = "approved" if approve else "rejected"
+        with self._conn:
+            if approve:
+                proposed = json.loads(row["proposed_settings_json"])
+                self.put_tenant_settings(tenant_id=tenant_id, settings=proposed, actor_id=approver_id, source="approval")
+            self._conn.execute(
+                "UPDATE settings_change_requests SET status=?, approved_by=?, decided_at=? WHERE request_id=?",
+                (status, approver_id, now, request_id),
+            )
+        updated = self._conn.execute("SELECT * FROM settings_change_requests WHERE request_id=?", (request_id,)).fetchone()
+        return self._settings_change_request_row(updated)
+
+    def rollback_settings_change_request(self, *, tenant_id: str, request_id: str, actor_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM settings_change_requests WHERE request_id=? AND tenant_id=?", (request_id, tenant_id)
+        ).fetchone()
+        if row is None:
+            raise KeyError("settings change request not found")
+        if row["status"] != "approved":
+            raise ValueError("only an approved settings change can be rolled back")
+        previous = json.loads(row["previous_settings_json"])
+        now = _now()
+        with self._conn:
+            self.put_tenant_settings(tenant_id=tenant_id, settings=previous, actor_id=actor_id, source="rollback")
+            self._conn.execute(
+                "UPDATE settings_change_requests SET status='rolled_back', rolled_back_at=? WHERE request_id=?",
+                (now, request_id),
+            )
+        updated = self._conn.execute("SELECT * FROM settings_change_requests WHERE request_id=?", (request_id,)).fetchone()
+        return self._settings_change_request_row(updated)
 
     def list_test_events(self, *, tenant_id: str = "dashboard", agent_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         if agent_id is not None:
@@ -881,6 +1134,20 @@ class ShieldStore:
             }
             for row in rows
         ]
+
+    def get_integration(self, *, tenant_id: str, integration_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT integration_id, kind, config_json, created_at FROM integrations WHERE tenant_id=? AND integration_id=?",
+            (tenant_id, integration_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "integration_id": row["integration_id"],
+            "kind": row["kind"],
+            "config": json.loads(row["config_json"]),
+            "created_at": row["created_at"],
+        }
 
     def record_transaction_intent(
         self, *, tenant_id: str, device_id: str, intent: dict[str, Any], decision: dict[str, Any]

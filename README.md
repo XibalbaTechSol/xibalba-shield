@@ -198,6 +198,12 @@ This layered control system is designed to ensure privacy by default and reserve
 
 ## Current Status
 
+### Tenant settings and agent adoption
+
+Operational settings are validated server-side and assigned a deterministic `sha256:` configuration version. Every write is recorded in `tenant_settings_audit`. Sensor/evidence preferences can be saved directly; containment and agent-guardrail changes use the authenticated change-request workflow (`pending` → `approved`/`rejected`), with explicit rollback for approved changes.
+
+Enrolled agents fetch `/api/shield/device-settings` with their device token over the configured control-plane transport. The watchdog reports the delivered settings, configuration version, source URL, and synchronization health in runtime status. This makes distribution observable; endpoint-specific enforcement remains gated by the corresponding helper/runtime capability.
+
 Legend: real and tested means there is code and a test or live verification path. Partial means real code exists but a named dependency or environment requirement remains.
 
 | Area | Status | Evidence |
@@ -211,6 +217,7 @@ Legend: real and tested means there is code and a test or live verification path
 | Integrity exporter | Real, live middleware path verified 2026-08-29; DID readback pending | Uses `integrity-sdk` DID, BCC signing, and telemetry, running alongside (not instead of) the OTel span in `agent_core/router.py`. A real signed submission received a structured response from live `bcc_middleware`; the Shield DID still needs registration for successful remote evidence readback. |
 | Dev sensor | Real and synthetic | Explicitly test/demo-only; never claimed as endpoint telemetry. |
 | Linux process eBPF | Real, historically live-verified | Observed a real spawned subprocess `execve`. |
+| Privileged Linux split-helper path | Real, live-verified on the local Ubuntu host (2026-09-08) | Root-owned BCC helper owns kernel capabilities; the non-root endpoint consumes its Unix socket. The current device reported `attached: true`, real process events, and `lost_events: 0` after the shared-runtime-directory fix. |
 | Linux file-write eBPF | Real, historically live-verified | Observed a real write-mode `openat`; supports userspace sensitive-path filtering. |
 | Linux TCP-connect eBPF | Real, live-verified on Ubuntu 24.04 LTS; matrix frozen, 2 of 3 rows unverified | BTF-checked minimal socket prefix passed root verifier and observed a real localhost TCP connect on kernel `7.0.0-30-generic`. See `docs/SUPPORTED_MATRIX.md` — Ubuntu 22.04/26.04 LTS rows still need root-run evidence. |
 | DNS observation | Planned | Needs separate uprobe or packet-parsing design. |
@@ -218,6 +225,7 @@ Legend: real and tested means there is code and a test or live verification path
 | SIEM/SOAR export | Real and tested | JSONL normalization and generic webhook POST adapters. |
 | Local tamper evidence | Real and tested | Optional HMAC hash chain for decision logs via `--log-integrity-key`; root can still delete/disable local state. |
 | Exporter remediation queue | Local pilot implementation, tested | An admin may queue only `retry`, `flush`, or `reconnect`; the authenticated device atomically claims one job per watchdog tick and reports a terminal result. This is exporter recovery, not arbitrary endpoint command execution. |
+| Local control-plane mTLS | Implemented for local development, live-verified 2026-09-08 | A dedicated HTTPS listener on `127.0.0.1:8443` requires the local development CA and client certificate. Runtime status, policy delivery, and remediation-worker requests use the configured verified client context. This is not a production CA/deployment claim. |
 | Password-reset delivery | SMTP path implemented, deployment configuration required | Reset tokens are no longer returned by the API. Delivery requires `SHIELD_PASSWORD_RESET_URL`, `SHIELD_SMTP_HOST`, and `SHIELD_SMTP_FROM`; STARTTLS is used and username/password auth is optional. Failed delivery deletes the newly issued token and returns 503. |
 | Windows/macOS sensors | Interface boundary only | Status helpers document ETW/EndpointSecurity target sources; native sensors need target systems. See `docs/SUPPORTED_MATRIX.md`'s Windows track for real scope and why it isn't started (no Windows host available to write against, compile, or verify). |
 | Customer installer/updater | Partial | Linux install and policy-update scripts exist. Signed release tooling (`shield/release/`, `scripts/sign_release.py`/`release_manager.py`) is built and tested (2026-09-05) -- verified wheel signing, versioned releases, atomic symlink rollback -- but not yet wired into the live systemd unit's `ExecStart` or `install_linux_agent.sh`'s upgrade path; see `docs/runbooks/linux-agent.md`'s Rollback section. |
@@ -650,17 +658,21 @@ telemetry, and only `process-exec` / `file-write` are currently verified.
 Systemd artifacts:
 
 - `packaging/systemd/xibalba-shield.service`
+- `packaging/systemd/xibalba-shield-ebpf-helper.service`
 - `packaging/systemd/shield.env.example`
 
 Runbook:
 
 - `docs/runbooks/linux-agent.md`
 
-The unit runs `shield run` as a supervised process, using `/etc/xibalba-shield/device.json`, `/etc/xibalba-shield/policies/current.json`, and `/var/log/xibalba-shield/decisions.jsonl`.
+The endpoint unit runs `shield run` as a supervised non-root process, using `/etc/xibalba-shield/device.json`, `/etc/xibalba-shield/policies/current.json`, and `/var/log/xibalba-shield/decisions.jsonl`. When `SHIELD_PRIVILEGED_SOCKET` is configured, it requires the root-owned split helper. Only the helper owns `/run/xibalba-shield`; the endpoint consumes the socket and must not declare the same `RuntimeDirectory`, because systemd cleanup would remove the helper's socket pathname during an endpoint restart.
 
 Helper scripts:
 
 - `scripts/install_linux_agent.sh`: installs the package and systemd unit.
+- `scripts/generate_local_mtls_ca.sh`: creates a local-development CA plus server/client certificates; never use these credentials as a production trust root.
+- `scripts/repair_device_config_tls.sh`: installs the local client credentials, switches the device config to `https://127.0.0.1:8443`, and restarts the endpoint.
+- `scripts/rotate_backend_token.sh` / `scripts/rotate_tenant_admin_token.sh`: rotate backend credentials without printing token values.
 - `scripts/update_policy_bundle.sh`: fetches a tenant policy, validates it, and reloads/restarts the service.
 - `scripts/burn_in.py`: records root-free throughput, CPU/RSS, decision mix, false-positive review stats, and optional Shield ADR/precision/time-to-contain from labeled event JSONL.
 

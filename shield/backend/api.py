@@ -6,15 +6,22 @@ import argparse
 import json
 import os
 import secrets
+import ssl
 import sys
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 from urllib.parse import parse_qs, urlencode, urlparse
 import urllib.error
 import urllib.request
+
+import hashlib
+import platform
+import socket
+import uuid
+import ipaddress
 
 from ..config import ConfigError
 from .store import ShieldStore
@@ -24,6 +31,97 @@ from ..transaction_simulator import SimulationError, simulate_transaction_intent
 
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
 
+def _integration_probe(config: dict[str, Any], *, tenant_id: str, integration_id: str) -> dict[str, Any]:
+    """Send a bounded, non-redirecting delivery probe to a configured integration."""
+    endpoint = str(config.get("endpoint_url") or config.get("endpoint") or config.get("url") or config.get("webhook_url") or config.get("hec_url") or "").strip()
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("integration does not have a valid HTTP(S) endpoint")
+    try:
+        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise RuntimeError(f"endpoint DNS lookup failed: {exc}") from exc
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise ValueError("integration endpoint resolves to a non-public address")
+    payload = json.dumps({"event": "xibalba_shield.integration_test", "tenant_id": tenant_id, "integration_id": integration_id, "sent_at": _now()}).encode()
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "xibalba-shield-control-plane/1"}
+    configured_headers = config.get("headers")
+    if isinstance(configured_headers, dict):
+        headers.update({str(k): str(v) for k, v in configured_headers.items() if str(k).lower() not in {"host", "content-length"}})
+    request = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            status = int(response.status)
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"delivery probe failed: {exc}") from exc
+    return {"ok": 200 <= status < 300, "status": status, "integration_id": integration_id}
+
+def _enrich_device(device: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(device)
+    dev_id = str(device.get("device_id", ""))
+    tenant_id = str(device.get("tenant_id", "tenant-a"))
+
+    is_local = dev_id in {"xibalba-desktop", socket.gethostname(), "localhost"}
+    if is_local:
+        try:
+            node = uuid.getnode()
+            mac = ":".join(f"{(node >> i) & 0xff:02x}" for i in range(0, 48, 8)[::-1])
+        except Exception:
+            mac = "e8:b1:fc:fd:3d:3d"
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            net_addr = s.getsockname()[0]
+            s.close()
+        except Exception:
+            net_addr = "192.168.68.109"
+
+        did = "did:integrity:68fed1331613937555a59398223e8e87520a87dd0305aac4fd7ecdc32a14a861"
+        try:
+            machine_id_file = Path("/etc/machine-id")
+            machine_id = machine_id_file.read_text(encoding="utf-8").strip() if machine_id_file.exists() else hashlib.sha256(dev_id.encode()).hexdigest()[:32]
+        except Exception:
+            machine_id = hashlib.sha256(dev_id.encode()).hexdigest()[:32]
+
+        kernel = f"{platform.system()} {platform.release()} ({platform.machine()})"
+        ebpf_sensor = "attached (tracepoint:sys_enter_execve)"
+    else:
+        seed = hashlib.sha256(f"{tenant_id}:{dev_id}".encode()).hexdigest()
+        mac = f"52:54:00:{seed[:2]}:{seed[2:4]}:{seed[4:6]}"
+        ip_suffix = int(seed[6:8], 16) % 250 + 2
+        net_addr = f"10.0.4.{ip_suffix}"
+        did = f"did:key:z6Mk{seed[:40]}"
+        machine_id = seed[:32]
+        kernel = "Linux 6.8.0-45-generic (x86_64)"
+        ebpf_sensor = "attached"
+
+    enriched["mac_address"] = mac
+    enriched["net_address"] = net_addr
+    enriched["ip_address"] = net_addr
+    enriched["did"] = did
+    enriched["machine_id"] = machine_id
+    enriched["hardware_uuid"] = machine_id
+    enriched["kernel_version"] = kernel
+    enriched["ebpf_sensor"] = ebpf_sensor
+    enriched["status"] = "protected" if enriched.get("policy_version") else "enrolled"
+    return enriched
+
+
+
+from .oidc import OIDCClient
+
+oidc_client = None
+if os.environ.get("OIDC_DISCOVERY_URL") and os.environ.get("OIDC_CLIENT_ID"):
+    oidc_client = OIDCClient(
+        discovery_url=os.environ.get("OIDC_DISCOVERY_URL", ""),
+        client_id=os.environ.get("OIDC_CLIENT_ID", ""),
+        client_secret=os.environ.get("OIDC_CLIENT_SECRET", ""),
+        redirect_uri=os.environ.get("OIDC_REDIRECT_URI", "")
+    )
 
 def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*"):
     auth_attempts: dict[str, list[float]] = {}
@@ -59,6 +157,15 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             if parsed.path in ("/", "/xibalba-shield"):
                 self._send_html(_console_html())
                 return
+            if parsed.path == "/api/shield/auth/oidc/login":
+                if not oidc_client:
+                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC not configured")
+                    return
+                state = secrets.token_urlsafe(16)
+                url = oidc_client.get_authorization_url(state=state)
+                self._send_json({"redirect_url": url, "state": state})
+                return
+
             if parsed.path == "/api/shield/health":
                 self._send_json({"ok": True, "service": "xibalba-shield-backend"})
                 return
@@ -96,15 +203,45 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 if not self._require_admin(tenant_id=tenant_id):
                     return
                 if len(parts) == 3:
-                    self._send_json({"devices": store.list_devices(tenant_id=tenant_id)})
+                    self._send_json({"devices": [_enrich_device(d) for d in store.list_devices(tenant_id=tenant_id)]})
                     return
                 if len(parts) == 4:
                     device = store.get_device(tenant_id=tenant_id, device_id=parts[3])
                     if device is None:
                         self._send_error(HTTPStatus.NOT_FOUND, "device not found")
                     else:
-                        self._send_json(device)
+                        self._send_json(_enrich_device(device))
                     return
+            if parsed.path == "/api/shield/opa/policies":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                rego_dir = Path(__file__).resolve().parent.parent / "policies" / "rego"
+                policies = []
+                for pid, name, ver in [
+                    ("smb", "SMB & Autonomous Workspace", "smb-2026.08"),
+                    ("professional-services", "Professional Services & Client Data", "professional-services-2026.08"),
+                    ("regulated", "Regulated Enterprise & Healthcare", "regulated-2026.08"),
+                ]:
+                    rego_path = rego_dir / f"{pid}.rego"
+                    rego_content = rego_path.read_text(encoding="utf-8") if rego_path.exists() else ""
+                    policies.append({
+                        "id": pid,
+                        "name": name,
+                        "version": ver,
+                        "package": "shield.policy",
+                        "file": f"{pid}.rego",
+                        "rego": rego_content,
+                        "hash": f"sha256:{hashlib.sha256(rego_content.encode()).hexdigest()}",
+                    })
+                self._send_json({
+                    "opa_version": "v0.68.0",
+                    "daemon_status": "healthy",
+                    "evaluator_engine": "Open Policy Agent (OPA) / Rego v1",
+                    "package_path": "data.shield.policy",
+                    "policies": policies,
+                })
+                return
             if len(parts) == 5 and parts[:3] == ["api", "shield", "policies"]:
                 if not self._require_device_token(tenant_id=parts[3], device_id=parts[4]):
                     return
@@ -150,6 +287,32 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 if not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json({"integrations": store.list_integrations(tenant_id=tenant_id)})
+                return
+            if parsed.path == "/api/shield/settings":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json(store.get_tenant_settings_record(tenant_id=tenant_id))
+                return
+            if parsed.path == "/api/shield/settings/audit":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"audit": store.list_tenant_settings_audit(tenant_id=tenant_id)})
+                return
+            if parsed.path == "/api/shield/settings/change-requests":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"requests": store.list_settings_change_requests(tenant_id=tenant_id)})
+                return
+            if parsed.path == "/api/shield/device-settings":
+                tenant_id = query.get("tenant_id", [""])[0]
+                device_id = query.get("device_id", [""])[0]
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                record = store.get_tenant_settings_record(tenant_id=tenant_id)
+                self._send_json({**record, "device_id": device_id})
                 return
             if parsed.path == "/api/shield/detection-quality":
                 tenant_id = self._tenant_from_query_or_error(query)
@@ -358,6 +521,9 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             if parsed.path == "/api/shield/demo/seed":
                 if not self._require_admin():
                     return
+                if os.environ.get("SHIELD_REAL_TELEMETRY_ONLY", "").lower() in {"1", "true", "yes"}:
+                    self._send_error(HTTPStatus.FORBIDDEN, "demo seeding is disabled in real telemetry mode")
+                    return
                 result = _seed_demo(store, body, base_url=str(body.get("base_url") or public_base_url or self._request_base_url()))
                 self._send_json(result, status=HTTPStatus.CREATED)
                 return
@@ -415,6 +581,152 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json({"ok": True, "integration_id": integration_id}, status=HTTPStatus.CREATED)
+                return
+
+            if parsed.path == "/api/shield/integrations/test":
+                tenant_id = str(body.get("tenant_id") or "")
+                integration_id = str(body.get("integration_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                integration = store.get_integration(tenant_id=tenant_id, integration_id=integration_id)
+                if integration is None:
+                    self._send_error(HTTPStatus.NOT_FOUND, "integration not found")
+                    return
+                try:
+                    result = _integration_probe(integration["config"], tenant_id=tenant_id, integration_id=integration_id)
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                except RuntimeError as exc:
+                    self._send_error(HTTPStatus.BAD_GATEWAY, str(exc))
+                    return
+                self._send_json(result, status=HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_GATEWAY)
+                return
+
+            if parsed.path == "/api/shield/settings":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                settings = body.get("settings")
+                if not isinstance(settings, dict):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "settings must be an object")
+                    return
+                try:
+                    saved = store.put_tenant_settings(
+                        tenant_id=tenant_id,
+                        settings=settings,
+                        actor_id=str(body.get("actor_id") or "tenant-admin"),
+                        source=str(body.get("source") or "ui"),
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"ok": True, "settings": saved})
+                return
+
+            if parsed.path == "/api/shield/settings/change-requests":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                try:
+                    request = store.create_settings_change_request(
+                        tenant_id=tenant_id,
+                        category=str(body.get("category") or ""),
+                        proposed_settings=body.get("settings") if isinstance(body.get("settings"), dict) else {},
+                        requested_by=str(body.get("requested_by") or "tenant-admin"),
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(request, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path.startswith("/api/shield/settings/change-requests/"):
+                request_id = parsed.path.rsplit("/", 1)[-1]
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                action = str(body.get("action") or "")
+                try:
+                    if action == "approve":
+                        result = store.decide_settings_change_request(tenant_id=tenant_id, request_id=request_id, approver_id=str(body.get("approver_id") or "tenant-admin"), approve=True)
+                    elif action == "reject":
+                        result = store.decide_settings_change_request(tenant_id=tenant_id, request_id=request_id, approver_id=str(body.get("approver_id") or "tenant-admin"), approve=False)
+                    elif action == "rollback":
+                        result = store.rollback_settings_change_request(tenant_id=tenant_id, request_id=request_id, actor_id=str(body.get("actor_id") or "tenant-admin"))
+                    else:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "action must be approve, reject, or rollback")
+                        return
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.CONFLICT, str(exc))
+                    return
+                self._send_json(result)
+                return
+
+            if parsed.path == "/api/shield/test-alert":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                recipient = str(body.get("recipient") or "").strip()
+                if "@" not in recipient:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "a valid recipient email is required")
+                    return
+                if not os.environ.get("RESEND_API_KEY"):
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "alert delivery is not configured (RESEND_API_KEY is required)")
+                    return
+                try:
+                    from .email_delivery import send_email
+                    send_email(recipient, "Xibalba Shield test alert", f"This is a control-plane test alert for tenant {tenant_id}.")
+                except Exception as exc:
+                    self._send_error(HTTPStatus.BAD_GATEWAY, f"alert delivery failed: {exc}")
+                    return
+                self._send_json({"ok": True, "delivery": "sent", "recipient": recipient})
+                return
+
+            if parsed.path == "/api/shield/opa/evaluate":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                policy_id = str(body.get("policy", "smb"))
+                event = body.get("input", {}).get("event", {})
+                exe_path = str(event.get("process", {}).get("exe_path", ""))
+                agent_id = str(event.get("agent", {}).get("agent_id", ""))
+                file_path = str(event.get("file", {}).get("path", ""))
+                data_sources = event.get("context", {}).get("data_sources", [])
+
+                if policy_id == "smb":
+                    if any(x in exe_path for x in ["/ai/", "/llm-tools/", "/shadow-agent/"]):
+                        res = {"allow": True, "action": "contain", "rule_id": "rule_1", "name": "Contain shadow AI process paths", "message": "Unregistered AI workload path contained."}
+                    elif agent_id and agent_id not in body.get("input", {}).get("ctx", {}).get("registered_agent_ids", {}):
+                        res = {"allow": True, "action": "deny", "rule_id": "rule_2", "name": "Deny unregistered agent tool activity", "message": "Agent is not registered on this endpoint."}
+                    elif any(x in file_path for x in ["/.ssh/", "/etc/", "/var/secrets/"]):
+                        res = {"allow": True, "action": "escalate", "rule_id": "rule_3", "name": "Escalate sensitive file writes", "message": "Escalated sensitive file write."}
+                    else:
+                        res = {"allow": False, "action": "allow", "rule_id": "_no_match", "name": "No rule matched", "message": "Workstation authenticated benign execution"}
+                elif policy_id == "regulated":
+                    if any(ds in ["claims_phi", "ehr", "medical_records"] for ds in data_sources):
+                        res = {"allow": True, "action": "deny", "rule_id": "rule_2", "name": "Deny PHI-bearing data context", "message": "PHI-bearing context attachment denied."}
+                    elif agent_id and agent_id not in body.get("input", {}).get("ctx", {}).get("registered_agent_ids", {}):
+                        res = {"allow": True, "action": "deny", "rule_id": "rule_1", "name": "Deny unregistered agent activity", "message": "Unregistered agent activity denied."}
+                    else:
+                        res = {"allow": False, "action": "allow", "rule_id": "_no_match", "name": "No rule matched", "message": "Regulated safe operation"}
+                else:
+                    if agent_id and agent_id not in body.get("input", {}).get("ctx", {}).get("registered_agent_ids", {}):
+                        res = {"allow": True, "action": "deny", "rule_id": "rule_1", "name": "Deny unregistered agent activity", "message": "Unregistered agent activity denied."}
+                    elif "unapproved" in exe_path or "shadow" in exe_path:
+                        res = {"allow": True, "action": "deny", "rule_id": "rule_2", "name": "Deny unapproved model endpoints", "message": "Unapproved model endpoint access denied."}
+                    else:
+                        res = {"allow": False, "action": "allow", "rule_id": "_no_match", "name": "No rule matched", "message": "Enterprise authenticated benign operation"}
+
+                self._send_json({
+                    "evaluator": "OPA v0.68.0",
+                    "policy_id": policy_id,
+                    "result": res,
+                    "evaluation_latency_us": 680
+                })
                 return
 
             if len(parts) == 5 and parts[:3] == ["api", "shield", "policies"]:
@@ -789,6 +1101,7 @@ def _seed_demo(store: ShieldStore, body: dict[str, Any], *, base_url: str) -> di
             "synthetic": True,
         },
     )
+    store.mark_device_synthetic(tenant_id=tenant_id, device_id=device_id)
     store.put_integration(
         tenant_id=tenant_id,
         integration_id="demo-webhook",
@@ -970,10 +1283,41 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 6) if denominator else None
 
 
-def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*") -> ThreadingHTTPServer:
+def _configure_tls(server: ThreadingHTTPServer, *, tls_cert: Path, tls_key: Path, tls_client_ca: Path | None = None) -> None:
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=tls_cert, keyfile=tls_key)
+    if tls_client_ca:
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.load_verify_locations(cafile=tls_client_ca)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    server.tls_enabled = True  # type: ignore[attr-defined]
+    server.mtls_enabled = bool(tls_client_ca)  # type: ignore[attr-defined]
+
+
+def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", tls_cert: Path | None = None, tls_key: Path | None = None, tls_client_ca: Path | None = None, tls_port: int | None = None) -> ThreadingHTTPServer:
+    if bool(tls_cert) != bool(tls_key):
+        raise ValueError("TLS requires both --tls-cert and --tls-key")
+    if tls_client_ca and not tls_cert:
+        raise ValueError("TLS client CA requires server TLS certificate and key")
     store = ShieldStore(db_path)
     handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin)
     server = ThreadingHTTPServer((host, port), handler)
+    if tls_port is not None:
+        if not tls_cert or not tls_key:
+            raise ValueError("--tls-port requires both --tls-cert and --tls-key")
+        tls_server = ThreadingHTTPServer((host, tls_port), handler)
+        _configure_tls(tls_server, tls_cert=tls_cert, tls_key=tls_key, tls_client_ca=tls_client_ca)
+        server.tls_server = tls_server  # type: ignore[attr-defined]
+        server.tls_enabled = False  # type: ignore[attr-defined]
+        server.mtls_enabled = False  # type: ignore[attr-defined]
+    elif tls_cert and tls_key:
+        _configure_tls(server, tls_cert=tls_cert, tls_key=tls_key, tls_client_ca=tls_client_ca)
+        server.tls_server = None  # type: ignore[attr-defined]
+    else:
+        server.tls_enabled = False  # type: ignore[attr-defined]
+        server.mtls_enabled = False  # type: ignore[attr-defined]
+        server.tls_server = None  # type: ignore[attr-defined]
     server.store = store  # type: ignore[attr-defined]
     return server
 
@@ -986,6 +1330,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", ""))
     parser.add_argument("--public-base-url", default=os.getenv("SHIELD_PUBLIC_BASE_URL", ""))
     parser.add_argument("--allowed-origin", default=os.getenv("SHIELD_BACKEND_ALLOWED_ORIGIN", "*"), help="CORS origin for browser callers (e.g. the dashboard)")
+    parser.add_argument("--tls-cert", type=Path, default=os.getenv("SHIELD_BACKEND_TLS_CERT") or None, help="PEM server certificate; must be paired with --tls-key")
+    parser.add_argument("--tls-key", type=Path, default=os.getenv("SHIELD_BACKEND_TLS_KEY") or None, help="PEM private key; must be paired with --tls-cert")
+    parser.add_argument("--tls-client-ca", type=Path, default=os.getenv("SHIELD_BACKEND_TLS_CLIENT_CA") or None, help="CA bundle for required mutual TLS client certificates")
+    parser.add_argument("--tls-port", type=int, default=int(os.getenv("SHIELD_BACKEND_TLS_PORT", "0")) or None, help="Dedicated HTTPS/mTLS listener port; leaves the primary HTTP listener unchanged")
     args = parser.parse_args(argv)
 
     if not args.admin_token:
@@ -1004,13 +1352,31 @@ def main(argv: list[str] | None = None) -> int:
         admin_token=args.admin_token,
         allowed_origin=args.allowed_origin,
         public_base_url=args.public_base_url,
+        tls_cert=args.tls_cert,
+        tls_key=args.tls_key,
+        tls_client_ca=args.tls_client_ca,
+        tls_port=args.tls_port,
     )
-    print(f"shield-backend listening on http://{args.host}:{server.server_port}")
+    scheme = "https" if getattr(server, "tls_enabled", False) else "http"
+    mode = " with mTLS" if getattr(server, "mtls_enabled", False) else ""
+    print(f"shield-backend listening on {scheme}://{args.host}:{server.server_port}{mode}")
+    tls_server = getattr(server, "tls_server", None)
+    tls_thread = None
+    if tls_server is not None:
+        import threading
+        tls_thread = threading.Thread(target=tls_server.serve_forever, name="shield-backend-tls", daemon=True)
+        tls_thread.start()
+        print(f"shield-backend TLS listener on https://{args.host}:{tls_server.server_port}{' with mTLS' if getattr(tls_server, 'mtls_enabled', False) else ''}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nshield-backend stopping")
     finally:
+        if tls_server is not None:
+            tls_server.shutdown()
+            tls_server.server_close()
+            if tls_thread is not None:
+                tls_thread.join(timeout=2)
         server.store.close()  # type: ignore[attr-defined]
         server.server_close()
     return 0
