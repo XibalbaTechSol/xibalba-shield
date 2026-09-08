@@ -218,7 +218,7 @@ Legend: real and tested means there is code and a test or live verification path
 | SIEM/SOAR export | Real and tested | JSONL normalization and generic webhook POST adapters. |
 | Local tamper evidence | Real and tested | Optional HMAC hash chain for decision logs via `--log-integrity-key`; root can still delete/disable local state. |
 | Windows/macOS sensors | Interface boundary only | Status helpers document ETW/EndpointSecurity target sources; native sensors need target systems. See `docs/SUPPORTED_MATRIX.md`'s Windows track for real scope and why it isn't started (no Windows host available to write against, compile, or verify). |
-| Customer installer/updater | Partial | Linux install and policy-update scripts exist. Signed binary updater is still planned. |
+| Customer installer/updater | Partial | Linux install and policy-update scripts exist. Signed release tooling (`shield/release/`, `scripts/sign_release.py`/`release_manager.py`) is built and tested (2026-09-05) -- verified wheel signing, versioned releases, atomic symlink rollback -- but not yet wired into the live systemd unit's `ExecStart` or `install_linux_agent.sh`'s upgrade path; see `docs/runbooks/linux-agent.md`'s Rollback section. |
 
 Current root-free validation:
 

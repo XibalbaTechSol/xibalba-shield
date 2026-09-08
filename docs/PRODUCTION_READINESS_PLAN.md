@@ -234,11 +234,142 @@ Pass when the selected pilot fleet meets resource, availability, event-loss, dec
    and enforces with `require_signed_policy` set; a tampered bundle and an expired
    bundle are both rejected with a specific diagnostic, not a silent failure.
 2. Add supervisor/watchdog and health/degraded-state telemetry for OPA, sensors, exporter, and queue.
-3. Complete live TCP verification on the selected Linux kernel matrix; record attach and event-loss evidence.
+3. Complete live TCP verification on the selected Linux kernel matrix; record attach and
+   event-loss evidence. **Partially addressed 2026-09-05** — the parts doable without
+   additional kernel hardware are closed: all three sensors now raise a typed
+   `SensorAttachError` (stage-tagged: `bpf_load`/`kprobe`/`kretprobe`/`perf_buffer`) instead
+   of a raw traceback on attach failure, the `lost_events` counter has a real test proving
+   the BCC `lost_cb` wiring is load-bearing, and process-exec/file-write now have their own
+   standalone root-run verify scripts matching TCP's (`scripts/verify_{process_exec,
+   file_write}_root.py`), closing the script-parity gap `docs/SUPPORTED_MATRIX.md`'s closing
+   procedure implicitly assumed. Real root-run evidence collected same day on kernel
+   `7.0.0-30-generic`: all 11 relevant `tests/test_ebpf_sensor.py` cases pass (including the
+   three new lost-events wiring tests), and all three `verify_*_root.py` scripts independently
+   report `"status": "pass"`, archived at `artifacts/live-gate/{process-exec,file-write,
+   tcp-connect}-root.log`. **Still open, and not closeable from this session**:
+   `docs/SUPPORTED_MATRIX.md`'s Ubuntu 22.04 LTS and 26.04 LTS rows remain `⬜ not run` — this
+   needs a real second/third kernel (VM or bare metal, not a shared-kernel chroot, per that
+   doc's own closing procedure) actually provisioned and root-run against, which this
+   environment cannot do.
 4. Make the exporter durable and complete DID registration/readback preflight tooling.
+   **Closed 2026-09-05.** Durable exporter: `IntegrityExporter.export_decision` previously
+   did a single-shot synchronous BCC submission with no queue at all -- a failure during an
+   outage lost the evidence immediately, not just eventually. `shield/integrity_exporter/
+   spool.py` (new) mirrors `integrity-core/bcc_middleware/app/spool.py`'s design for
+   consistency across both products: a single SQLite file, write-AFTER-failure (a successful
+   submission never touches disk), capped exponential backoff on retry. `export_decision`
+   now spools the already-built, already-signed commitment on failure;
+   `IntegrityExporter.replay_pending()` drains it, called every `Watchdog.tick()` so an
+   outage that stops new decisions doesn't also stop retrying what's already queued.
+   `health()` now reports `spool_pending`/`spool_oldest_age_seconds` alongside the existing
+   `export_failures`/`queue_depth`. 17 new/updated tests (`tests/test_exporter_spool.py`,
+   updates to `tests/test_exporter_health.py`/`test_invocation_id.py`), all passing, real
+   SQLite against `tmp_path`, only the network boundary mocked.
+
+   DID registration/readback preflight: no such check existed before this -- the dashboard's
+   demo-seed path (`shield/backend/api.py`) literally hardcoded `"did_registered": False` and
+   `"oracle_readback": "blocked_until_rpc_credentials"` as synthetic placeholders (correctly
+   labeled `"synthetic": True`, but no real alternative existed anywhere else in the repo).
+   `shield/integrity_exporter/preflight.py` (new) and a new `shield preflight` CLI command
+   give a real, checkable answer instead: does the local DID load/create cleanly, is
+   `bcc_middleware` reachable (`GET /health`), and -- only if `--oracle-url` is configured --
+   is the Oracle reachable (`GET /healthz`) and does it already know this DID
+   (`GET /v1/agent/{did}`, treating 404 as a conclusive "not yet registered," not an error).
+   Deliberately does NOT attempt full on-chain registration
+   (`integrity_sdk.registration.register_agent`) -- that needs a funder key, RPC access, and
+   deployed contract addresses this repo has no config surface for. 7 new tests
+   (`tests/test_preflight.py` against a real local `http.server`, plus 2 CLI-wiring tests in
+   `tests/test_cli.py`), all passing.
 5. Harden systemd deployment and implement signed package/update/rollback mechanics.
+   **Systemd hardening half addressed 2026-09-05, package signing/update/rollback still
+   fully open.** `packaging/systemd/xibalba-shield.service` now runs as a dedicated
+   `xibalba-shield` system account (not root, not the interactive dev/codex user) via
+   `User=`/`Group=`, relying entirely on the three ambient eBPF capabilities for privilege
+   rather than "whatever this account can already do"; `ProtectSystem=full`→`strict`;
+   added `PrivateDevices`, `ProtectClock`, `ProtectHostname`, `ProtectProc=invisible`,
+   `ProcSubset=pid`, `RestrictNamespaces`, `RestrictRealtime`, `SystemCallArchitectures=
+   native`, `UMask=0077`. `scripts/install_linux_agent.sh` now creates that account and
+   chowns config/log/state dirs to it (idempotent); `docs/runbooks/linux-agent.md` updated
+   with the manual equivalent and a chown reminder for operator-created files. Deliberately
+   did NOT add `SystemCallFilter=`/`MemoryDenyWriteExecute=` -- BCC's userspace LLVM JIT
+   (used by `BPF(text=...)` before the real kernel-side bpf() load) makes it genuinely
+   unclear whether either would silently break sensor attach, and guessing would violate
+   this repo's own "no silent mocks" rule. `scripts/verify_hardened_unit.sh` (new) uses
+   `systemd-run` to replicate every directive actually shipped and run all 3 sensors'
+   `self_test()` under it -- root-only, not yet run in this session (this environment has
+   no passwordless sudo); **an operator must run it and confirm PASS before trusting this
+   hardening in production**, the same live-verification discipline item 3 used.
+
+   Package signing/update/rollback mechanics: **mechanism built and tested 2026-09-06,
+   not yet wired to the live install path.** New `shield/release/` package: `signing.py`
+   (Ed25519 wheel signing/verification, reusing `shield/config/signing.py`'s PEM/0600
+   key-handling convention but a deliberately SEPARATE key/trust domain from the
+   policy-signing key) and `manager.py` (versioned `<releases-dir>/<version>/` +
+   atomic-symlink-swap `current`, so rollback is a symlink flip with no reinstall, no
+   network call, no re-verification). CLI surface: `scripts/sign_release.py`,
+   `scripts/release_manager.py` (`install`/`rollback`/`list`). 18 new tests, including
+   one that exercises the real venv+pip install path end to end (not just an injected
+   fake installer) against a real trivial package -- all passing. Manually verified: a
+   tampered wheel is correctly refused by `release_manager.py install` with a specific
+   sha256-mismatch diagnostic, not a silent accept.
+
+   **Deliberately NOT done in this pass**: `packaging/systemd/xibalba-shield.service`'s
+   `ExecStart` still hardcodes `/usr/local/bin/shield`, not `<current-link>/bin/shield` --
+   pointing the live unit at the versioned-release path is a separate, deliberate
+   decision (it changes the real deployment path for every existing install) that
+   shouldn't be bundled silently into the mechanism's introduction. `install_linux_agent.sh`
+   also doesn't call the new tooling yet. `scripts/pilot_gate_report.py`'s
+   `_installer_gate()` remains a self-attestation stub (checks a text file mentions
+   certain keywords) -- it could now be pointed at a real attestation produced by
+   `sign_release.py`/`verify_artifact`, but that wiring wasn't done here either.
 6. Add failure-injection and adversarial tests, then run the pilot-gate report and burn-in.
-7. Wire the dashboard to the resulting health, coverage, policy, evidence, and containment contracts.
+   **Chaos/adversarial half closed 2026-09-05, burn-in run still open.** New
+   `docs/design/threat-model-matrix-2026-09-06.md` maps all 14 scenarios workstream I
+   names (7 chaos, 7 adversarial) to a real test, pre-existing coverage, or an honestly
+   disclosed "not independently testable at this level" -- Gate 6's own required
+   artifact, which didn't exist before. 12 of 14 have a real, passing automated test
+   (`tests/test_chaos_adversarial.py`, 9 new tests); building it surfaced and fixed two
+   real, previously-unknown bugs (not just confirmed already-correct behavior):
+   `Watchdog.tick()` used to abort its entire status publish if any one sub-check raised
+   (a dead sensor's own `health()` throwing meant the dashboard kept showing stale
+   "healthy" data during exactly that failure -- now each sub-check is independently
+   try/excepted), and `shield sign-policy` crashed with a raw `cryptography`-library
+   traceback on a corrupted existing key file instead of a clean error. New
+   `scripts/run_adversarial_tests.py` produces a real JSON artifact (not a self-
+   attestation) and a new `_adversarial_gate()` in `scripts/pilot_gate_report.py`
+   consumes it -- run end-to-end and verified passing. **Still fully open**: an actual
+   48h+ burn-in run against a real pilot fleet (`scripts/burn_in.py` is a real harness,
+   never run for the required duration against real hosts) -- that's a real multi-day
+   operational exercise, not more code to write.
+7. Wire the dashboard to the resulting health, coverage, policy, evidence, and containment
+   contracts. **Partially addressed 2026-09-05.** Two real UI surfaces exist for Shield, and
+   this closed the gap in the one this repo actually owns: `shield/backend/api.py`'s embedded
+   `_console_html()` console (real, served directly by `shield-backend`, previously never
+   called `/api/shield/exporter-status` at all) now has a "Device Health & Exporter Status"
+   panel rendering real per-device `did_preflight` (item 4), `policy`/`sensors`/`exporter`
+   watchdog telemetry (item 2), and the new `spool_pending`/`spool_oldest_age_seconds` (item
+   4) -- falls back to the older demo-seed `did_registered`/`oracle_readback` fields when
+   `did_preflight` is absent, so both real devices and the demo tenant render sensibly.
+   Browser-verified end to end (real backend, real demo seed, then a real POST simulating a
+   live device's watchdog payload) -- not just unit-tested. New regression coverage in
+   `tests/test_backend.py`. **Also closed 2026-09-06**: a "Containment Outcomes" panel now
+   calls `/api/shield/enforcement-outcomes` -- a real backend endpoint that existed since
+   before this session but was never called from this console at all, so every containment
+   attempt (including failures, like a `contain` decision whose target process had already
+   exited) was invisible to an operator. Browser-verified with a real containment-failure
+   outcome round-tripped through the real backend. `list_enforcement_outcomes`/
+   `record_enforcement_outcome` had zero test coverage before this session; now covered in
+   `tests/test_backend.py`. **What this still does NOT close**: coverage-matrix (item 3's
+   per-kernel evidence) visualization and the 3D evidence graph's own containment-outcome
+   nodes/edges (a separate, bigger visualization piece from the plain table added here)
+   remain unbuilt in this console; and a
+   *second*, unrelated UI surface -- `ShieldFleetOverview.tsx`/`ShieldPage.tsx` -- lives inside
+   `integrity-core`'s own `integrity-dashboard`, not this repo, which is an architectural
+   inconsistency with both repos' stated zero-cross-dependency boundary (`CLAUDE.md`). This
+   repo's own `ui/` is still the untouched default Vite/React scaffold, never built out --
+   tracked as a separate future item (build a real Shield-owned React app there, eventually
+   migrating fleet-overview functionality out of `integrity-core`), not attempted in this
+   pass since the embedded console was the faster, real win for this gate.
 
 Current evidence (2026-09-04): item 2 (watchdog/health telemetry) is implemented — a
 `Watchdog` (`shield/watchdog.py`) now owns hot-reload checking, OPA restart-if-unhealthy,

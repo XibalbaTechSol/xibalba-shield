@@ -10,11 +10,20 @@ This runbook turns the existing `shield run` loop into a supervised Linux proces
    python3 -m pip install .
    ```
 
-2. Create local config directories:
+2. Create the dedicated `xibalba-shield` system account the hardened unit runs as
+   (`packaging/systemd/xibalba-shield.service`'s `User=`/`Group=`, 2026-09-05) and local
+   config directories owned by it -- `scripts/install_linux_agent.sh` does both of these
+   steps for you; shown here manually for a from-scratch walkthrough:
 
    ```bash
-   sudo install -d -m 0750 /etc/xibalba-shield/policies /var/log/xibalba-shield /var/lib/xibalba-shield
+   sudo groupadd --system xibalba-shield
+   sudo useradd --system --gid xibalba-shield --no-create-home --shell /usr/sbin/nologin xibalba-shield
+   sudo install -d -m 0750 -o xibalba-shield -g xibalba-shield /etc/xibalba-shield/policies /var/log/xibalba-shield /var/lib/xibalba-shield
    ```
+
+   Any file you create under `/etc/xibalba-shield` yourself in the steps below (device
+   config, policy bundle) must also be owned by `xibalba-shield:xibalba-shield` (or at least
+   group-readable by it) -- the unit no longer runs as root and cannot read a root-only file.
 
 3. Install a device config at `/etc/xibalba-shield/device.json`:
 
@@ -45,6 +54,12 @@ This runbook turns the existing `shield run` loop into a supervised Linux proces
 
    ```bash
    shield fetch-policy --device-config /etc/xibalba-shield/device.json --output /etc/xibalba-shield/policies/current.json
+   ```
+
+   Fix ownership of whatever you just created, since the unit reads these as `xibalba-shield`, not root:
+
+   ```bash
+   sudo chown -R xibalba-shield:xibalba-shield /etc/xibalba-shield
    ```
 
 5. Install and start the systemd unit:
@@ -192,7 +207,42 @@ shield validate --rules /etc/xibalba-shield/policies/current.json
 sudo systemctl restart xibalba-shield
 ```
 
-Binary rollback is package-manager specific. The minimum safe rollback is to reinstall the previous reviewed wheel or commit, then restart the service. Do not replace binaries from an unsigned download.
+Binary/package rollback (2026-09-05): `shield/release/` + `scripts/release_manager.py`
+now give a real, signed, versioned mechanism instead of "reinstall the previous reviewed
+wheel or commit" -- `install` verifies a signed wheel (`scripts/sign_release.py`) before
+creating a new, independent `<releases-dir>/<version>/` and only then atomically flips
+`<current-link>`; `rollback` flips it back to an already-installed version with no
+reinstall, no network call, and no re-verification (the release was verified once, at
+install time):
+
+```bash
+# One-time: create a release-signing keypair (separate from the policy-signing key) and
+# sign a built wheel.
+python3 scripts/sign_release.py --key ~/.xibalba-shield/release-signing.key \
+    --wheel dist/xibalba_shield-0.1.1-py3-none-any.whl \
+    --out dist/xibalba_shield-0.1.1.attestation.json
+
+# Install the new signed release (verifies before touching anything, then swaps `current`):
+sudo python3 scripts/release_manager.py install \
+    --wheel dist/xibalba_shield-0.1.1-py3-none-any.whl \
+    --attestation dist/xibalba_shield-0.1.1.attestation.json \
+    --version 0.1.1 --releases-dir /opt/xibalba-shield/releases \
+    --current-link /opt/xibalba-shield/current
+sudo systemctl restart xibalba-shield
+
+# Rollback -- a symlink flip, not a reinstall:
+sudo python3 scripts/release_manager.py rollback --version 0.1.0 \
+    --releases-dir /opt/xibalba-shield/releases --current-link /opt/xibalba-shield/current
+sudo systemctl restart xibalba-shield
+```
+
+**Not yet wired to a live install**: `packaging/systemd/xibalba-shield.service`'s
+`ExecStart` still hardcodes `/usr/local/bin/shield` (from a plain `pip install .`), not
+`<current-link>/bin/shield` -- pointing the unit at the versioned-release path is a
+separate, deliberate change (it alters the real deployment path for every existing
+install) not made alongside this mechanism's introduction. Until that's done, the tools
+above exist and are tested but aren't yet the live upgrade path `install_linux_agent.sh`
+uses.
 
 ## Uninstall
 

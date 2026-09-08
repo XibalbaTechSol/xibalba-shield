@@ -1,0 +1,11 @@
+[self-test:process_exec] loading (requires root)...
+[self-test:process_exec] spawned /usr/bin/true (pid 675353), watching for its exec...
+[self-test:process_exec] PASS — observed pid 675353's real execve.
+{
+  "check": "process_exec_root_verification",
+  "command": "python3 scripts/verify_process_exec_root.py",
+  "reason": "observed real spawned subprocess's execve",
+  "requires_root": true,
+  "returncode": 0,
+  "status": "pass"
+}

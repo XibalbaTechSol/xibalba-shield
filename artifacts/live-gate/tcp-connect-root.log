@@ -102,3 +102,14 @@ include/linux/args.h:25:24: note: expanded from macro '__CONCAT'
   "returncode": 0,
   "status": "pass"
 }
+[self-test:tcp_connect] loading (requires root)...
+[self-test:tcp_connect] connecting to 127.0.0.1:35619 from this process (pid 675369), watching...
+[self-test:tcp_connect] PASS — observed this process's real connect to port 35619.
+{
+  "check": "tcp_connect_root_verification",
+  "command": "python3 scripts/verify_tcp_connect_root.py",
+  "reason": "observed real localhost TCP connect",
+  "requires_root": true,
+  "returncode": 0,
+  "status": "pass"
+}

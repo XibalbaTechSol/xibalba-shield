@@ -15,7 +15,28 @@ TCP-connect/DNS hooks, pushing compact records to user space via a ring buffer.
 
 Reproduce: `sudo python3 -m shield.sensors.ebpf.loader` (or `sudo pytest
 tests/test_ebpf_sensor.py -v`) from the repo root — see the parent `README.md`'s "Verifying
-the eBPF sensors" section for exact commands and expected output.
+the eBPF sensors" section for exact commands and expected output. Each sensor also has its
+own standalone, pytest-independent root-run script for per-kernel evidence bundles
+(`docs/SUPPORTED_MATRIX.md`'s closing procedure): `scripts/verify_process_exec_root.py`,
+`scripts/verify_file_write_root.py`, `scripts/verify_tcp_connect_root.py` — all three now
+exist (2026-09-05; previously only TCP had one).
+
+Attach failures across all three sensors now raise a typed `SensorAttachError` (`loader.py`)
+carrying which stage failed (`bpf_load`/`kprobe`/`kretprobe`/`perf_buffer`) instead of a raw
+bcc/libbpf traceback, and each sensor's `lost_events`/`health()` wiring has a real (root-gated)
+test confirming the counter is load-bearing, not silently dead code
+(`test_lost_events_counter_reflects_bcc_lost_cb`, 2026-09-05). This closes the "measured ...
+attach-failure behavior" half of Gate 3's wording for the one kernel already verified here — it
+does **not** touch the still-open half: `docs/SUPPORTED_MATRIX.md`'s Ubuntu 22.04/26.04 rows
+remain `⬜ not run` and need real per-kernel hardware/VMs to close, not something a code change
+in this repo can substitute for.
+
+**Root-run evidence, 2026-09-05, same kernel:** `sudo .venv/bin/python -m pytest
+tests/test_ebpf_sensor.py -v` — 11 passed (3 pre-existing non-root-runnable cases skipped as
+designed), including all three new `test_lost_events_counter_reflects_bcc_lost_cb` cases. All
+three standalone verify scripts (`scripts/verify_{process_exec,file_write,tcp_connect}_root.py`)
+independently report `"status": "pass"`, archived at `artifacts/live-gate/{process-exec,
+file-write,tcp-connect}-root.log`.
 
 **Before wiring any of the three sensors into `shield/agent_core/router.py`** in place of
 `shield/sensors/dev_generator.py`: nothing else needs to happen on this kernel — all three are

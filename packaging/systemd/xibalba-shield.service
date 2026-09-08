@@ -13,19 +13,44 @@ RestartSec=5s
 RuntimeDirectory=xibalba-shield
 StateDirectory=xibalba-shield
 LogsDirectory=xibalba-shield
+# Dedicated non-root system account (created by scripts/install_linux_agent.sh), not root
+# and not the interactive dev/codex user -- least-privilege relies entirely on the three
+# ambient capabilities below, not on "whatever this account can already do."
+User=xibalba-shield
+Group=xibalba-shield
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+PrivateDevices=true
+# strict (not full): the whole filesystem is read-only except RuntimeDirectory/
+# StateDirectory/LogsDirectory (systemd grants those write access automatically even
+# under strict) plus the explicit ReadWritePaths below.
+ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/var/log/xibalba-shield /var/lib/xibalba-shield /etc/xibalba-shield
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
 LockPersonality=true
 RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
 CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
 AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
+# SystemCallFilter=/MemoryDenyWriteExecute= are deliberately NOT set here: BCC's
+# BPF(text=...) JIT-compiles the eBPF C source via an embedded LLVM in this process's own
+# userspace before loading it via the bpf() syscall, and guessing which syscall-filter
+# group covers that safely (vs. silently breaking every sensor's attach) is exactly the
+# kind of unverified claim this codebase's own "no silent mocks" rule forbids. Real,
+# root-run verification against this exact unit -- scripts/verify_hardened_unit.sh -- is
+# the checkable path to closing this, not a guess. See docs/PRODUCTION_READINESS_PLAN.md
+# §7 item 5.
 
 [Install]
 WantedBy=multi-user.target

@@ -312,6 +312,11 @@ def test_pilot_gate_report_accepts_realistic_pass_artifacts(tmp_path):
     hardening.write_text("secure_boot=true\ntpm_or_mdm=true\nservice_protection=true\nlog_key_protection=true\n", encoding="utf-8")
     installer = tmp_path / "installer.txt"
     installer.write_text("artifact_sha256=abc\nsignature=sig\nservice_manager=systemd\nrollback=true\n", encoding="utf-8")
+    adversarial = tmp_path / "adversarial.json"
+    adversarial.write_text(
+        json.dumps({"status": "pass", "duration_sec": 12.3, "threat_model_matrix": "docs/design/threat-model-matrix-2026-09-06.md"}),
+        encoding="utf-8",
+    )
 
     proc = subprocess.run(
         [
@@ -331,6 +336,8 @@ def test_pilot_gate_report_accepts_realistic_pass_artifacts(tmp_path):
             str(hardening),
             "--installer-attestation",
             str(installer),
+            "--adversarial-artifact",
+            str(adversarial),
             "--json",
         ],
         cwd=Path(__file__).resolve().parents[1],

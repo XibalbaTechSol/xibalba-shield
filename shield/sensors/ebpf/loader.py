@@ -41,6 +41,17 @@ to reproduce. This verification is for kernel `7.0.0-30-generic` only — per
 `docs/PRODUCTION_READINESS_PLAN.md` workstream C, a pilot needs this evidence freshly
 reproduced and archived for every kernel/distro in the actual supported matrix, not assumed
 to carry over from this one.
+
+**Re-verified 2026-09-05, same kernel, with the attach-failure/event-loss hardening below:**
+all 11 relevant `tests/test_ebpf_sensor.py` cases pass root-run (`sudo .venv/bin/python -m
+pytest tests/test_ebpf_sensor.py -v`), including the new `test_lost_events_counter_reflects_
+bcc_lost_cb` for all three sensors, and all three standalone `scripts/verify_*_root.py`
+scripts report `"status": "pass"` (archived at `artifacts/live-gate/{process-exec,file-write,
+tcp-connect}-root.log`). Attach failures across all three sensors now raise a typed
+`SensorAttachError(stage, cause)` (`bpf_load`/`kprobe`/`kretprobe`/`perf_buffer`) instead of
+a raw bcc/libbpf traceback, closing the "attach-failure behavior" half of Gate 3's wording on
+this kernel. Still only this one kernel — 22.04/26.04 remain unverified, see
+`docs/SUPPORTED_MATRIX.md`.
 """
 
 from __future__ import annotations
@@ -89,6 +100,20 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+class SensorAttachError(RuntimeError):
+    """Raised when BPF load or kprobe/kretprobe attach fails, carrying which stage failed
+    ("bpf_load", "kprobe", "kretprobe", "perf_buffer") so an operator (or a verify script)
+    gets a structured diagnostic instead of a raw bcc/libbpf traceback. This does not change
+    the fact that a construction failure aborts `__init__` entirely -- Gate 3's "measured ...
+    attach-failure behavior" wording is about giving that failure a legible, checkable shape,
+    not about tolerating a half-attached sensor object."""
+
+    def __init__(self, stage: str, cause: Exception):
+        self.stage = stage
+        self.cause = cause
+        super().__init__(f"attach failed at stage {stage!r}: {cause}")
+
+
 class LinuxEbpfSensor:
     """Structurally satisfies `shield.sensors.base.Sensor` (a `Protocol` — matched by shape,
     not inheritance, the same way `dev_generator.DevModeSensor` does). Real implementation
@@ -110,10 +135,19 @@ class LinuxEbpfSensor:
         self._lost_events = 0
         self._last_event_at: str | None = None
 
-        self._bpf = BPF(text=_BPF_SOURCE.read_text())
+        try:
+            self._bpf = BPF(text=_BPF_SOURCE.read_text())
+        except Exception as exc:
+            raise SensorAttachError("bpf_load", exc) from exc
         execve_fnname = self._bpf.get_syscall_fnname("execve")
-        self._bpf.attach_kprobe(event=execve_fnname, fn_name="on_execve")
-        self._bpf["process_exec_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+        try:
+            self._bpf.attach_kprobe(event=execve_fnname, fn_name="on_execve")
+        except Exception as exc:
+            raise SensorAttachError("kprobe", exc) from exc
+        try:
+            self._bpf["process_exec_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+        except Exception as exc:
+            raise SensorAttachError("perf_buffer", exc) from exc
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002 — perf_buffer callback signature
         rec = self._bpf["process_exec_events"].event(data)
@@ -179,11 +213,23 @@ class LinuxFileWriteSensor:
         self._lost_events = 0
         self._last_event_at: str | None = None
 
-        self._bpf = BPF(text=_FILE_WRITE_SOURCE.read_text())
+        try:
+            self._bpf = BPF(text=_FILE_WRITE_SOURCE.read_text())
+        except Exception as exc:
+            raise SensorAttachError("bpf_load", exc) from exc
         openat_fnname = self._bpf.get_syscall_fnname("openat")
-        self._bpf.attach_kprobe(event=openat_fnname, fn_name="syscall__trace_entry_openat")
-        self._bpf.attach_kretprobe(event=openat_fnname, fn_name="trace_openat_return")
-        self._bpf["file_write_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+        try:
+            self._bpf.attach_kprobe(event=openat_fnname, fn_name="syscall__trace_entry_openat")
+        except Exception as exc:
+            raise SensorAttachError("kprobe", exc) from exc
+        try:
+            self._bpf.attach_kretprobe(event=openat_fnname, fn_name="trace_openat_return")
+        except Exception as exc:
+            raise SensorAttachError("kretprobe", exc) from exc
+        try:
+            self._bpf["file_write_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+        except Exception as exc:
+            raise SensorAttachError("perf_buffer", exc) from exc
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002
         rec = self._bpf["file_write_events"].event(data)
@@ -249,10 +295,22 @@ class LinuxTcpConnectSensor:
         self._lost_events = 0
         self._last_event_at: str | None = None
 
-        self._bpf = BPF(text=_TCP_CONNECT_SOURCE.read_text())
-        self._bpf.attach_kprobe(event="tcp_v4_connect", fn_name="trace_connect_entry")
-        self._bpf.attach_kretprobe(event="tcp_v4_connect", fn_name="trace_connect_v4_return")
-        self._bpf["tcp_connect_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+        try:
+            self._bpf = BPF(text=_TCP_CONNECT_SOURCE.read_text())
+        except Exception as exc:
+            raise SensorAttachError("bpf_load", exc) from exc
+        try:
+            self._bpf.attach_kprobe(event="tcp_v4_connect", fn_name="trace_connect_entry")
+        except Exception as exc:
+            raise SensorAttachError("kprobe", exc) from exc
+        try:
+            self._bpf.attach_kretprobe(event="tcp_v4_connect", fn_name="trace_connect_v4_return")
+        except Exception as exc:
+            raise SensorAttachError("kretprobe", exc) from exc
+        try:
+            self._bpf["tcp_connect_events"].open_perf_buffer(self._on_perf_event, lost_cb=self._on_lost)
+        except Exception as exc:
+            raise SensorAttachError("perf_buffer", exc) from exc
 
     def _on_perf_event(self, cpu: int, data, size: int) -> None:  # noqa: ARG002
         rec = self._bpf["tcp_connect_events"].event(data)
@@ -380,6 +438,19 @@ def _self_test_tcp_connect(seconds: int) -> bool:
     print(f"[self-test:tcp_connect] {'PASS' if ok else 'FAIL'} — "
           f"{'observed' if ok else 'never observed'} this process's real connect to port {listen_port}.")
     return ok
+
+
+def self_test_process_exec(seconds: int = 5) -> int:
+    """Run only the process-exec live sensor proof on the current kernel — the process-exec
+    counterpart to `self_test_tcp_connect`, added for `verify_process_exec_root.py` so all
+    three sensors have an equivalent standalone, pytest-independent root-run entry point."""
+    return 0 if _self_test_process_exec(seconds) else 1
+
+
+def self_test_file_write(seconds: int = 5) -> int:
+    """Run only the file-write live sensor proof on the current kernel — the file-write
+    counterpart to `self_test_tcp_connect`, added for `verify_file_write_root.py`."""
+    return 0 if _self_test_file_write(seconds) else 1
 
 
 def self_test_tcp_connect(seconds: int = 5) -> int:

@@ -1,0 +1,11 @@
+[self-test:file_write] loading (requires root)...
+[self-test:file_write] wrote /tmp/tmpgbx6kfwe-shield-self-test from this process (pid 675357), watching...
+[self-test:file_write] PASS — observed this process's real write open of '/tmp/tmpgbx6kfwe-shield-self-test'.
+{
+  "check": "file_write_root_verification",
+  "command": "python3 scripts/verify_file_write_root.py",
+  "reason": "observed this process's real write-open",
+  "requires_root": true,
+  "returncode": 0,
+  "status": "pass"
+}

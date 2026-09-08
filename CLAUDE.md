@@ -57,10 +57,16 @@ shield/
 │                        # judgment beyond static Rego rules; `--slm-backend {none,simulated,local}`
 ├── guardrail_hooks/     # all 6 hook points, all real — spec §4.4
 ├── integrity_exporter/  # Wraps integrity-sdk: real BCC signing + telemetry — spec §4.5
+│                        # spool.py: durable SQLite retry queue for failed BCC submissions
+│                        # (2026-09-05); preflight.py: real DID/bcc_middleware/Oracle
+│                        # readback check, `shield preflight` CLI command
 ├── integrations/        # SIEM/SOAR export adapters (siem.py)
 ├── backend/              # FastAPI-style backend API + store — separate `shield-backend` CLI entry
 ├── config/               # Config loader, hot reload, policy-pack distribution
 ├── schemas/             # Event classes (§5) + policy rule shape (§7), canonical, no renaming
+├── release/             # Package signing + versioned-release/symlink rollback (2026-09-06)
+│                        # -- separate key/trust domain from config/signing.py's policy
+│                        # signing; not yet wired into the live systemd ExecStart path
 └── cli.py               # `shield status/events/validate/run/fetch-policy/verify-log/
                          #  siem-export/local-run` — spec §4.6
 

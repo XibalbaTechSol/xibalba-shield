@@ -77,7 +77,7 @@ def test_agent_event_invocation_id_is_preserved_by_policy_evaluation(mock_opa):
     assert decision.to_dict()["invocation_id"] == invocation_id
 
 
-def test_exporter_passes_invocation_id_when_sdk_supports_it(monkeypatch):
+def test_exporter_passes_invocation_id_when_sdk_supports_it(monkeypatch, tmp_path):
     captured = {}
 
     def build_bcc_commitment(
@@ -114,6 +114,7 @@ def test_exporter_passes_invocation_id_when_sdk_supports_it(monkeypatch):
     exporter.chain_id = 84532
     exporter.verifying_contract = "0x" + "1" * 40
     exporter._nonce_store = type("NonceStore", (), {"next": lambda self: 7})()
+    exporter._spool_db_path = tmp_path / "spool.db"
     invocation_id = "018f3f62-9ca4-7db5-8a7a-6c26c9f9d820"
 
     result = exporter.export_decision(_decision(invocation_id=invocation_id))
@@ -144,7 +145,7 @@ def test_invocation_id_is_retained_locally_when_integrity_export_fails(tmp_path,
     assert retained["export"]["invocation_id"] == invocation_id
 
 
-def test_exporter_rejects_mismatched_bcc_response_invocation_id(monkeypatch):
+def test_exporter_rejects_mismatched_bcc_response_invocation_id(monkeypatch, tmp_path):
     invocation_id = "018f3f62-9ca4-7db5-8a7a-6c26c9f9d820"
 
     def build_commitment(
@@ -178,6 +179,7 @@ def test_exporter_rejects_mismatched_bcc_response_invocation_id(monkeypatch):
     exporter.verifying_contract = "0x" + "1" * 40
     exporter._nonce_store = type("NonceStore", (), {"next": lambda self: 8})()
     exporter._export_failures = 0
+    exporter._spool_db_path = tmp_path / "spool.db"
 
     result = exporter.export_decision(_decision(invocation_id=invocation_id))
 

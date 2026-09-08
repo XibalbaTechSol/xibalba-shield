@@ -20,14 +20,27 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
   exit 1
 }
 
+# Dedicated system account the hardened unit runs as (packaging/systemd/xibalba-shield.service's
+# User=/Group=) -- least-privilege relies on this account owning nothing but its own
+# config/log/state dirs plus the three ambient eBPF capabilities the unit grants, not on
+# reusing root or an interactive login account. --system: no login shell, no password,
+# UID from the system range. Idempotent: useradd/groupadd both no-op if already present.
+SERVICE_USER="${SERVICE_USER:-xibalba-shield}"
+if ! getent group "$SERVICE_USER" >/dev/null 2>&1; then
+  groupadd --system "$SERVICE_USER"
+fi
+if ! getent passwd "$SERVICE_USER" >/dev/null 2>&1; then
+  useradd --system --gid "$SERVICE_USER" --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+fi
+
 install -d -m 0755 "$PREFIX"
-install -d -m 0750 "$CONFIG_DIR" "$POLICY_DIR" "$LOG_DIR" "$STATE_DIR"
+install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$CONFIG_DIR" "$POLICY_DIR" "$LOG_DIR" "$STATE_DIR"
 "$PYTHON_BIN" -m pip install --upgrade .
 install -m 0644 packaging/systemd/xibalba-shield.service "$SERVICE_DIR/xibalba-shield.service"
 if [ ! -f "$CONFIG_DIR/shield.env" ]; then
-  install -m 0600 packaging/systemd/shield.env.example "$CONFIG_DIR/shield.env"
+  install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" packaging/systemd/shield.env.example "$CONFIG_DIR/shield.env"
 fi
-install -m 0600 packaging/systemd/shield.env.example "$CONFIG_DIR/shield.env.example"
+install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" packaging/systemd/shield.env.example "$CONFIG_DIR/shield.env.example"
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload
