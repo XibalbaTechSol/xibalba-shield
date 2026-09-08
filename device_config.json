@@ -1,0 +1,1 @@
+{"backend_url": "http://localhost:8765", "device_id": "xibalba-desktop", "device_role": "dev-workstation", "device_token": "P-CaAZOqFwcSb4DRAV1xXn6B9KxnbSRQSk00t-sgL3I", "feature_flags": {}, "sensitive_paths": [], "tenant_id": "tenant-a", "tenant_policy_url": "http://localhost:8765/api/shield/policies/tenant-a/xibalba-desktop", "trusted_policy_hashes": []}

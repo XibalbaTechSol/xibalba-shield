@@ -17,18 +17,88 @@ const fallbackOutcomes = [
 function Brand(){return <div className="brand"><img src="/shield-logo.png" alt="Xibalba Shield"/><b>Xibalba <i>Shield</i></b></div>}
 function Landing({next}){return <main className="landing">
   <nav className="site-nav"><Brand/><div className="nav-links"><a href="#platform">Platform</a><a href="#proof">Trust</a><a href="#control">Control plane</a></div><div><button className="quiet" onClick={next}>Sign in</button><button className="primary" onClick={next}>Open console <ArrowRight/></button></div></nav>
-  <section className="hero"><div className="hero-copy"><p className="eyebrow"><span/> LINUX-FIRST AGENT SECURITY</p><h1>Trust every action.<br/><em>Contain every threat.</em></h1><p className="lede">Observe, evaluate, and enforce policy at the edge—a verifiable security boundary built for autonomous agents.</p><div className="hero-actions"><button className="primary big" onClick={next}>Explore the console <ArrowRight/></button><a href="#platform">See how it works</a></div><div className="checks"><span><Check/>Kernel telemetry</span><span><Check/>Signed policies</span><span><Check/>Receipt-backed enforcement</span></div></div>
+  <section className="hero"><div className="hero-copy"><img src="/shield-logo.png" alt="Shield Logo" className="hero-logo" /><p className="eyebrow"><span/> LINUX-FIRST AGENT SECURITY</p><h1>Trust every action.<br/><em>Contain every threat.</em></h1><p className="lede">Observe, evaluate, and enforce policy at the edge—a verifiable security boundary built for autonomous agents.</p><div className="hero-actions"><button className="primary big" onClick={next}>Explore the console <ArrowRight/></button><a href="#platform">See how it works</a></div><div className="checks"><span><Check/>Kernel telemetry</span><span><Check/>Signed policies</span><span><Check/>Receipt-backed enforcement</span></div></div>
   <div className="hero-art"><div className="ring r1"/><div className="ring r2"/><div className="core"><Shield/><b>Policy verified</b></div><div className="signal s1"><Activity/><span>Process event<b>Allowed</b></span></div><div className="signal s2"><LockKeyhole/><span>Write attempt<b>Contained</b></span></div><div className="signal s3"><Globe2/><span>Network call<b>Verified</b></span></div></div></section>
   <section className="proof" id="proof"><div><b>Kernel-level</b><span>eBPF sensor coverage</span></div><div><b>Default deny</b><span>policy enforcement</span></div><div><b>Append-only</b><span>decision evidence</span></div><div><b>Local first</b><span>works without cloud</span></div></section>
   <section className="features" id="platform"><header><p className="eyebrow">THE SHIELD PLATFORM</p><h2>Security that moves at agent speed.</h2><p>One operational surface for fleet posture, policy decisions, and containment evidence.</p></header><div className="feature-grid">{[[Radar,'See every action','Process, file, and network telemetry in one live event stream.'],[Fingerprint,'Enforce identity','Bind decisions to verified agents, devices, and identities.'],[FileCheck2,'Prove the outcome','Every action produces durable, reviewable evidence.']].map(([Icon,title,copy])=><article key={title}><span><Icon/></span><h3>{title}</h3><p>{copy}</p><button onClick={next}>View in console <ArrowRight/></button></article>)}</div></section>
   <section className="cta"><div><p className="eyebrow">BUILT FOR REAL OPERATIONS</p><h2>Put your agent fleet behind a verifiable boundary.</h2></div><button onClick={next}>Open Shield <ArrowRight/></button></section>
   <footer><Brand/><span>Endpoint security for the agentic era.</span><small>© 2026 Xibalba</small></footer>
 </main>}
+const DEFAULT_CONTROL_PLANE = 'http://localhost:8765'
+
 function SignIn({back,connect}){
-  const [mode,setMode]=useState('login'),[advanced,setAdvanced]=useState(false),[error,setError]=useState(()=>sessionStorage.getItem('shield-auth-notice')||''),[busy,setBusy]=useState(false)
+  const [mode,setMode]=useState('login')
+  const [advanced,setAdvanced]=useState(false)
+  const [error,setError]=useState(()=>sessionStorage.getItem('shield-auth-notice')||'')
+  const [busy,setBusy]=useState(false)
+
   useEffect(()=>{sessionStorage.removeItem('shield-auth-notice')},[])
-  const submit=async e=>{e.preventDefault();const d=new FormData(e.currentTarget);const baseUrl=String(d.get('baseUrl')||window.location.origin).trim();setBusy(true);setError('');try{if(advanced){const tenant=String(d.get('tenant')||'').trim(),token=String(d.get('token')||'').trim();if(!tenant||!token)throw new Error('Tenant ID and admin token are required');const api=new ShieldApi(baseUrl,tenant,token);await api.dashboard();connect({tenant,token,baseUrl,account:null})}else{const email=String(d.get('email')||'').trim(),password=String(d.get('password')||'');const payload=await new ShieldApi(baseUrl,'','').auth(mode,{email,password,display_name:String(d.get('displayName')||''),tenant_id:String(d.get('tenant')||'').trim()});const tenant=payload.tenant_id;const api=new ShieldApi(baseUrl,tenant,payload.admin_token);await api.dashboard();connect({tenant,token:payload.admin_token,baseUrl,account:{...payload.account,session_expires_at:payload.session_expires_at}})}}catch(err){setError(err instanceof Error?err.message:String(err))}finally{setBusy(false)}}
-  return <main className="auth"><button className="auth-back" onClick={back}>← Back to Shield</button><section className="auth-story"><Brand/><div><p className="eyebrow">SECURE OPERATOR ACCESS</p><h1>Your fleet.<br/>One trusted boundary.</h1><p>Connect directly to your Shield control plane. Credentials remain in this browser session.</p></div><aside><ShieldCheck/><span><b>Local-first authentication</b><small>No credentials are embedded in the client bundle.</small></span></aside></section><section className="auth-form"><form onSubmit={submit}><span className="lock"><LockKeyhole/></span><div className="auth-tabs"><button type="button" className={mode==='login'?'active':''} onClick={()=>setMode('login')}>Sign in</button><button type="button" className={mode==='signup'?'active':''} onClick={()=>setMode('signup')}>Create account</button></div><h2>{mode==='signup'?'Create your Shield account':'Sign in to Shield'}</h2><p>{mode==='signup'?'Create a local operator account for a tenant.':'Use your account credentials or an existing admin token.'}</p>{!advanced?<><label>Email<input name="email" type="email" autoFocus required/></label>{mode==='signup'&&<><label>Display name<input name="displayName" required/></label><label>Tenant ID<input name="tenant" placeholder="acme-production" required/></label></>}<label>Password<input name="password" type="password" minLength="10" required/></label><button type="button" className="advanced" onClick={()=>setAdvanced(true)}>Use admin token instead</button></>:<><label>Tenant ID<input name="tenant" placeholder="acme-production" autoFocus required/></label><label>Admin token<input name="token" type="password" required/></label><button type="button" className="advanced" onClick={()=>setAdvanced(false)}>Use account sign in</button></>}<label>Control plane URL<input name="baseUrl" defaultValue="http://localhost:8765" required/></label>{error&&<div className="auth-error">{error}</div>}<button className="primary submit" disabled={busy}>{busy?'Connecting…':mode==='signup'?'Create account':'Continue to console'} <ArrowRight/></button><small className="session-note"><LockKeyhole/> Session-only credentials · <button type="button" className="link-button" onClick={()=>setError('Password reset is not configured for this local deployment yet.')}>Forgot password?</button></small></form></section></main>
+
+  const submit=async event=>{
+    event.preventDefault()
+    const form=new FormData(event.currentTarget)
+    const baseUrl=advanced?String(form.get('baseUrl')||DEFAULT_CONTROL_PLANE).trim():DEFAULT_CONTROL_PLANE
+    setBusy(true)
+    setError('')
+    try{
+      if(advanced){
+        const tenant=String(form.get('tenant')||'').trim()
+        const token=String(form.get('token')||'').trim()
+        if(!tenant||!token)throw new Error('Tenant ID and admin token are required')
+        const api=new ShieldApi(baseUrl,tenant,token)
+        await api.dashboard()
+        connect({tenant,token,baseUrl,account:null})
+        return
+      }
+
+      const email=String(form.get('email')||'').trim()
+      const password=String(form.get('password')||'')
+      const payload=await new ShieldApi(baseUrl,'','').auth(mode,{
+        email,
+        password,
+        display_name:String(form.get('displayName')||''),
+        tenant_id:String(form.get('tenant')||'').trim(),
+      })
+      const tenant=payload.tenant_id
+      const api=new ShieldApi(baseUrl,tenant,payload.admin_token)
+      await api.dashboard()
+      connect({
+        tenant,
+        token:payload.admin_token,
+        baseUrl,
+        account:{...payload.account,session_expires_at:payload.session_expires_at},
+      })
+    }catch(err){
+      setError(err instanceof Error?err.message:String(err))
+    }finally{
+      setBusy(false)
+    }
+  }
+
+  return <main className="auth">
+    <button className="auth-back" onClick={back}>← Back to Shield</button>
+    <section className="auth-story">
+      <Brand/>
+      <div><p className="eyebrow">SECURE OPERATOR ACCESS</p><h1>Your fleet.<br/>One trusted boundary.</h1><p>Sign in to view your protected devices, decisions, and evidence.</p></div>
+      <aside><ShieldCheck/><span><b>Local-first authentication</b><small>Your credentials remain in this browser session.</small></span></aside>
+    </section>
+    <section className="auth-form">
+      <form onSubmit={submit}>
+        <span className="lock"><LockKeyhole/></span>
+        {!advanced&&<div className="auth-tabs">
+          <button type="button" className={mode==='login'?'active':''} onClick={()=>setMode('login')}>Sign in</button>
+          <button type="button" className={mode==='signup'?'active':''} onClick={()=>setMode('signup')}>Create account</button>
+        </div>}
+        <h2>{advanced?'Advanced access':mode==='signup'?'Create your Shield account':'Welcome back'}</h2>
+        <p>{advanced?'Connect with an administrator token and custom control plane.':mode==='signup'?'Create an operator account for your organization.':'Enter your email and password to continue.'}</p>
+        {!advanced?<><label>Email<input name="email" type="email" autoFocus required/></label>{mode==='signup'&&<><label>Display name<input name="displayName" required/></label><label>Organization ID<input name="tenant" placeholder="acme-production" required/></label></>}<label>Password<input name="password" type="password" minLength="10" required/></label></>:<><label>Organization ID<input name="tenant" placeholder="acme-production" autoFocus required/></label><label>Admin token<input name="token" type="password" required/></label><label>Control plane URL<input name="baseUrl" defaultValue={DEFAULT_CONTROL_PLANE} required/></label></>}
+        {error&&<div className="auth-error">{error}</div>}
+        <button className="primary submit" disabled={busy}>{busy?'Connecting…':advanced?'Connect':mode==='signup'?'Create account':'Sign in'} <ArrowRight/></button>
+        <button type="button" className="advanced" onClick={()=>{setAdvanced(value=>!value);setError('')}}>{advanced?'Back to email sign in':'Advanced access'}</button>
+        <small className="session-note"><LockKeyhole/> Session-only credentials</small>
+      </form>
+    </section>
+  </main>
 }
 function Metric({Icon,label,value,detail,tone}){return <article className="metric"><div><span className={tone||''}><Icon/></span>{label}</div><b>{value}</b><small>{detail}</small></article>}
 

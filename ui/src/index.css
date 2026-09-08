@@ -236,3 +236,15 @@ tr:hover td {
 .badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--status-warning); }
 .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--status-danger); }
 .badge-info { background: rgba(59, 130, 246, 0.2); color: var(--status-info); }
+.hero-logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  object-fit: cover;
+  margin-bottom: 24px;
+  display: block;
+}
+.brand img {
+  width: 48px !important;
+  height: 48px !important;
+}
