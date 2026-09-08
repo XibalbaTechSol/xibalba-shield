@@ -1,0 +1,10 @@
+{
+  "duration_sec": 15.09,
+  "reason": "all chaos/adversarial tests passed",
+  "returncode": 0,
+  "status": "pass",
+  "stderr_tail": "",
+  "stdout_tail": "============================= test session starts ==============================\nplatform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/xibalba/Projects/xibalba-shield/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /home/xibalba/Projects/xibalba-shield\nconfigfile: pyproject.toml\nplugins: anyio-4.14.2, asyncio-1.4.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 9 items\n\ntests/test_chaos_adversarial.py::test_containment_failure_reports_a_truthful_enforcement_outcome PASSED [ 11%]\ntests/test_chaos_adversarial.py::test_sequential_exports_use_strictly_increasing_nonces PASSED [ 22%]\ntests/test_chaos_adversarial.py::test_router_survives_and_records_a_burst_of_events_without_silent_loss PASSED [ 33%]\ntests/test_chaos_adversarial.py::test_spool_enqueue_survives_an_unwritable_path_without_raising PASSED [ 44%]\ntests/test_chaos_adversarial.py::test_export_decision_still_returns_a_clean_failure_when_disk_is_also_full PASSED [ 55%]\ntests/test_chaos_adversarial.py::test_tick_still_publishes_when_sensor_health_itself_raises PASSED [ 66%]\ntests/test_chaos_adversarial.py::test_tick_still_publishes_when_exporter_replay_pending_raises PASSED [ 77%]\ntests/test_chaos_adversarial.py::test_sign_policy_reports_a_clean_error_for_a_corrupted_key_file PASSED [ 88%]\ntests/test_chaos_adversarial.py::test_a_fresh_exporter_instance_after_restart_delivers_what_the_old_one_spooled PASSED [100%]\n\n============================== 9 passed in 13.61s ==============================\n",
+  "test_file": "tests/test_chaos_adversarial.py",
+  "threat_model_matrix": "docs/design/threat-model-matrix-2026-09-06.md"
+}

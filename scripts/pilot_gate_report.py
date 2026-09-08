@@ -65,6 +65,27 @@ def _hardening_gate(path: Path | None) -> Gate:
     return Gate("root/admin resistance hardening", "PASS", f"attestation supplied: {path}")
 
 
+def _adversarial_gate(artifact: dict | None) -> Gate:
+    """Reads the real JSON `scripts/run_adversarial_tests.py` produces (which itself
+    runs `tests/test_chaos_adversarial.py`) -- distinct from `_hardening_gate`/
+    `_installer_gate` above, which only check that an attestation *mentions* certain
+    keywords. A passing artifact here means real tests actually ran and passed, not
+    that an operator typed the right words into a file. Still not a full Gate 6 pass by
+    itself: the threat-model matrix it points at discloses PID reuse as architecturally
+    not independently testable, which a human reviewer must weigh separately."""
+    if artifact is None:
+        return Gate("chaos/adversarial validation", "BLOCKED", "no adversarial-test artifact supplied")
+    status = str(artifact.get("status", "")).lower()
+    matrix = artifact.get("threat_model_matrix", "(none)")
+    if status == "pass":
+        return Gate(
+            "chaos/adversarial validation", "PASS",
+            f"tests/test_chaos_adversarial.py passed ({artifact.get('duration_sec', '?')}s); "
+            f"review threat-model matrix for disclosed non-tested scenarios: {matrix}",
+        )
+    return Gate("chaos/adversarial validation", "FAIL", artifact.get("reason") or f"artifact status={status or 'missing'}")
+
+
 def _installer_gate(path: Path | None) -> Gate:
     if path is None:
         return Gate("installer/updater signing", "BLOCKED", "no signing/release attestation supplied")
@@ -86,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-burn-in-hours", type=float, default=48.0)
     parser.add_argument("--hardening-attestation", type=Path, help="text/JSON attestation for OS-level hardening")
     parser.add_argument("--installer-attestation", type=Path, help="text/JSON attestation for signed package/update")
+    parser.add_argument("--adversarial-artifact", type=Path, help="JSON from scripts/run_adversarial_tests.py")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -96,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         _gate_from_status("macOS native sensors", _load_json(args.macos_artifact)),
         _hardening_gate(args.hardening_attestation),
         _installer_gate(args.installer_attestation),
+        _adversarial_gate(_load_json(args.adversarial_artifact)),
         _burn_in_gate(_load_json(args.burn_in_artifact), args.min_burn_in_hours),
     ]
     doc = {"gates": [gate.__dict__ for gate in gates]}
