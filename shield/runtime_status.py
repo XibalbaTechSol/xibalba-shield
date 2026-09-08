@@ -19,6 +19,7 @@ def publish_runtime_status(
     opa_status: dict[str, Any],
     sensors_status: dict[str, Any] | None = None,
     exporter_status_detail: dict[str, Any] | None = None,
+    did_preflight_detail: dict[str, Any] | None = None,
     timeout: float = 1.0,
 ) -> bool:
     """Publish status without ever affecting local enforcement or process exit."""
@@ -29,6 +30,11 @@ def publish_runtime_status(
         status["sensors"] = sensors_status
     if exporter_status_detail is not None:
         status["exporter"] = exporter_status_detail
+    if did_preflight_detail is not None:
+        # A startup-time check (shield/integrity_exporter/preflight.py), not re-run every
+        # tick -- DID load/reachability doesn't change on the timescale a watchdog tick
+        # does, so this is the same value republished each tick rather than a fresh check.
+        status["did_preflight"] = did_preflight_detail
     payload = {
         "tenant_id": device_config.tenant_id,
         "device_id": device_config.device_id,

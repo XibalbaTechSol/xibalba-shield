@@ -37,9 +37,12 @@ import inspect
 import logging
 from typing import Any
 
+from pathlib import Path
+
 from integrity_sdk import bcc, did as sdk_did
 from integrity_sdk.client import IntegrityClient
 
+from . import spool
 from ..schemas.events import INTENT_TYPES, NormalizedEvent, PolicyDecision
 
 logger = logging.getLogger("shield.integrity_exporter")
@@ -70,6 +73,7 @@ class IntegrityExporter:
         agent_label: str = "xibalba-shield",
         chain_id: int = 84532,
         verifying_contract: str = "0x72e21e44AdD6d6e7CAa02eaedF078630afC40819",
+        spool_db_path: Path | str | None = None,
     ) -> None:
         # Bootstraps (or reuses) a real local DID/keypair the same way pretool_gate.py's
         # load_bridged_identity does — one identity per device/deployment, persisted under
@@ -84,6 +88,10 @@ class IntegrityExporter:
         self.chain_id = chain_id
         self.verifying_contract = verifying_contract
         self._nonce_store = bcc.NonceStore(sdk_did.agent_dir(agent_label) / "bcc_nonce")
+        # Colocated with the nonce store under integrity-sdk's own agent_dir convention,
+        # not a new DeviceConfig field -- this is an internal durability detail, not
+        # something an operator needs to configure per deployment. Overridable for tests.
+        self._spool_db_path = Path(spool_db_path) if spool_db_path is not None else sdk_did.agent_dir(agent_label) / "export_spool.db"
         self._telemetry_client = IntegrityClient(
             self.agent_id,
             oracle_url,
@@ -136,12 +144,26 @@ class IntegrityExporter:
             # loudly rather than swallowed.
             logger.warning("BCC submission failed for decision %s: %r", decision.event_ref.event_id, exc)
             self._export_failures += 1
+            # Spool the already-built, already-signed commitment for later replay --
+            # see spool.py's module docstring for why this is safe to resend as-is
+            # (no new nonce, no re-signing) and what "delivered" means on replay.
+            spool.enqueue(self._spool_db_path, kind="decision", payload=commitment, error=str(exc))
             return {
                 "authorized": False,
                 "reason": f"submission failed: {exc}",
                 "invocation_id": decision.invocation_id,
                 "invocation_id_signed": False,
             }
+
+    def replay_pending(self) -> spool.RetryCycleResult:
+        """One retry pass over the durable spool -- called periodically by
+        `shield.watchdog.Watchdog.tick()`, independent of new decisions arriving.
+        Never raises: an unreachable `bcc_middleware` just leaves rows pending for
+        the next tick, same as a single spooled row's own retry failure."""
+        return spool.run_retry_cycle(
+            self._spool_db_path,
+            lambda payload: bcc.submit_commitment(payload, self.bcc_middleware_url),
+        )
 
     def export_event(self, event: NormalizedEvent) -> None:
         self._telemetry_client.log_telemetry({"shield_event": event.to_dict()})
@@ -170,7 +192,10 @@ class IntegrityExporter:
                 queue_depth = batcher.queue_depth()
             except AttributeError:
                 queue_depth = None
+        spool_status = spool.status(self._spool_db_path)
         return {
             "export_failures": self._export_failures,
             "queue_depth": queue_depth,
+            "spool_pending": spool_status["pending"],
+            "spool_oldest_age_seconds": spool_status["oldest_age_seconds"],
         }

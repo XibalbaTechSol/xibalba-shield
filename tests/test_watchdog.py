@@ -45,6 +45,36 @@ def test_tick_drives_reloader_and_opa_supervisor_independent_of_events(mock_publ
     _, kwargs = mock_publish.call_args
     assert kwargs["sensors_status"] == {"attached": True, "lost_events": 0, "last_event_at": None}
     assert kwargs["exporter_status_detail"] == {"export_failures": 0, "queue_depth": 0}
+    assert kwargs["did_preflight_detail"] is None
+
+
+@patch("shield.watchdog.publish_runtime_status")
+def test_tick_republishes_the_same_startup_preflight_result_unchanged(mock_publish):
+    """did_preflight is computed once at `shield run` startup (cli.py), not re-checked
+    every tick -- confirms Watchdog just forwards whatever it was constructed with."""
+    policy_engine = Mock()
+    policy_engine.health_status.return_value = {"healthy": True}
+    sensor = Mock()
+    sensor.health.return_value = {"attached": True}
+    preflight_result = {"did": "did:test:agent", "did_loaded": True, "bcc_middleware_reachable": True}
+
+    watchdog = Watchdog(
+        interval=1.0,
+        device_config=_config(),
+        policy_engine=policy_engine,
+        reloader=None,
+        opa_supervisor=None,
+        exporter=None,
+        sensor=sensor,
+        did_preflight_status=preflight_result,
+    )
+
+    watchdog.tick()
+    watchdog.tick()
+
+    assert mock_publish.call_count == 2
+    for call in mock_publish.call_args_list:
+        assert call.kwargs["did_preflight_detail"] is preflight_result
 
 
 @patch("shield.watchdog.publish_runtime_status")

@@ -208,6 +208,44 @@ def test_verify_log_command_detects_tamper_evident_log(tmp_path, capsys):
     assert "verified 1 decision log entries" in capsys.readouterr().out
 
 
+def test_preflight_command_reports_real_did_preflight_json(tmp_path, monkeypatch, capsys):
+    """CLI-wiring test: `preflight.py` itself has direct HTTP-level coverage
+    (tests/test_preflight.py) -- this just confirms `shield preflight` calls it with the
+    right URLs and reports its result as exit-code-carrying JSON."""
+    captured_kwargs = {}
+
+    def fake_check_did_preflight(*, bcc_middleware_url, oracle_url, timeout):
+        captured_kwargs.update(bcc_middleware_url=bcc_middleware_url, oracle_url=oracle_url, timeout=timeout)
+        return {
+            "did": "did:test:agent", "did_loaded": True,
+            "bcc_middleware_reachable": True,
+            "oracle_configured": True, "oracle_reachable": True, "oracle_registered": False,
+        }
+
+    monkeypatch.setattr("shield.integrity_exporter.check_did_preflight", fake_check_did_preflight)
+
+    code = main([
+        "preflight",
+        "--bcc-middleware-url", "http://bcc.example",
+        "--oracle-url", "http://oracle.example",
+    ])
+
+    assert code == 0
+    assert captured_kwargs == {
+        "bcc_middleware_url": "http://bcc.example", "oracle_url": "http://oracle.example", "timeout": 5.0,
+    }
+    out = json.loads(capsys.readouterr().out)
+    assert out["did"] == "did:test:agent"
+    assert out["oracle_registered"] is False
+
+
+def test_preflight_command_fails_without_bcc_middleware_url(tmp_path, capsys):
+    code = main(["preflight"])
+
+    assert code == 2
+    assert "--bcc-middleware-url or --device-config is required" in capsys.readouterr().err
+
+
 def test_siem_export_command_requires_one_destination(tmp_path, capsys):
     code = main(["--log-path", str(tmp_path / "decisions.jsonl"), "siem-export"])
 

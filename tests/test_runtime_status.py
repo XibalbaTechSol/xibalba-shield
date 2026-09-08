@@ -57,6 +57,25 @@ def test_runtime_status_includes_sensors_and_exporter_when_given(mock_urlopen):
 
 
 @patch("shield.runtime_status.urlopen", return_value=_Response())
+def test_runtime_status_includes_did_preflight_when_given(mock_urlopen):
+    import json
+
+    config = DeviceConfig(
+        device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend"
+    )
+    preflight = {"did": "did:test:agent", "did_loaded": True, "bcc_middleware_reachable": True}
+
+    assert publish_runtime_status(
+        device_config=config,
+        policy_status={"healthy": True},
+        opa_status={"healthy": True},
+        did_preflight_detail=preflight,
+    ) is True
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["status"]["did_preflight"] == preflight
+
+
+@patch("shield.runtime_status.urlopen", return_value=_Response())
 def test_runtime_status_omits_sensors_and_exporter_when_not_given(mock_urlopen):
     import json
 

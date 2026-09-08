@@ -270,8 +270,9 @@ def _run(args: argparse.Namespace) -> int:
     # --no-exporter. Imported lazily so commands that don't run the enforcement loop
     # (status/events/validate/etc.) never pull in integrity-sdk's heavier dependencies.
     exporter = None
+    did_preflight_status = None
     if not args.no_exporter:
-        from .integrity_exporter import IntegrityExporter
+        from .integrity_exporter import IntegrityExporter, check_did_preflight
 
         exporter = IntegrityExporter(
             bcc_middleware_url=bcc_middleware_url,
@@ -279,6 +280,18 @@ def _run(args: argparse.Namespace) -> int:
             agent_label=args.agent_label,
             chain_id=device_config.chain_id,
             verifying_contract=device_config.verifying_contract,
+        )
+        # A one-time startup check (docs/PRODUCTION_READINESS_PLAN.md §7 item 4), not a
+        # per-tick recheck -- Watchdog republishes this same value on every tick rather
+        # than calling check_did_preflight again.
+        did_preflight_status = check_did_preflight(
+            bcc_middleware_url=bcc_middleware_url,
+            oracle_url=oracle_url,
+            agent_label=args.agent_label,
+            # Bounded below preflight.py's own 5s default: this runs synchronously before
+            # the enforcement loop starts, so an unreachable bcc_middleware/Oracle must not
+            # turn "start the agent" into a multi-second hang on a real production host.
+            timeout=2.0,
         )
 
     # Real OS-level containment, on by default -- this is what makes a "contain" decision
@@ -325,6 +338,7 @@ def _run(args: argparse.Namespace) -> int:
         opa_supervisor=opa_supervisor,
         exporter=exporter,
         sensor=sensor,
+        did_preflight_status=did_preflight_status,
     )
     watchdog.start()
 
@@ -362,6 +376,24 @@ def _fetch_policy(args: argparse.Namespace) -> int:
         f"to {result.path} policy_version={result.bundle.version or '(none)'} "
         f"policy_hash={result.bundle.hash}"
     )
+    return 0
+
+
+def _preflight(args: argparse.Namespace) -> int:
+    from .integrity_exporter import check_did_preflight
+
+    device_config = load_device_config(args.device_config) if args.device_config else None
+    bcc_middleware_url = args.bcc_middleware_url or (device_config.bcc_middleware_url if device_config else None)
+    oracle_url = args.oracle_url if args.oracle_url is not None else (device_config.oracle_url if device_config else None)
+    if not bcc_middleware_url:
+        print("shield preflight: --bcc-middleware-url or --device-config is required", file=sys.stderr)
+        return 2
+
+    result = check_did_preflight(bcc_middleware_url=bcc_middleware_url, oracle_url=oracle_url, timeout=args.timeout)
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+    if not result["did_loaded"] or not result["bcc_middleware_reachable"]:
+        return 1
     return 0
 
 
@@ -426,7 +458,15 @@ def _sign_policy(args: argparse.Namespace) -> int:
     from .config.signing import sign_policy_bundle
 
     if args.key.exists():
-        keypair = Keypair.from_pem(args.key.read_bytes())
+        try:
+            keypair = Keypair.from_pem(args.key.read_bytes())
+        except (ValueError, OSError) as exc:
+            # A corrupted/damaged key file (disk error, partial write, wrong file entirely)
+            # must report cleanly like every other config-loading failure in this CLI, not
+            # crash with a raw cryptography-library traceback -- workstream I's "key loss"
+            # chaos scenario.
+            print(f"shield sign-policy: cannot load existing key {args.key}: {exc}", file=sys.stderr)
+            return 1
     else:
         keypair = Keypair.generate()
         args.key.parent.mkdir(parents=True, exist_ok=True)
@@ -511,6 +551,16 @@ def main(argv: list[str] | None = None) -> int:
     p_fetch.add_argument("--output", type=Path, required=True, help="destination policy bundle path")
     p_fetch.add_argument("--timeout", type=float, default=10.0, help="HTTP timeout in seconds")
     p_fetch.set_defaults(func=_fetch_policy)
+
+    p_preflight = sub.add_parser(
+        "preflight",
+        help="check the exporter's DID load and bcc_middleware/Oracle readback before normal operation",
+    )
+    p_preflight.add_argument("--device-config", type=Path, default=None, help="device config for bcc_middleware_url/oracle_url")
+    p_preflight.add_argument("--bcc-middleware-url", dest="bcc_middleware_url", default=None, help="overrides --device-config's bcc_middleware_url")
+    p_preflight.add_argument("--oracle-url", dest="oracle_url", default=None, help="overrides --device-config's oracle_url; omit to skip the oracle readback check")
+    p_preflight.add_argument("--timeout", type=float, default=5.0, help="HTTP timeout in seconds")
+    p_preflight.set_defaults(func=_preflight)
 
     p_verify_log = sub.add_parser("verify-log", help="verify a tamper-evident decision log hash chain")
     p_verify_log.add_argument("--integrity-key", type=Path, required=True, help="HMAC key file used when writing the log")
