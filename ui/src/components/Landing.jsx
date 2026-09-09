@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Check, Crosshair, FileCheck2, Fingerprint, Globe2, LockKeyhole, Radar, RotateCcw, Shield, SquareTerminal } from 'lucide-react'
+import { Activity, ArrowRight, Check, Crosshair, FileCheck2, Fingerprint, Globe2, LockKeyhole, Radar, RotateCcw, Settings2, Shield, SquareTerminal, Workflow } from 'lucide-react'
 import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
@@ -22,6 +22,17 @@ const RESPONSE_FLOW = `flowchart LR
   F --> I[Kill process]
   F --> J[Block network flow]`
 
+const AGENT_FLOW = `flowchart LR
+  A[Agent request] --> B[Ingress guardrail]
+  B --> C[Model and retrieval checks]
+  C --> D[Tool pre-action gate]
+  D --> E[Kernel-observed execution]
+  E --> F[Post-action verification]
+  F --> G[Correlated evidence]
+  H[Signed local policy] -. governs .-> B
+  H -. governs .-> D
+  I[Process · file · network sensors] -. observes .-> E`
+
 export function Landing({ next }) {
   return (
     <main className="landing">
@@ -32,6 +43,7 @@ export function Landing({ next }) {
             <a href="#platform">Platform</a>
             <a href="#architecture">Architecture</a>
             <a href="#responders">Responders</a>
+            <a href="#agent-security">Agent security</a>
             <a href="#assurance">Assurance</a>
           </div>
           <div className="nav-actions">
@@ -150,6 +162,28 @@ export function Landing({ next }) {
         </div>
       </section>
 
+      <section className="landing-agent-security" id="agent-security" aria-labelledby="agent-security-heading">
+        <div className="agent-security-intro">
+          <div><Shield aria-hidden="true" /><h2 id="agent-security-heading">One security boundary across agent intent and host execution.</h2></div>
+          <p>Shield protects autonomous systems at two layers. Semantic guardrails inspect what an agent is attempting to do, while Linux sensors observe what actually reaches the operating system. A local deterministic policy engine connects both views without putting cloud inference in the enforcement path.</p>
+        </div>
+        <MermaidDiagram chart={AGENT_FLOW} label="Shield agent request, guardrail, kernel execution, and evidence correlation flow" />
+        <div className="metadata-rail" aria-label="Shield security coverage"><span>Security coverage</span>{['Ingress', 'Retrieval', 'Model routing', 'Tool calls', 'Process execution', 'File writes', 'Network flows', 'Post-action checks'].map((item) => <b key={item}>{item}</b>)}</div>
+        <div className="agent-security-details">
+          <article><Workflow /><h3>Correlate intent with execution</h3><p>Shield carries stable identifiers from an agent request through policy evaluation, attempted action, kernel telemetry, containment, and evidence publication. Operators can reconstruct what was requested, what policy decided, what the host observed, and whether the outcome matched expectations.</p><ul><li>Agent, tenant, device, session, and invocation scope.</li><li>Policy version and deterministic decision reason.</li><li>Requested, attempted, completed, and verified outcomes.</li><li>Explicit gaps when telemetry or evidence is unavailable.</li></ul></article>
+          <article><Settings2 /><h3>Configure enforcement deliberately</h3><p>Teams select sensor cadence, evidence behavior, guardrail coverage, containment mode, and cooldowns through versioned tenant settings. Sensitive containment and guardrail changes enter an approval queue and can be rejected or rolled back with a complete audit trail.</p><ul><li>Audit-only, approval, or policy-authorized response modes.</li><li>Independent guardrails for retrieval, routing, output, tools, and post-action state.</li><li>Signed policy distribution with downgrade protection.</li><li>Responder capability stays locked until runtime proof passes.</li></ul></article>
+        </div>
+        <div className="shield-capabilities">
+          <article><span>01</span><div><h3>Live event timeline</h3><p>Filter process, file, network, and agent events by severity and decision. Expand each record to inspect normalized context, policy rationale, evidence state, and correlation identifiers.</p></div></article>
+          <article><span>02</span><div><h3>Pre-action guardrails</h3><p>Evaluate ingress, retrieved context, model destinations, generated output, and tool requests before execution. Unavailable policy dependencies fail closed instead of silently allowing work.</p></div></article>
+          <article><span>03</span><div><h3>Kernel-level observation</h3><p>Use eBPF process, file-write, and TCP-connect sensors—or a split privileged helper—to observe real host activity independently of the agent framework.</p></div></article>
+          <article><span>04</span><div><h3>Bounded containment</h3><p>Start with reversible SIGSTOP. Promote cgroup freeze, explicit kill, or destination-scoped nftables blocking only after device-bound runtime evidence and operator approval.</p></div></article>
+          <article><span>05</span><div><h3>Post-action verification</h3><p>Compare the expected state transition with observed results. A mismatch becomes an enforcement anomaly rather than an unqualified success.</p></div></article>
+          <article><span>06</span><div><h3>Evidence and integrations</h3><p>Publish durable decision and outcome records, monitor exporter queues, and route normalized events into SIEM, webhooks, and incident-response systems.</p></div></article>
+        </div>
+        <p className="agent-security-boundary"><LockKeyhole size={14} /> Shield is the enforcement authority shown here. External intelligence can inform policy design, but it cannot bypass local policy, approval, or responder-readiness gates.</p>
+      </section>
+
       <section className="cta" id="control">
         <div>
           <p className="eyebrow">BUILT FOR REAL OPERATIONS</p>
@@ -163,7 +197,7 @@ export function Landing({ next }) {
       <footer className="site-footer">
         <div className="footer-main">
           <div className="footer-brand"><Brand /><p>Deterministic endpoint security for autonomous systems—local decisions, bounded response, verifiable outcomes.</p><span><span className="status-dot green" /> Local-first by design</span></div>
-          <div className="footer-links"><h3>Platform</h3><a href="#platform">Capabilities</a><a href="#architecture">Architecture</a><a href="#responders">Responders</a></div>
+          <div className="footer-links"><h3>Platform</h3><a href="#platform">Capabilities</a><a href="#architecture">Architecture</a><a href="#agent-security">Agent security</a></div>
           <div className="footer-links"><h3>Security</h3><a href="#proof">Trust model</a><a href="#assurance">Assurance</a><button onClick={next}>Operator console</button></div>
           <div className="footer-links"><h3>Operate</h3><a href="#architecture">Decision path</a><a href="#responders">Proof gates</a><button onClick={next}>Sign in</button></div>
         </div>

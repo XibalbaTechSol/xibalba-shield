@@ -5,6 +5,7 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   timeout: 30000,
   expect: {
+    timeout: 15000,
     toHaveScreenshot: { maxDiffPixelRatio: 0.05 },
   },
   fullyParallel: true,

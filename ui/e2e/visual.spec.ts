@@ -16,7 +16,7 @@ test.describe('Visual Regression', () => {
   test('landing diagrams render without mobile page overflow', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');
-    await expect(page.locator('.mermaid-svg svg')).toHaveCount(2);
+    await expect(page.locator('.mermaid-svg svg')).toHaveCount(3);
     await expect(page.getByRole('heading', { name: /proof-gated response lifecycle/i })).toBeVisible();
     const dimensions = await page.evaluate(() => ({
       client: document.documentElement.clientWidth,
