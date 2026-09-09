@@ -1,27 +1,37 @@
 import os
-import resend
+import smtplib
+import ssl
+from email.message import EmailMessage
 
 class EmailDeliveryError(RuntimeError):
     pass
 
 def send_email(to_email: str, subject: str, body: str) -> None:
-    sender = os.environ.get("SHIELD_EMAIL_FROM", "noreply@xibalba.local").strip()
-    api_key = os.environ.get("RESEND_API_KEY")
-
-    if not api_key:
-        print(f"WARN: RESEND_API_KEY not set. Would have sent email to {to_email} with subject '{subject}'")
-        # In a real environment, we'd raise an error if required:
-        # raise EmailDeliveryError("RESEND_API_KEY is required")
-        return
-
-    resend.api_key = api_key
-
+    host = os.environ.get("SHIELD_SMTP_HOST", "").strip()
+    sender = os.environ.get("SHIELD_SMTP_FROM", "").strip()
+    if not host or not sender:
+        raise EmailDeliveryError("SHIELD_SMTP_HOST and SHIELD_SMTP_FROM are required")
     try:
-        resend.Emails.send({
-            "from": sender,
-            "to": to_email,
-            "subject": subject,
-            "text": body
-        })
-    except Exception as exc:
-        raise EmailDeliveryError(f"Resend delivery failed: {exc}") from exc
+        port = int(os.environ.get("SHIELD_SMTP_PORT", "587"))
+    except ValueError as exc:
+        raise EmailDeliveryError("SHIELD_SMTP_PORT must be an integer") from exc
+    username = os.environ.get("SHIELD_SMTP_USERNAME", "").strip()
+    password = os.environ.get("SHIELD_SMTP_PASSWORD", "")
+    if bool(username) != bool(password):
+        raise EmailDeliveryError("SHIELD_SMTP_USERNAME and SHIELD_SMTP_PASSWORD must be configured together")
+
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.set_content(body)
+    try:
+        with smtplib.SMTP(host, port, timeout=15) as client:
+            client.ehlo()
+            client.starttls(context=ssl.create_default_context())
+            client.ehlo()
+            if username:
+                client.login(username, password)
+            client.send_message(message)
+    except (OSError, smtplib.SMTPException) as exc:
+        raise EmailDeliveryError("SMTP delivery failed") from exc

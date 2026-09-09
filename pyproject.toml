@@ -27,7 +27,6 @@ dependencies = [
     "mlflow>=3.15.1",
     "pyjwt[crypto]>=2.13.0",
     "requests>=2.34.2",
-    "resend>=2.43.0",
 ]
 
 [project.optional-dependencies]

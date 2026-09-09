@@ -2716,19 +2716,6 @@ wheels = [
 ]
 
 [[package]]
-name = "resend"
-version = "2.43.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/6b/e588fb353a968dcdc6f51837059aed017970784888d5d12a97f30f3b811d/resend-2.43.0.tar.gz", hash = "sha256:9fbee451329d12d7ba3f75eed40373847ea6b8cdef1f1475f554f0ea21fecc6d", size = 61007, upload-time = "2026-09-04T11:43:19.928Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/ad/3a3e024b4842df64865abf33ae41a945f30c34024f7d387c2098770eb95a/resend-2.43.0-py2.py3-none-any.whl", hash = "sha256:efeee831c08e41018f7227ad988d3fc74ac38b3b8975270855a781c5d86ea8b9", size = 92764, upload-time = "2026-09-04T11:43:18.645Z" },
-]
-
-[[package]]
 name = "rlp"
 version = "4.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3104,7 +3091,6 @@ dependencies = [
     { name = "mlflow" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "requests" },
-    { name = "resend" },
 ]
 
 [package.optional-dependencies]
@@ -3121,7 +3107,6 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "requests", specifier = ">=2.34.2" },
-    { name = "resend", specifier = ">=2.43.0" },
 ]
 provides-extras = ["dev"]
 
