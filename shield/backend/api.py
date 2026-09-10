@@ -120,6 +120,12 @@ def _enrich_device(device: dict[str, Any]) -> dict[str, Any]:
     enriched["net_address"] = net_addr
     enriched["ip_address"] = net_addr
     enriched["did"] = did
+    enriched["agent_id"] = device.get("integrity_agent_id") or did
+    enriched["integrity_registration"] = {
+        "agent_id": device.get("integrity_agent_id") or did,
+        "status": device.get("registration_status") or "unregistered",
+        "memory_scope": device.get("memory_scope") or "device",
+    }
     enriched["machine_id"] = machine_id
     enriched["hardware_uuid"] = machine_id
     enriched["kernel_version"] = kernel
@@ -355,6 +361,20 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 device_id = query.get("device_id", [None])[0]
                 self._send_json({"enforcement_outcomes": store.list_enforcement_outcomes(tenant_id=tenant_id, device_id=device_id)})
                 return
+            if parsed.path == "/api/shield/agents":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                devices = [_enrich_device(d) for d in store.list_devices(tenant_id=tenant_id)]
+                grouped: dict[str, dict[str, Any]] = {}
+                for device in devices:
+                    agent_id = str(device.get("agent_id") or device.get("did"))
+                    item = grouped.setdefault(agent_id, {"agent_id": agent_id, "devices": [], "registration_status": device.get("registration_status", "unregistered"), "memory_scope": "agent"})
+                    item["devices"].append(device)
+                    if device.get("registration_status") == "registered":
+                        item["registration_status"] = "registered"
+                self._send_json({"agents": list(grouped.values())})
+                return
             self._send_error(HTTPStatus.NOT_FOUND, "not found")
 
         def do_POST(self) -> None:
@@ -519,6 +539,33 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     },
                     status=HTTPStatus.CREATED,
                 )
+                return
+
+            if parsed.path == "/api/shield/agents/register":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                device_id = str(body.get("device_id") or "")
+                agent_id = str(body.get("agent_id") or "").strip()
+                if not device_id or not agent_id:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "device_id and agent_id are required")
+                    return
+                registration_status = "pending_signature"
+                oracle_url = str(body.get("oracle_url") or os.environ.get("INTEGRITY_ORACLE_URL") or "http://127.0.0.1:8080").rstrip("/")
+                try:
+                    request = urllib.request.Request(f"{oracle_url}/v1/agent/{agent_id}", headers={"Accept": "application/json"})
+                    with urllib.request.urlopen(request, timeout=4) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    if payload.get("oracle_registered") is True:
+                        registration_status = "registered"
+                except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+                    payload = {"oracle_registered": None}
+                try:
+                    device = store.bind_integrity_agent(tenant_id=tenant_id, device_id=device_id, agent_id=agent_id, registration_status=registration_status)
+                except (KeyError, ValueError) as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"agent": _enrich_device(device), "registration": {"status": registration_status, "oracle": payload, "requires_signature": registration_status != "registered"}}, status=HTTPStatus.OK)
                 return
 
             if parsed.path == "/api/shield/admin-tokens":

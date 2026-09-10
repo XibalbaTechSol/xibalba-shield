@@ -55,6 +55,7 @@ export function Dashboard({ connection, logout }) {
   const [view, setView] = useState('overview')
   const [data, setData] = useState({
     summary: null,
+    agents: [],
     devices: realOnly ? [] : fallbackDevices,
     outcomes: realOnly ? [] : fallbackOutcomes,
     exporter: [],
@@ -80,13 +81,14 @@ export function Dashboard({ connection, logout }) {
     const results = await Promise.allSettled([
       api.dashboard(),
       api.devices(),
+      api.agents(),
       api.enforcementOutcomes(),
       api.exporterStatus(),
       api.integrations(),
       api.detectionQuality(),
       api.testEvents(),
     ])
-    const [summary, devices, outcomes, exporter, integrations, quality, events] = results
+    const [summary, devices, agents, outcomes, exporter, integrations, quality, events] = results
     const live = summary.status === 'fulfilled'
     const visibleDevices = devices.status === 'fulfilled'
       ? devices.value.devices.filter((device) => !realOnly || !device.synthetic)
@@ -111,6 +113,7 @@ export function Dashboard({ connection, logout }) {
 
     setData((current) => ({
       summary: live ? visibleSummary : (realOnly ? null : current.summary),
+      agents: agents.status === 'fulfilled' ? agents.value.agents : current.agents,
       devices: devices.status === 'fulfilled' ? visibleDevices : (realOnly ? [] : current.devices),
       outcomes: outcomes.status === 'fulfilled' ? outcomes.value.enforcement_outcomes.filter((row) => !realOnly || !row.outcome?.synthetic) : (realOnly ? [] : current.outcomes),
       exporter: exporter.status === 'fulfilled' ? visibleExporter : current.exporter,

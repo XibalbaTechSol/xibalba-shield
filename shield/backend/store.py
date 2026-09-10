@@ -181,6 +181,9 @@ class ShieldStore:
                 device_role TEXT NOT NULL DEFAULT '',
                 device_token_hash TEXT NOT NULL,
                 agent_label TEXT NOT NULL DEFAULT 'xibalba-shield',
+                integrity_agent_id TEXT,
+                registration_status TEXT NOT NULL DEFAULT 'unregistered',
+                memory_scope TEXT NOT NULL DEFAULT 'device',
                 synthetic INTEGER NOT NULL DEFAULT 0,
                 last_seen_at TEXT NOT NULL,
                 created_at TEXT NOT NULL,
@@ -377,6 +380,12 @@ class ShieldStore:
         if "synthetic" not in device_columns:
             self._conn.execute("ALTER TABLE devices ADD COLUMN synthetic INTEGER NOT NULL DEFAULT 0")
             self._conn.execute("UPDATE devices SET synthetic=1 WHERE EXISTS (SELECT 1 FROM decisions WHERE decisions.tenant_id=devices.tenant_id AND decisions.device_id=devices.device_id AND decisions.synthetic=1)")
+        if "integrity_agent_id" not in device_columns:
+            self._conn.execute("ALTER TABLE devices ADD COLUMN integrity_agent_id TEXT")
+        if "registration_status" not in device_columns:
+            self._conn.execute("ALTER TABLE devices ADD COLUMN registration_status TEXT NOT NULL DEFAULT 'unregistered'")
+        if "memory_scope" not in device_columns:
+            self._conn.execute("ALTER TABLE devices ADD COLUMN memory_scope TEXT NOT NULL DEFAULT 'device'")
         if "role" not in account_columns:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'tenant_admin'")
         if "failed_attempts" not in account_columns:
@@ -701,7 +710,8 @@ class ShieldStore:
     def list_devices(self, *, tenant_id: str) -> list[dict[str, Any]]:
         rows = self._conn.execute(
             """
-            SELECT d.tenant_id, d.device_id, d.device_role, d.agent_label, d.last_seen_at, d.synthetic,
+            SELECT d.tenant_id, d.device_id, d.device_role, d.agent_label, d.integrity_agent_id,
+                   d.registration_status, d.memory_scope, d.last_seen_at, d.synthetic,
                    p.policy_version, p.policy_hash
             FROM devices d
             LEFT JOIN policies p ON p.tenant_id=d.tenant_id AND p.device_id IN (d.device_id, '*')
@@ -716,6 +726,21 @@ class ShieldStore:
     def get_device(self, *, tenant_id: str, device_id: str) -> dict[str, Any] | None:
         rows = [row for row in self.list_devices(tenant_id=tenant_id) if row["device_id"] == device_id]
         return rows[0] if rows else None
+
+    def bind_integrity_agent(self, *, tenant_id: str, device_id: str, agent_id: str, registration_status: str) -> dict[str, Any]:
+        self._validate_id("tenant_id", tenant_id)
+        self._validate_id("device_id", device_id)
+        agent_id = str(agent_id).strip()
+        if not agent_id:
+            raise ValueError("agent_id is required")
+        with self._conn:
+            updated = self._conn.execute(
+                "UPDATE devices SET integrity_agent_id=?, registration_status=? WHERE tenant_id=? AND device_id=?",
+                (agent_id, registration_status, tenant_id, device_id),
+            ).rowcount
+        if not updated:
+            raise KeyError(device_id)
+        return self.get_device(tenant_id=tenant_id, device_id=device_id) or {}
 
     def mark_device_synthetic(self, *, tenant_id: str, device_id: str, synthetic: bool = True) -> None:
         with self._conn:

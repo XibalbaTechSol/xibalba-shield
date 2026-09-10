@@ -86,6 +86,20 @@ def test_backend_enrolls_device_and_serves_policy_to_existing_client_shape(tmp_p
         store.close()
 
 
+def test_backend_binds_integrity_agent_and_exposes_agent_workspace(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _request(f"{base}/api/shield/enroll", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1", "device_role": "workstation"})
+        status, result = _request(f"{base}/api/shield/agents/register", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-1", "agent_id": "did:integrity:test", "oracle_url": "http://127.0.0.1:1"})
+        assert status == 200
+        assert result["registration"]["status"] == "pending_signature"
+        assert result["agent"]["agent_id"] == "did:integrity:test"
+        status, agents = _request(f"{base}/api/shield/agents?tenant_id=tenant-a")
+        assert status == 200 and agents["agents"][0]["agent_id"] == "did:integrity:test"
+    finally:
+        server.shutdown(); server.server_close(); store.close()
+
+
 def test_backend_rejects_admin_api_without_admin_token(tmp_path):
     server, store, base = _start_backend(tmp_path)
     try:

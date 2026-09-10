@@ -20,6 +20,7 @@ export function AgentView({ data, refresh, api }) {
   const [remediation, setRemediation] = useState({ action: 'retry', message: '' })
   const [guardrails, setGuardrails] = useState({ toolCalls: true, modelRouting: true, retrieval: true, outputChecks: true, postAction: true })
   const [guardrailMessage, setGuardrailMessage] = useState('')
+  const [registrationMessage, setRegistrationMessage] = useState('')
   useEffect(() => {
     let cancelled = false
     api.settings().then(({ settings = {} }) => {
@@ -44,6 +45,17 @@ export function AgentView({ data, refresh, api }) {
       setRemediation((current) => ({ ...current, message: `Request ${result.id} queued for the exporter worker.` }))
     } catch (error) { setRemediation((current) => ({ ...current, message: error instanceof Error ? error.message : String(error) })) }
   }
+  const registerSelectedAgent = async () => {
+    if (!selected?.device_id) return
+    const agentId = selected.integrity_agent_id || selected.agent_id || selected.did
+    setRegistrationMessage('Checking Integrity registration…')
+    try {
+      const result = await api.registerAgent(selected.device_id, agentId)
+      setSelected(result.agent)
+      setRegistrationMessage(result.registration?.status === 'registered' ? 'Registered on Integrity and bound to this device.' : 'Saved as pending signature; complete the on-chain registration before publishing agent telemetry.')
+      refresh()
+    } catch (error) { setRegistrationMessage(error instanceof Error ? error.message : String(error)) }
+  }
   const devices = data.devices || []
   const exporterByDevice = useMemo(() => Object.fromEntries((data.exporter || []).map((row) => [row.device_id, row])), [data.exporter])
   const responderStatus = useMemo(() => {
@@ -58,7 +70,7 @@ export function AgentView({ data, refresh, api }) {
       <span>Inspect endpoint posture, sensor attachment, evidence publication, and recent enforcement activity from one authenticated view.</span>
       <small className="evidence-label">Only control-plane records are shown. Missing telemetry is marked unverified.</small>
     </header>
-    <div className="agent-toolbar"><span><span className="status-dot green" /> {devices.length} enrolled agent{devices.length === 1 ? '' : 's'}</span><button type="button" className="secondary-btn" onClick={refresh}><RefreshCw size={14} /> Refresh agents</button></div>
+    <div className="agent-toolbar"><span><span className="status-dot green" /> {devices.length} enrolled device{devices.length === 1 ? '' : 's'}</span><span className="evidence-label">Each device is scoped to one canonical Shield agent and Cortex memory namespace.</span><button type="button" className="secondary-btn" onClick={refresh}><RefreshCw size={14} /> Refresh agents</button></div>
     <section className="responder-panel" aria-labelledby="responder-panel-title">
       <div className="responder-panel-heading">
         <div><p className="eyebrow">RESPONSE CAPABILITIES</p><h3 id="responder-panel-title">Responder interface</h3><p>Actions are surfaced from the agent contract. Destructive responders stay unavailable until their privileged runtime gates pass.</p></div>
@@ -97,6 +109,6 @@ export function AgentView({ data, refresh, api }) {
       </button>
     })}</div>}
     <div className="agent-footer-note"><Activity size={15} /><span>Agent actions remain tenant-scoped and auditable. Use Evidence for worker-backed remediation.</span></div>
-    {selected && <aside className="device-detail-backdrop" role="presentation" onClick={() => setSelected(null)}><section className="device-detail-drawer" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}><header className="device-detail-header"><div><p className="eyebrow">AGENT DETAIL</p><h2>{selected.device_id}</h2><span>{selected.device_role || 'Endpoint'} · {selected.status || 'unverified'}</span></div><button type="button" className="drawer-close" aria-label="Close agent details" onClick={() => setSelected(null)}>×</button></header>{selected.loading ? <p className="device-detail-loading">Loading authenticated agent state…</p> : selected.error ? <p className="form-message error">{selected.error}</p> : <><dl className="device-detail-grid">{['policy_version', 'last_seen_at', 'ip_address', 'kernel_version', 'ebpf_sensor', 'did'].map((key) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{selected[key] || '—'}</dd></div>)}</dl><div className="agent-remediation-panel"><p className="eyebrow">WORKER-BACKED ACTION</p><h3>Exporter remediation</h3><select className="form-select" value={remediation.action} onChange={(event) => setRemediation({ action: event.target.value, message: '' })}><option value="retry">Retry failed exports</option><option value="reconnect">Reconnect exporter</option><option value="flush">Flush pending queue</option></select><button type="button" className="primary" onClick={queueRemediation}>Queue action</button>{remediation.message && <p className="form-message" aria-live="polite">{remediation.message}</p>}</div></>}</section></aside>}
+    {selected && <aside className="device-detail-backdrop" role="presentation" onClick={() => setSelected(null)}><section className="device-detail-drawer" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}><header className="device-detail-header"><div><p className="eyebrow">AGENT DETAIL</p><h2>{selected.device_id}</h2><span>{selected.device_role || 'Endpoint'} · {selected.status || 'unverified'}</span></div><button type="button" className="drawer-close" aria-label="Close agent details" onClick={() => setSelected(null)}>×</button></header>{selected.loading ? <p className="device-detail-loading">Loading authenticated agent state…</p> : selected.error ? <p className="form-message error">{selected.error}</p> : <><dl className="device-detail-grid">{['policy_version', 'last_seen_at', 'ip_address', 'kernel_version', 'ebpf_sensor', 'did', 'agent_id', 'registration_status', 'memory_scope'].map((key) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{selected[key] || '—'}</dd></div>)}</dl><div className="agent-remediation-panel"><p className="eyebrow">INTEGRITY IDENTITY</p><h3>Register Shield agent</h3><p>Verify the canonical DID with Integrity and bind this device to the agent-scoped Cortex memory namespace.</p><button type="button" className="primary" onClick={registerSelectedAgent}>Register / verify on Integrity</button>{registrationMessage && <p className="form-message" aria-live="polite">{registrationMessage}</p>}</div><div className="agent-remediation-panel"><p className="eyebrow">WORKER-BACKED ACTION</p><h3>Exporter remediation</h3><select className="form-select" value={remediation.action} onChange={(event) => setRemediation({ action: event.target.value, message: '' })}><option value="retry">Retry failed exports</option><option value="reconnect">Reconnect exporter</option><option value="flush">Flush pending queue</option></select><button type="button" className="primary" onClick={queueRemediation}>Queue action</button>{remediation.message && <p className="form-message" aria-live="polite">{remediation.message}</p>}</div></>}</section></aside>}
   </section>
 }

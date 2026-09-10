@@ -17,6 +17,7 @@ source_files:
 - [AgentRegistry](#agentregistry)
 - [How the policy engine reads this](#how-the-policy-engine-reads-this)
 - [Related pages](#related-pages)
+- [Integrity and Cortex binding](#integrity-and-cortex-binding)
 
 ## Overview
 
@@ -67,6 +68,17 @@ for every `AgentEvent`) without ever being explicitly `register()`-ed stays unre
 owner, workload metadata) is intended to match against exactly this registry state — though see
 policy-engine.md's documented drift section for the caveat that the current OPA-delegated
 evaluator doesn't consult the JSON rule bundles' condition groups directly.
+
+## Integrity and Cortex binding
+
+The authenticated Shield control plane exposes `POST /api/shield/agents/register` and
+`GET /api/shield/agents`. Registration accepts the canonical Integrity agent ID (normally the
+agent DID), probes the configured Oracle read endpoint, and records one of three explicit states:
+`registered`, `pending_signature`, or `unregistered`. The endpoint never claims an on-chain write
+occurred when the Oracle cannot verify it; a pending result is the handoff to the wallet/script
+signature step. Each device carries the bound `integrity_agent_id`, `registration_status`, and
+`memory_scope`. Runtime memory events should send the same agent ID plus `device_id` to Cortex;
+the pair is the stable namespace for device-separated, redacted cloud memory.
 
 ## Related pages
 
