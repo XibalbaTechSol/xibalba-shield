@@ -742,6 +742,32 @@ class ShieldStore:
             raise KeyError(device_id)
         return self.get_device(tenant_id=tenant_id, device_id=device_id) or {}
 
+    def discover_agent_ids(self, *, tenant_id: str, device_id: str) -> list[dict[str, Any]]:
+        """Discover agent identities observed by this real device; never creates a fixture."""
+        found: dict[str, dict[str, Any]] = {}
+        rows = self._conn.execute(
+            "SELECT decision_json FROM decisions WHERE tenant_id=? AND device_id=? ORDER BY id DESC LIMIT 500",
+            (tenant_id, device_id),
+        ).fetchall()
+        for row in rows:
+            try:
+                payload = json.loads(row["decision_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            agent = payload.get("event", {}).get("agent", {}) if isinstance(payload, dict) else {}
+            if not isinstance(agent, dict) or not agent.get("agent_id"):
+                continue
+            agent_id = str(agent["agent_id"])
+            found.setdefault(agent_id, {"agent_id": agent_id, "name": agent.get("name") or agent_id, "source": "real_device_decision"})
+        rows = self._conn.execute(
+            "SELECT agent_id FROM enforcement_outcomes WHERE tenant_id=? AND device_id=? AND agent_id IS NOT NULL ORDER BY id DESC LIMIT 500",
+            (tenant_id, device_id),
+        ).fetchall()
+        for row in rows:
+            agent_id = str(row["agent_id"])
+            found.setdefault(agent_id, {"agent_id": agent_id, "name": agent_id, "source": "real_device_outcome"})
+        return list(found.values())
+
     def mark_device_synthetic(self, *, tenant_id: str, device_id: str, synthetic: bool = True) -> None:
         with self._conn:
             self._conn.execute("UPDATE devices SET synthetic=? WHERE tenant_id=? AND device_id=?", (int(synthetic), tenant_id, device_id))

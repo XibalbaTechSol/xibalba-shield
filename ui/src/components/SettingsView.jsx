@@ -765,7 +765,7 @@ export function SettingsView({ connection, logout, data = {} }) {
                 <input type="checkbox" checked={realOnly} onChange={(e) => setRealOnly(e.target.checked)} />
                 <div>
                   <b>Real telemetry only</b>
-                  <p>Hide synthetic fallback devices, events, and outcomes when the control plane is unavailable.</p>
+                  <p>Real device telemetry only. Synthetic and preview records are never shown in this operator workflow.</p>
                 </div>
               </label>
               <label className="toggle-item">

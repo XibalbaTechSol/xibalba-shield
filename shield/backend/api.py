@@ -365,7 +365,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
-                devices = [_enrich_device(d) for d in store.list_devices(tenant_id=tenant_id)]
+                devices = [_enrich_device(d) for d in store.list_devices(tenant_id=tenant_id) if not d.get("synthetic")]
                 grouped: dict[str, dict[str, Any]] = {}
                 for device in devices:
                     agent_id = str(device.get("agent_id") or device.get("did"))
@@ -373,6 +373,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     item["devices"].append(device)
                     if device.get("registration_status") == "registered":
                         item["registration_status"] = "registered"
+                    item["available_agents"] = store.discover_agent_ids(tenant_id=tenant_id, device_id=str(device.get("device_id")))
                 self._send_json({"agents": list(grouped.values())})
                 return
             self._send_error(HTTPStatus.NOT_FOUND, "not found")

@@ -57,6 +57,7 @@ export function AgentView({ data, refresh, api }) {
     } catch (error) { setRegistrationMessage(error instanceof Error ? error.message : String(error)) }
   }
   const devices = data.devices || []
+  const realAgentRoster = useMemo(() => (data.agents || []).flatMap((agent) => (agent.available_agents || []).map((identity) => ({ ...identity, device_id: agent.devices?.[0]?.device_id || '' }))), [data.agents])
   const exporterByDevice = useMemo(() => Object.fromEntries((data.exporter || []).map((row) => [row.device_id, row])), [data.exporter])
   const responderStatus = useMemo(() => {
     const live = (data.exporter || []).find((row) => row.status?.responders)?.status?.responders
@@ -71,6 +72,7 @@ export function AgentView({ data, refresh, api }) {
       <small className="evidence-label">Only control-plane records are shown. Missing telemetry is marked unverified.</small>
     </header>
     <div className="agent-toolbar"><span><span className="status-dot green" /> {devices.length} enrolled device{devices.length === 1 ? '' : 's'}</span><span className="evidence-label">Each device is scoped to one canonical Shield agent and Cortex memory namespace.</span><button type="button" className="secondary-btn" onClick={refresh}><RefreshCw size={14} /> Refresh agents</button></div>
+    <section className="settings-card" aria-labelledby="real-agent-roster-title"><div className="settings-card-header"><div className="settings-card-title"><ShieldCheck size={18} /><h3 id="real-agent-roster-title">Real agents observed on this device</h3></div><span className="live-status-pill"><Activity size={13} /> No fixtures</span></div><p className="settings-card-desc">Only identities emitted by this device’s authenticated decisions/outcomes are listed. Select an agent in the host runtime to exercise its policy and memory boundary.</p>{realAgentRoster.length === 0 ? <p className="small muted">No agent-bearing real events have been observed yet.</p> : <div className="agent-roster">{realAgentRoster.map((agent) => <div className="agent-roster-row" key={`${agent.device_id}:${agent.agent_id}`}><div><b>{agent.name}</b><small>{agent.agent_id}</small></div><span>{agent.source}</span></div>)}</div>}</section>
     <section className="responder-panel" aria-labelledby="responder-panel-title">
       <div className="responder-panel-heading">
         <div><p className="eyebrow">RESPONSE CAPABILITIES</p><h3 id="responder-panel-title">Responder interface</h3><p>Actions are surfaced from the agent contract. Destructive responders stay unavailable until their privileged runtime gates pass.</p></div>

@@ -27,7 +27,7 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
         <div>
           <p className="eyebrow">OPERATIONAL POSTURE</p>
           <h2>Fleet command center.</h2>
-          <span>{preview ? 'Preview mode: synthetic fallback data is shown until the control plane reconnects.' : 'Authenticated telemetry, policy decisions, and containment outcomes.'}</span>
+          <span>{preview ? 'Control plane unavailable: synthetic and preview records are not shown.' : 'Authenticated telemetry, policy decisions, and containment outcomes.'}</span>
         </div>
         <button className="primary" type="button" onClick={() => openView('policies')} disabled={preview} title={preview ? 'Reconnect to the control plane before deploying policy' : undefined}>
           <ShieldCheck aria-hidden="true" /> Deploy policy

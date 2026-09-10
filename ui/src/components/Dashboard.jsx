@@ -37,18 +37,6 @@ const NAV = [
 ]
 const VIEW_LABELS = Object.fromEntries([...NAV, ['settings', null, 'Settings'], ['developer', null, 'Developer']].map(([id, , label]) => [id, label]))
 
-const fallbackDevices = [
-  { id: 'prod-api-01', name: 'prod-api-01', os: 'Ubuntu 24.04', status: 'protected', policy: 'v12.4', last_seen: '12s ago' },
-  { id: 'prod-worker-02', name: 'prod-worker-02', os: 'Ubuntu 22.04', status: 'protected', policy: 'v12.4', last_seen: '28s ago' },
-  { id: 'edge-gateway-04', name: 'edge-gateway-04', os: 'Ubuntu 22.04', status: 'attention', policy: 'v12.3', last_seen: '4m ago' },
-]
-
-const fallbackOutcomes = [
-  { decision: 'blocked', action: 'process_exec', device_id: 'prod-api-01', target: '/tmp/unknown-agent', time: '2 min ago' },
-  { decision: 'allowed', action: 'tcp_connect', device_id: 'prod-worker-02', target: 'api.openai.com:443', time: '8 min ago' },
-  { decision: 'contained', action: 'file_write', device_id: 'edge-gateway-04', target: '/etc/systemd/system', time: '21 min ago' },
-]
-
 export function Dashboard({ connection, logout }) {
   const [realOnly, setRealOnly] = useState(() => sessionStorage.getItem('shield-real-only') !== 'false')
   const [menu, setMenu] = useState(false)
@@ -56,8 +44,8 @@ export function Dashboard({ connection, logout }) {
   const [data, setData] = useState({
     summary: null,
     agents: [],
-    devices: realOnly ? [] : fallbackDevices,
-    outcomes: realOnly ? [] : fallbackOutcomes,
+    devices: [],
+    outcomes: [],
     exporter: [],
     integrations: [],
     quality: [],
@@ -91,7 +79,7 @@ export function Dashboard({ connection, logout }) {
     const [summary, devices, agents, outcomes, exporter, integrations, quality, events] = results
     const live = summary.status === 'fulfilled'
     const visibleDevices = devices.status === 'fulfilled'
-      ? devices.value.devices.filter((device) => !realOnly || !device.synthetic)
+      ? devices.value.devices.filter((device) => !device.synthetic)
       : []
     const visibleDeviceIds = new Set(visibleDevices.map((device) => device.device_id || device.id))
     const visibleExporter = exporter.status === 'fulfilled'
@@ -103,7 +91,6 @@ export function Dashboard({ connection, logout }) {
           devices: visibleDevices,
           device_count: visibleDevices.length,
           latest_decisions: (summary.value.latest_decisions || []).filter((row) => {
-            if (!realOnly) return true
             const decision = row.decision || {}
             return visibleDeviceIds.has(decision.device_id || decision.event_ref?.device_id)
           }),
@@ -114,8 +101,8 @@ export function Dashboard({ connection, logout }) {
     setData((current) => ({
       summary: live ? visibleSummary : (realOnly ? null : current.summary),
       agents: agents.status === 'fulfilled' ? agents.value.agents : current.agents,
-      devices: devices.status === 'fulfilled' ? visibleDevices : (realOnly ? [] : current.devices),
-      outcomes: outcomes.status === 'fulfilled' ? outcomes.value.enforcement_outcomes.filter((row) => !realOnly || !row.outcome?.synthetic) : (realOnly ? [] : current.outcomes),
+      devices: devices.status === 'fulfilled' ? visibleDevices : [],
+      outcomes: outcomes.status === 'fulfilled' ? outcomes.value.enforcement_outcomes.filter((row) => !row.outcome?.synthetic) : [],
       exporter: exporter.status === 'fulfilled' ? visibleExporter : current.exporter,
       integrations: integrations.status === 'fulfilled' ? integrations.value.integrations : current.integrations,
       quality: quality.status === 'fulfilled' ? quality.value.detection_quality : current.quality,
@@ -149,7 +136,7 @@ export function Dashboard({ connection, logout }) {
   useEffect(() => {
     const handleMode = (event) => {
       const enabled = Boolean(event.detail)
-      setRealOnly(enabled)
+      setRealOnly(Boolean(enabled))
       if (enabled) setData((current) => ({ ...current, devices: [], outcomes: [], events: [], exporter: [], integrations: [], quality: [] }))
     }
     window.addEventListener('shield-telemetry-mode', handleMode)
