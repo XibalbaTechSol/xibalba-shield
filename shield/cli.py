@@ -559,6 +559,8 @@ def _local_run(args: argparse.Namespace) -> int:
             args.no_containment = True
             args.log_integrity_key = None
             args.slm_backend = "none"
+            args.cortex_url = None
+            args.cortex_token = None
             args.watchdog_interval = 15.0
             return _run(args)
     except (FileNotFoundError, RuntimeError, TimeoutError, OSError) as exc:
