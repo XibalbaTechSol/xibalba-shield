@@ -348,11 +348,15 @@ def _run(args: argparse.Namespace) -> int:
         print(f"shield run: {exc}", file=sys.stderr)
         return 1
 
+    from .agent_core.cortex_memory import CortexMemoryProvider
+    memory_provider = CortexMemoryProvider.from_environment(device_id=device_config.device_id, base_url=args.cortex_url, token=args.cortex_token)
+
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
                          decision_sink=evidence_publisher.publish_decision,
-                         enforcement_outcome_sink=evidence_publisher.publish_outcome)
+                         enforcement_outcome_sink=evidence_publisher.publish_outcome,
+                         memory_provider=memory_provider)
 
     try:
         sensor = _make_sensor(
@@ -682,6 +686,8 @@ def main(argv: list[str] | None = None) -> int:
                             "(default, unchanged behavior), 'simulated' (deterministic, synthetic "
                             "pattern match -- no model required), 'local' (real Qwen2.5-0.5B "
                             "inference, requires llama-cpp-python + slm_training/models/)")
+    p_run.add_argument("--cortex-url", default=None, help="optional redacted Cortex memory endpoint; also accepts XIBALBA_CORTEX_URL")
+    p_run.add_argument("--cortex-token", default=None, help="optional Cortex memory token; also accepts XIBALBA_CORTEX_TOKEN")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,
                        help="HMAC key file for tamper-evident decision log entries")
     p_run.add_argument("--max-events", type=int, default=None,

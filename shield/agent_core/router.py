@@ -51,6 +51,10 @@ class ExporterLike(Protocol):
     def export_decision(self, decision: PolicyDecision) -> dict: ...
 
 
+class MemoryProviderLike(Protocol):
+    def remember_event(self, event: NormalizedEvent, decision: PolicyDecision) -> None: ...
+
+
 def _pid_of(event: NormalizedEvent) -> int | None:
     """Best-effort extraction of the OS pid a `contain` decision should act on. Only
     ProcessActivity/FileActivity/NetworkFlow carry a `process.pid` (AgentEvent doesn't --
@@ -74,6 +78,7 @@ class EventRouter:
         slm_backend: SlmBackend | None = None,
         enforcement_outcome_sink: Callable[[EnforcementOutcome], None] | None = None,
         decision_sink: Callable[[PolicyDecision], None] | None = None,
+        memory_provider: MemoryProviderLike | None = None,
     ) -> None:
         self.device = device
         self.registry = registry
@@ -90,6 +95,7 @@ class EventRouter:
         # anything itself.
         self.enforcement_outcome_sink = enforcement_outcome_sink
         self.decision_sink = decision_sink
+        self.memory_provider = memory_provider
 
     def _context(self) -> EvaluationContext:
         return EvaluationContext(
@@ -318,5 +324,11 @@ class EventRouter:
                 self.decision_sink(decision)
             except Exception:  # noqa: BLE001 -- backend evidence is downstream of enforcement
                 logger.exception("failed to publish decision evidence for %s", decision.event_ref.event_id)
+
+        if self.memory_provider is not None:
+            try:
+                self.memory_provider.remember_event(event, decision)
+            except Exception:  # noqa: BLE001 -- cloud memory is downstream of local enforcement
+                logger.exception("failed to publish redacted Cortex memory for %s", decision.event_ref.event_id)
 
         return decision
