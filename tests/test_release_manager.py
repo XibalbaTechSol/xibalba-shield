@@ -207,7 +207,7 @@ def test_default_installer_really_installs_a_real_trivial_wheel(tmp_path):
     attestation_path.write_text(json.dumps(attestation))
 
     def _real_installer_from_tar(artifact_path: Path, venv_dir: Path) -> None:
-        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, capture_output=True, text=True)
+        subprocess.run(["uv", "venv", "--seed", str(venv_dir)], check=True, capture_output=True, text=True)
         extract_dir = venv_dir.parent / "src"
         shutil.unpack_archive(str(artifact_path), str(extract_dir), format="tar")
         subprocess.run(

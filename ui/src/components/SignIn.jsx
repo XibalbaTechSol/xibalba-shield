@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { ShieldApi } from '../api'
 import { Brand } from './Brand'
+import { readSession, removeSession } from '../storage'
 
 const DEFAULT_CONTROL_PLANE = 'http://127.0.0.1:8421'
 
 export function SignIn({ back, connect }) {
   const [mode, setMode] = useState('login')
   const [advanced, setAdvanced] = useState(false)
-  const [error, setError] = useState(() => sessionStorage.getItem('shield-auth-notice') || '')
+  const [error, setError] = useState(() => readSession('shield-auth-notice'))
   const [busy, setBusy] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,7 +31,7 @@ export function SignIn({ back, connect }) {
   }
 
   useEffect(() => {
-    sessionStorage.removeItem('shield-auth-notice')
+    removeSession('shield-auth-notice')
   }, [])
 
   const submit = async (event) => {

@@ -20,6 +20,7 @@ import { ShieldApi } from '../api'
 import { Brand } from './Brand'
 import { Overview } from './Overview'
 import { ResourceView } from './ResourceView'
+import { readSession, writeSession } from '../storage'
 
 const NAV = [
   ['overview', Gauge, 'Overview'],
@@ -38,7 +39,7 @@ const NAV = [
 const VIEW_LABELS = Object.fromEntries([...NAV, ['settings', null, 'Settings'], ['developer', null, 'Developer']].map(([id, , label]) => [id, label]))
 
 export function Dashboard({ connection, logout }) {
-  const [realOnly, setRealOnly] = useState(() => sessionStorage.getItem('shield-real-only') !== 'false')
+  const [realOnly, setRealOnly] = useState(() => readSession('shield-real-only') !== 'false')
   const [menu, setMenu] = useState(false)
   const [view, setView] = useState('overview')
   const [data, setData] = useState({
@@ -50,6 +51,7 @@ export function Dashboard({ connection, logout }) {
     integrations: [],
     quality: [],
     events: [],
+    cortexOutbox: null,
   })
   const [status, setStatus] = useState({
     state: 'connecting',
@@ -75,8 +77,9 @@ export function Dashboard({ connection, logout }) {
       api.integrations(),
       api.detectionQuality(),
       api.testEvents(),
+      api.cortexOutbox(),
     ])
-    const [summary, devices, agents, outcomes, exporter, integrations, quality, events] = results
+    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox] = results
     const live = summary.status === 'fulfilled'
     const visibleDevices = devices.status === 'fulfilled'
       ? devices.value.devices.filter((device) => !device.synthetic)
@@ -107,6 +110,7 @@ export function Dashboard({ connection, logout }) {
       integrations: integrations.status === 'fulfilled' ? integrations.value.integrations : current.integrations,
       quality: quality.status === 'fulfilled' ? quality.value.detection_quality : current.quality,
       events: events.status === 'fulfilled' ? events.value.test_events : current.events,
+      cortexOutbox: cortexOutbox.status === 'fulfilled' ? cortexOutbox.value.outbox : current.cortexOutbox,
     }))
 
     const failure = summary.reason?.message || 'Authentication failed'

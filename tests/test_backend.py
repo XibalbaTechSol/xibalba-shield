@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import base64
 import threading
 import urllib.error
 import urllib.request
+import pytest
+import shield.backend.api as backend_api
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 
@@ -96,6 +99,55 @@ def test_backend_binds_integrity_agent_and_exposes_agent_workspace(tmp_path):
         assert result["agent"]["agent_id"] == "did:integrity:test"
         status, agents = _request(f"{base}/api/shield/agents?tenant_id=tenant-a")
         assert status == 200 and agents["agents"][0]["agent_id"] == "did:integrity:test"
+    finally:
+        server.shutdown(); server.server_close(); store.close()
+
+
+def test_backend_binding_proof_requires_device_possession_and_agent_signature(tmp_path, monkeypatch):
+    monkeypatch.setenv("INTEGRITY_DID_HOME", str(tmp_path / "did"))
+    from integrity_sdk.did import load_or_create_did
+
+    agent_id, keypair, _document = load_or_create_did("binding-agent")
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll", method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-proof", "device_role": "workstation"},
+        )
+        status, result = _request(
+            f"{base}/api/shield/agents/register", method="POST",
+            body={
+                "tenant_id": "tenant-a", "device_id": "dev-proof", "agent_id": agent_id,
+                "device_token": enrolled["device_token"], "oracle_url": "http://127.0.0.1:1",
+                "agent_signature": base64.b64encode(keypair.sign(json.dumps({"schema": "xibalba.shield.device-agent-binding.v1", "tenant_id": "tenant-a", "device_id": "dev-proof", "agent_id": agent_id}, sort_keys=True, separators=(",", ":")).encode())).decode(),
+                "agent_public_key": base64.b64encode(keypair.public_bytes()).decode(),
+            },
+        )
+        assert status == 200
+        binding = result["agent"]["device_agent_binding"]
+        assert binding["status"] == "cryptographically_attested"
+        assert binding["device_attested"] is True
+        assert binding["agent_attested"] is True
+    finally:
+        server.shutdown(); server.server_close(); store.close()
+
+
+def test_backend_cortex_memory_proxy_is_bound_to_device_agent_pair(tmp_path, monkeypatch):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _request(f"{base}/api/shield/enroll", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-memory", "device_role": "workstation"})
+        _request(f"{base}/api/shield/agents/register", method="POST", body={"tenant_id": "tenant-a", "device_id": "dev-memory", "agent_id": "did:integrity:memory"})
+        monkeypatch.setattr(backend_api, "_read_cortex_agent_memories", lambda **kwargs: {"memories": [{"id": "m-1", "content_preview": "redacted event"}]})
+        status, payload = _request(f"{base}/api/shield/cortex-memories?tenant_id=tenant-a&device_id=dev-memory&agent_id=did%3Aintegrity%3Amemory")
+        assert status == 200
+        assert payload["memory_namespace"] == "shield:did:integrity:memory"
+        assert payload["memories"][0]["id"] == "m-1"
+        try:
+            _request(f"{base}/api/shield/cortex-memories?tenant_id=tenant-a&device_id=dev-memory&agent_id=did%3Aintegrity%3Aother")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 409
+        else:
+            raise AssertionError("unbound Cortex agent namespace was accepted")
     finally:
         server.shutdown(); server.server_close(); store.close()
 
@@ -732,6 +784,54 @@ def test_backend_admin_auth_fails_closed_with_no_admin_token_configured(tmp_path
     finally:
         server.shutdown()
         store.close()
+
+
+def test_backend_dev_auth_bypass_allows_loopback_without_token(tmp_path):
+    store = ShieldStore(tmp_path / "shield.sqlite3")
+    handler = make_handler(store=store, admin_token="", dev_disable_admin_auth=True)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, _payload = _request(
+            f"http://127.0.0.1:{server.server_port}/api/shield/devices?tenant_id=tenant-a"
+        )
+        assert status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+
+
+def test_backend_dev_auth_bypass_rejects_non_loopback_browser_origin(tmp_path):
+    store = ShieldStore(tmp_path / "shield.sqlite3")
+    handler = make_handler(store=store, admin_token="", dev_disable_admin_auth=True)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/shield/devices?tenant_id=tenant-a",
+            headers={"Origin": "https://attacker.example"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as failure:
+            urllib.request.urlopen(request, timeout=5)
+        assert failure.value.code == 403
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+
+
+def test_backend_dev_auth_bypass_rejects_non_loopback_listener(tmp_path):
+    with pytest.raises(ValueError, match="loopback host"):
+        run_server(
+            host="0.0.0.0",
+            port=0,
+            db_path=tmp_path / "shield.sqlite3",
+            admin_token="",
+            dev_disable_admin_auth=True,
+        )
 
 
 def test_backend_tenant_scoped_admin_token_cannot_read_another_tenant(tmp_path):

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Database } from 'lucide-react'
 import { ShieldApi } from '../api'
 import { TenantSwitcher, AvatarPreference, AuditEvents } from './SettingsView'
+import { readSession } from '../storage'
 
 export function Metric({ Icon, label, value, detail, tone }) {
   return (
@@ -84,7 +85,7 @@ export function Resource({ title, copy, children }) {
   const connection = title === 'Account & control plane'
     ? (() => {
         try {
-          return JSON.parse(sessionStorage.getItem('shield-connection') || '{}')
+          return JSON.parse(readSession('shield-connection', '{}'))
         } catch {
           return {}
         }

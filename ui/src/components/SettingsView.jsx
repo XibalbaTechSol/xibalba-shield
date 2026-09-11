@@ -21,11 +21,12 @@ import {
   RotateCw,
 } from 'lucide-react'
 import { ShieldApi } from '../api'
+import { readSession, writeSession, removeSession } from '../storage'
 
 export function TenantSwitcher() {
   const [connection] = useState(() => {
     try {
-      return JSON.parse(sessionStorage.getItem('shield-connection') || '{}')
+      return JSON.parse(readSession('shield-connection', '{}'))
     } catch {
       return {}
     }
@@ -45,7 +46,7 @@ export function TenantSwitcher() {
         connection.tenant,
         connection.token
       ).switchTenant(connection.account.email, target)
-      sessionStorage.setItem(
+      writeSession(
         'shield-connection',
         JSON.stringify({
           baseUrl: connection.baseUrl,
@@ -83,7 +84,7 @@ export function TenantSwitcher() {
 }
 
 export function AvatarPreference() {
-  const [avatar, setAvatar] = useState(() => sessionStorage.getItem('shield-avatar') || '')
+  const [avatar, setAvatar] = useState(() => readSession('shield-avatar'))
 
   const choose = (event) => {
     const file = event.target.files?.[0]
@@ -92,7 +93,7 @@ export function AvatarPreference() {
     const reader = new FileReader()
     reader.onload = () => {
       const value = String(reader.result || '')
-      sessionStorage.setItem('shield-avatar', value)
+      writeSession('shield-avatar', value)
       setAvatar(value)
     }
     reader.readAsDataURL(file)
@@ -126,7 +127,7 @@ export function AvatarPreference() {
               type="button"
               className="remove-avatar-btn"
               onClick={() => {
-                sessionStorage.removeItem('shield-avatar')
+                removeSession('shield-avatar')
                 setAvatar('')
               }}
             >
@@ -193,7 +194,7 @@ export function SettingsView({ connection, logout, data = {} }) {
   const [copiedKey, setCopiedKey] = useState(null)
 
   // Security Posture Settings
-  const [savedPosture, setSavedPosture] = useState(() => { try { return JSON.parse(sessionStorage.getItem('shield-posture') || '{}') } catch { return {} } })
+  const [savedPosture, setSavedPosture] = useState(() => { try { return JSON.parse(readSession('shield-posture', '{}')) } catch { return {} } })
   const [containmentMode, setContainmentMode] = useState(() => savedPosture.containmentMode || 'autonomous')
   const [governanceTier, setGovernanceTier] = useState(() => savedPosture.governanceTier || 'tier1')
   const [ringBufferInterval, setRingBufferInterval] = useState(() => savedPosture.ringBufferInterval || '50')
@@ -216,7 +217,7 @@ export function SettingsView({ connection, logout, data = {} }) {
   const [notifyContain, setNotifyContain] = useState(true)
   const [notifyDeny, setNotifyDeny] = useState(true)
   const [notifySensorDrop, setNotifySensorDrop] = useState(true)
-  const [realOnly, setRealOnly] = useState(() => sessionStorage.getItem('shield-real-only') !== 'false')
+  const [realOnly, setRealOnly] = useState(() => readSession('shield-real-only') !== 'false')
   const [smtpHost, setSmtpHost] = useState('smtp.corp.internal')
   const [smtpPort, setSmtpPort] = useState('587')
   const [smtpRecipient, setSmtpRecipient] = useState('secops-alerts@corp.internal')
@@ -282,9 +283,9 @@ export function SettingsView({ connection, logout, data = {} }) {
         const request = await api.createSettingsChangeRequest('containment', { ...saved, containmentMode })
         feedback = `Operational settings saved. Containment change queued for approval (${request.request_id}).`
       }
-      sessionStorage.setItem('shield-posture', JSON.stringify(saved))
+      writeSession('shield-posture', JSON.stringify(saved))
       setSavedPosture(saved)
-      sessionStorage.setItem('shield-real-only', String(realOnly))
+      writeSession('shield-real-only', String(realOnly))
       window.dispatchEvent(new CustomEvent('shield-telemetry-mode', { detail: realOnly }))
       setPostureSaved(feedback)
       setTimeout(() => setPostureSaved(''), 5000)

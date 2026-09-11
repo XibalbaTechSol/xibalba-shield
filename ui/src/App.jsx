@@ -4,22 +4,23 @@ import { Landing } from './components/Landing'
 import { SignIn } from './components/SignIn'
 import { Dashboard } from './components/Dashboard'
 import './App.css'
+import { readSession, writeSession, removeSession } from './storage'
 
 export default function App() {
   const [view, setView] = useState(() =>
-    sessionStorage.getItem('shield-session')
+    readSession('shield-session')
       ? 'dashboard'
       : 'landing'
   )
 
   const [connection, setConnection] = useState(() =>
-    JSON.parse(sessionStorage.getItem('shield-connection') || '{}')
+    JSON.parse(readSession('shield-connection', '{}'))
   )
 
   const connect = (conn) => {
     setConnection(conn)
-    sessionStorage.setItem('shield-connection', JSON.stringify(conn))
-    sessionStorage.setItem('shield-session', '1')
+    writeSession('shield-connection', JSON.stringify(conn))
+    writeSession('shield-session', '1')
     setView('dashboard')
   }
 
@@ -36,12 +37,12 @@ export default function App() {
     }
     const textNotice = typeof notice === 'string' ? notice : ''
     if (textNotice) {
-      sessionStorage.setItem('shield-auth-notice', textNotice)
+      writeSession('shield-auth-notice', textNotice)
     } else {
-      sessionStorage.removeItem('shield-auth-notice')
+      removeSession('shield-auth-notice')
     }
-    sessionStorage.removeItem('shield-session')
-    sessionStorage.removeItem('shield-connection')
+    removeSession('shield-session')
+    removeSession('shield-connection')
     setView(textNotice ? 'signin' : 'landing')
   }
 

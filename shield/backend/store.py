@@ -191,6 +191,22 @@ class ShieldStore:
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS device_agent_bindings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                registration_status TEXT NOT NULL,
+                bound_at TEXT NOT NULL,
+                unbound_at TEXT,
+                binding_proof TEXT,
+                FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_device_agent_bindings_active
+                ON device_agent_bindings(tenant_id, device_id, unbound_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_device_agent_bindings_active_pair
+                ON device_agent_bindings(tenant_id, device_id, agent_id) WHERE unbound_at IS NULL;
+
             CREATE TABLE IF NOT EXISTS policies (
                 tenant_id TEXT NOT NULL,
                 device_id TEXT NOT NULL,
@@ -211,6 +227,14 @@ class ShieldStore:
                 policy_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS policy_push_replays (
+                jti TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                consumed_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS decisions (
@@ -386,6 +410,11 @@ class ShieldStore:
             self._conn.execute("ALTER TABLE devices ADD COLUMN registration_status TEXT NOT NULL DEFAULT 'unregistered'")
         if "memory_scope" not in device_columns:
             self._conn.execute("ALTER TABLE devices ADD COLUMN memory_scope TEXT NOT NULL DEFAULT 'device'")
+        binding_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(device_agent_bindings)")}
+        if "binding_proof" not in binding_columns:
+            self._conn.execute("ALTER TABLE device_agent_bindings ADD COLUMN binding_proof TEXT")
+        self._conn.execute("DROP INDEX IF EXISTS idx_device_agent_bindings_one_active")
+        self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_device_agent_bindings_active_pair ON device_agent_bindings(tenant_id, device_id, agent_id) WHERE unbound_at IS NULL")
         if "role" not in account_columns:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'tenant_admin'")
         if "failed_attempts" not in account_columns:
@@ -684,6 +713,17 @@ class ShieldStore:
             )
         return bundle
 
+    def consume_policy_push_jti(self, *, jti: str, tenant_id: str, device_id: str, expires_at: str) -> bool:
+        """Atomically consume a signed policy-push ID; expired/replayed IDs are rejected."""
+        if not jti or not expires_at:
+            return False
+        with self._conn:
+            cur = self._conn.execute(
+                "INSERT OR IGNORE INTO policy_push_replays(jti,tenant_id,device_id,expires_at,consumed_at) VALUES(?,?,?,?,?)",
+                (jti, tenant_id, device_id, expires_at, _now()),
+            )
+        return cur.rowcount == 1
+
     def list_policy_history(self, *, tenant_id: str, device_id: str) -> list[dict[str, Any]]:
         rows = self._conn.execute("SELECT id,device_id,policy_version,policy_hash,created_at FROM policy_history WHERE tenant_id=? AND device_id=? ORDER BY id DESC", (tenant_id, device_id)).fetchall()
         return [dict(row) for row in rows]
@@ -712,7 +752,10 @@ class ShieldStore:
             """
             SELECT d.tenant_id, d.device_id, d.device_role, d.agent_label, d.integrity_agent_id,
                    d.registration_status, d.memory_scope, d.last_seen_at, d.synthetic,
-                   p.policy_version, p.policy_hash
+                   p.policy_version, p.policy_hash,
+                   (SELECT b.binding_proof FROM device_agent_bindings b
+                    WHERE b.tenant_id=d.tenant_id AND b.device_id=d.device_id AND b.unbound_at IS NULL
+                    ORDER BY b.id DESC LIMIT 1) AS binding_proof
             FROM devices d
             LEFT JOIN policies p ON p.tenant_id=d.tenant_id AND p.device_id IN (d.device_id, '*')
             WHERE d.tenant_id=?
@@ -727,20 +770,61 @@ class ShieldStore:
         rows = [row for row in self.list_devices(tenant_id=tenant_id) if row["device_id"] == device_id]
         return rows[0] if rows else None
 
-    def bind_integrity_agent(self, *, tenant_id: str, device_id: str, agent_id: str, registration_status: str) -> dict[str, Any]:
+    def bind_integrity_agent(self, *, tenant_id: str, device_id: str, agent_id: str, registration_status: str, expected_agent_id: str | None = None, binding_proof: str | None = None) -> dict[str, Any]:
         self._validate_id("tenant_id", tenant_id)
         self._validate_id("device_id", device_id)
         agent_id = str(agent_id).strip()
         if not agent_id:
             raise ValueError("agent_id is required")
         with self._conn:
-            updated = self._conn.execute(
-                "UPDATE devices SET integrity_agent_id=?, registration_status=? WHERE tenant_id=? AND device_id=?",
-                (agent_id, registration_status, tenant_id, device_id),
-            ).rowcount
-        if not updated:
-            raise KeyError(device_id)
+            current = self._conn.execute(
+                "SELECT integrity_agent_id FROM devices WHERE tenant_id=? AND device_id=?",
+                (tenant_id, device_id),
+            ).fetchone()
+            if current is None:
+                raise KeyError(device_id)
+            previous_agent_id = current["integrity_agent_id"]
+            if expected_agent_id is not None and previous_agent_id != expected_agent_id and not self._conn.execute("SELECT 1 FROM device_agent_bindings WHERE tenant_id=? AND device_id=? AND agent_id=? AND unbound_at IS NULL", (tenant_id, device_id, expected_agent_id)).fetchone():
+                raise ValueError("device-agent binding changed concurrently; refresh and retry")
+            now = _now()
+            active = self._conn.execute(
+                "SELECT id FROM device_agent_bindings WHERE tenant_id=? AND device_id=? AND agent_id=? AND unbound_at IS NULL ORDER BY id DESC LIMIT 1",
+                (tenant_id, device_id, agent_id),
+            ).fetchone()
+            if active is None:
+                self._conn.execute(
+                    "INSERT INTO device_agent_bindings(tenant_id,device_id,agent_id,registration_status,bound_at,binding_proof) VALUES(?,?,?,?,?,?)",
+                    (tenant_id, device_id, agent_id, registration_status, now, binding_proof),
+                )
+            else:
+                self._conn.execute("UPDATE device_agent_bindings SET registration_status=?, binding_proof=COALESCE(?, binding_proof) WHERE id=?", (registration_status, binding_proof, active["id"]))
+            self._conn.execute(
+                "UPDATE devices SET integrity_agent_id=?, registration_status=? WHERE tenant_id=? AND device_id=? AND (? IS NULL OR integrity_agent_id=?)",
+                (agent_id, registration_status, tenant_id, device_id, expected_agent_id, expected_agent_id),
+            )
+            if self._conn.execute("SELECT changes()").fetchone()[0] != 1:
+                raise ValueError("device-agent binding changed concurrently; refresh and retry")
         return self.get_device(tenant_id=tenant_id, device_id=device_id) or {}
+
+    def list_device_agent_bindings(self, *, tenant_id: str, device_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT id,tenant_id,device_id,agent_id,registration_status,bound_at,unbound_at,binding_proof FROM device_agent_bindings WHERE tenant_id=? AND device_id=? ORDER BY id DESC",
+            (tenant_id, device_id),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_device_agent_binding_status(self, *, tenant_id: str, device_id: str, agent_id: str, status: str) -> dict[str, Any]:
+        if status not in {"detached", "revoked"}:
+            raise ValueError("status must be detached or revoked")
+        now = _now()
+        with self._conn:
+            updated = self._conn.execute(
+                "UPDATE device_agent_bindings SET unbound_at=?, registration_status=? WHERE tenant_id=? AND device_id=? AND agent_id=? AND unbound_at IS NULL",
+                (now, status, tenant_id, device_id, agent_id),
+            ).rowcount
+            if not updated:
+                raise KeyError("active device-agent pair not found")
+        return next(row for row in self.list_device_agent_bindings(tenant_id=tenant_id, device_id=device_id) if row["agent_id"] == agent_id and row["unbound_at"] == now)
 
     def discover_agent_ids(self, *, tenant_id: str, device_id: str) -> list[dict[str, Any]]:
         """Discover agent identities observed by this real device; never creates a fixture."""

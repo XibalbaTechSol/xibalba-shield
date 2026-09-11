@@ -10,6 +10,8 @@ function devAdminToken() {
   try { return readFileSync(process.env.SHIELD_DEV_ADMIN_TOKEN_FILE || resolve(homedir(), `.xibalba-shield/${tenant}-admin-token`), 'utf8').trim() } catch { return '' }
 }
 
+const devAuthDisabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.SHIELD_DEV_DISABLE_AUTH || '').trim().toLowerCase())
+
 function shieldLocalSession() {
   return {
     name: 'shield-local-session',
@@ -19,8 +21,8 @@ function shieldLocalSession() {
         const token = devAdminToken()
         response.setHeader('Content-Type', 'application/json')
         response.setHeader('Cache-Control', 'no-store')
-        if (!token) { response.statusCode = 503; return response.end(JSON.stringify({ error: 'Local admin token is not available. Start the backend once to create it.' })) }
-        response.end(JSON.stringify({ tenant_id: process.env.SHIELD_DEV_TENANT || 'tenant-a', dev_proxy: true }))
+        if (!token && !devAuthDisabled) { response.statusCode = 503; return response.end(JSON.stringify({ error: 'Local admin token is not available. Start the backend once to create it, or explicitly set SHIELD_DEV_DISABLE_AUTH=true for loopback development.' })) }
+        response.end(JSON.stringify({ tenant_id: process.env.SHIELD_DEV_TENANT || 'tenant-a', dev_proxy: true, auth_disabled: devAuthDisabled }))
       })
     },
   }

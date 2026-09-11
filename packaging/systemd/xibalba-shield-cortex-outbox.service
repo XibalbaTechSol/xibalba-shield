@@ -1,0 +1,21 @@
+[Unit]
+Description=Xibalba Shield durable Cortex outbox worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xibalba-shield
+Group=xibalba-shield
+EnvironmentFile=-/etc/xibalba-shield/shield.env
+ExecStart=/usr/local/bin/shield-cortex-outbox --device-id ${SHIELD_DEVICE_ID} --batch-size 100 --interval 1
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/xibalba-shield/cortex
+
+[Install]
+WantedBy=multi-user.target

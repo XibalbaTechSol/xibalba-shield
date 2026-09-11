@@ -29,7 +29,11 @@ export class ShieldApi {
   dashboard() { return this.request('/api/shield/dashboard-summary') }
   devices() { return this.request('/api/shield/devices') }
   agents() { return this.request('/api/shield/agents') }
+  agentBindings(deviceId) { return this.request(`/api/shield/devices/${encodeURIComponent(deviceId)}/agent-bindings`) }
+  cortexOutbox() { return this.request('/api/shield/cortex-outbox') }
+  cortexMemories(deviceId, agentId, limit = 20) { return this.request(`/api/shield/cortex-memories?device_id=${encodeURIComponent(deviceId)}&agent_id=${encodeURIComponent(agentId)}&limit=${limit}`) }
   registerAgent(deviceId, agentId, oracleUrl = '') { return this.request('/api/shield/agents/register', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, agent_id: agentId, oracle_url: oracleUrl }, tenant: false }) }
+  agentBindingAction(deviceId, agentId, action) { return this.request(`/api/shield/devices/${encodeURIComponent(deviceId)}/agent-bindings/${encodeURIComponent(agentId)}/${action}`, { method: 'POST', body: { tenant_id: this.tenantId }, tenant: false }) }
   device(id) { return this.request(`/api/shield/devices/${encodeURIComponent(id)}`) }
   exporterStatus() { return this.request('/api/shield/exporter-status') }
   exporterRemediation(deviceId, action = 'retry', reason = '') { return this.request('/api/shield/exporter-remediation', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, action, reason }, tenant: false }) }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import secrets
@@ -13,15 +14,22 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 import urllib.error
 import urllib.request
 
 import hashlib
+import hmac
+import base64
 import platform
 import socket
 import uuid
-import ipaddress
+import sqlite3
+
+try:
+    import jwt
+except ImportError:  # pragma: no cover - production dependency is installed with Shield
+    jwt = None  # type: ignore[assignment]
 
 from ..config import ConfigError
 from .store import ShieldStore
@@ -29,7 +37,65 @@ from . import remediation
 from ..transaction_gateway import TransactionIntent, TransactionPolicy, evaluate_transaction_intent
 from ..transaction_simulator import SimulationError, simulate_transaction_intent
 
+try:
+    from integrity_sdk.did import fingerprint_for_pubkey, verify_signature
+except ImportError:  # pragma: no cover - the production wheel supplies the SDK
+    fingerprint_for_pubkey = None  # type: ignore[assignment]
+    verify_signature = None  # type: ignore[assignment]
+
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
+
+
+def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
+    return json.dumps(
+        {"schema": "xibalba.shield.device-agent-binding.v1", "tenant_id": tenant_id, "device_id": device_id, "agent_id": agent_id},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def _read_cortex_outbox_status(path: str | Path) -> dict[str, int]:
+    db_path = Path(path)
+    if not db_path.exists():
+        return {"pending": 0, "sent": 0, "dead_letter": 0, "delivered_total": 0, "dead_letter_total": 0}
+    try:
+        with sqlite3.connect(db_path) as conn:
+            counts = {row[0]: int(row[1]) for row in conn.execute("SELECT status, COUNT(*) FROM cortex_outbox GROUP BY status")}
+            metrics = {row[0]: int(row[1]) for row in conn.execute("SELECT name, value FROM cortex_outbox_metrics")}
+        return {"pending": counts.get("pending", 0), "sent": counts.get("sent", 0), "dead_letter": counts.get("dead_letter", 0), **metrics}
+    except sqlite3.Error:
+        return {"pending": 0, "sent": 0, "dead_letter": 0, "outbox_unreadable": 1}
+
+
+def _read_cortex_agent_memories(*, agent_id: str, device_id: str | None = None, limit: int = 50) -> dict[str, Any]:
+    """Read the authenticated Cortex partition for one validated Shield agent.
+
+    The Shield control plane never accepts an arbitrary Cortex namespace from the browser:
+    the caller must first prove the device/agent pair locally, then this helper uses the
+    operator-configured Cortex credential to fetch the corresponding agent partition.
+    """
+    endpoint = str(os.environ.get("XIBALBA_CORTEX_URL", "")).strip().rstrip("/")
+    if not endpoint:
+        raise RuntimeError("Cortex memory endpoint is not configured")
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("Cortex memory endpoint must be an HTTP(S) URL")
+    query = urlencode({"limit": max(1, min(int(limit), 200)), **({"device_id": device_id} if device_id else {})})
+    url = f"{endpoint}/api/agent/{quote(agent_id, safe='')}/memories?{query}"
+    headers = {"Accept": "application/json", "User-Agent": "xibalba-shield-control-plane/1"}
+    token = str(os.environ.get("XIBALBA_CORTEX_TOKEN", "")).strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise RuntimeError("Cortex returned a non-object response")
+            return payload
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Cortex memory request failed ({exc.code})") from exc
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        raise RuntimeError(f"Cortex memory request failed: {exc}") from exc
 
 
 def load_or_create_admin_token(path: Path) -> tuple[str, bool]:
@@ -121,10 +187,56 @@ def _enrich_device(device: dict[str, Any]) -> dict[str, Any]:
     enriched["ip_address"] = net_addr
     enriched["did"] = did
     enriched["agent_id"] = device.get("integrity_agent_id") or did
+    canonical_agent_id = enriched["agent_id"]
+    pair_id = hashlib.sha256(f"{enriched.get('tenant_id', '')}:{enriched.get('device_id', '')}:{canonical_agent_id}".encode("utf-8")).hexdigest()[:24]
+    hermes_agent_id = str(os.environ.get("XIBALBA_SHIELD_HERMES_AGENT_ID") or "").strip() or None
     enriched["integrity_registration"] = {
-        "agent_id": device.get("integrity_agent_id") or did,
+        "agent_id": canonical_agent_id,
         "status": device.get("registration_status") or "unregistered",
         "memory_scope": device.get("memory_scope") or "device",
+    }
+    enriched["device_agent_pair"] = {
+        "pair_id": pair_id,
+        "device_id": enriched.get("device_id"),
+        "shield_agent_id": canonical_agent_id,
+        "memory_namespace": f"shield:{canonical_agent_id}",
+        "binding": "unique_active_binding",
+    }
+    raw_proof = device.get("binding_proof")
+    try:
+        proof = json.loads(raw_proof) if isinstance(raw_proof, str) else {}
+    except json.JSONDecodeError:
+        proof = {}
+    agent_attested = False
+    if proof.get("agent_signature") and proof.get("agent_public_key") and verify_signature is not None:
+        try:
+            public_key = base64.b64decode(proof["agent_public_key"], validate=True)
+            signature = base64.b64decode(proof["agent_signature"], validate=True)
+            agent_attested = bool(
+                verify_signature(public_key, _binding_bytes(tenant_id=tenant_id, device_id=str(device.get("device_id")), agent_id=canonical_agent_id), signature)
+                and fingerprint_for_pubkey is not None
+                and f"did:integrity:{fingerprint_for_pubkey(public_key)}" == canonical_agent_id
+            )
+        except (ValueError, TypeError):
+            agent_attested = False
+    enriched["device_agent_binding"] = {
+        "status": "cryptographically_attested" if proof.get("device_hmac") and agent_attested else ("agent_attested_only" if agent_attested else ("legacy_digest" if raw_proof else "unattested")),
+        "proof_version": proof.get("version") or ("legacy-sha256" if raw_proof else None),
+        "payload_sha256": proof.get("payload_sha256"),
+        "device_attested": bool(proof.get("device_hmac")),
+        "agent_attested": agent_attested,
+    }
+    enriched["hybrid_architecture"] = {
+        "mode": "hybrid",
+        "local_enforcement": {"component": "Shield", "authority": "device", "status": "active"},
+        "cloud_reasoning": {
+            "component": "Hermes",
+            "status": "configured" if hermes_agent_id else "not_configured",
+            "agent_id": hermes_agent_id,
+            "subject_agent_id": canonical_agent_id,
+            "memory_provider": "Cortex",
+            "memory_namespace": f"shield:{canonical_agent_id}",
+        },
     }
     enriched["machine_id"] = machine_id
     enriched["hardware_uuid"] = machine_id
@@ -146,7 +258,7 @@ if os.environ.get("OIDC_DISCOVERY_URL") and os.environ.get("OIDC_CLIENT_ID"):
         redirect_uri=os.environ.get("OIDC_REDIRECT_URI", "")
     )
 
-def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*"):
+def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", dev_disable_admin_auth: bool = False):
     auth_attempts: dict[str, list[float]] = {}
 
     def auth_allowed(identity: str) -> bool:
@@ -191,6 +303,40 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
 
             if parsed.path == "/api/shield/health":
                 self._send_json({"ok": True, "service": "xibalba-shield-backend"})
+                return
+            if parsed.path == "/api/shield/cortex-outbox":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"outbox": _read_cortex_outbox_status(os.environ.get("XIBALBA_CORTEX_OUTBOX", "/var/lib/xibalba-shield/cortex/outbox.sqlite3"))})
+                return
+            if parsed.path == "/api/shield/cortex-memories":
+                tenant_id = self._tenant_from_query_or_error(query)
+                device_id = str(query.get("device_id", [""])[0] or "").strip()
+                agent_id = str(query.get("agent_id", [""])[0] or "").strip()
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                if not device_id or not agent_id:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "device_id and agent_id are required")
+                    return
+                device = store.get_device(tenant_id=tenant_id, device_id=device_id)
+                bound_agent = str((device or {}).get("integrity_agent_id") or (device or {}).get("agent_id") or (device or {}).get("did") or "").strip()
+                if device is None:
+                    self._send_error(HTTPStatus.NOT_FOUND, "device not found")
+                    return
+                if bound_agent != agent_id:
+                    self._send_error(HTTPStatus.CONFLICT, "device is not bound to the requested agent")
+                    return
+                try:
+                    memories = _read_cortex_agent_memories(
+                        agent_id=agent_id,
+                        device_id=device_id,
+                        limit=int(query.get("limit", [50])[0]),
+                    )
+                except RuntimeError as exc:
+                    self._send_error(HTTPStatus.BAD_GATEWAY, str(exc))
+                    return
+                self._send_json({"device_id": device_id, "agent_id": agent_id, "memory_namespace": f"shield:{agent_id}", "memories": memories.get("memories", []), "cortex": memories})
                 return
             if parsed.path == "/api/shield/auth/me":
                 if not self._require_admin():
@@ -361,6 +507,16 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 device_id = query.get("device_id", [None])[0]
                 self._send_json({"enforcement_outcomes": store.list_enforcement_outcomes(tenant_id=tenant_id, device_id=device_id)})
                 return
+            if parsed.path.startswith("/api/shield/devices/") and parsed.path.endswith("/agent-bindings"):
+                device_id = parsed.path[len("/api/shield/devices/"):-len("/agent-bindings")].strip("/")
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                if not device_id:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "device_id is required")
+                    return
+                self._send_json({"device_id": device_id, "bindings": store.list_device_agent_bindings(tenant_id=tenant_id, device_id=device_id)})
+                return
             if parsed.path == "/api/shield/agents":
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
@@ -385,6 +541,56 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 body = self._read_json()
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+
+            if parsed.path == "/api/v1/policy/push":
+                if jwt is None:
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "JWT verification is unavailable")
+                    return
+                token = str(body.get("token") or "").strip()
+                key_source = str(os.environ.get("XIBALBA_ORACLE_POLICY_PUBLIC_KEY") or "").strip()
+                if key_source.startswith("file:"):
+                    try:
+                        key_source = Path(key_source[5:]).read_text(encoding="utf-8")
+                    except OSError:
+                        key_source = ""
+                if not token or not key_source:
+                    self._send_error(HTTPStatus.UNAUTHORIZED, "signed policy token is not configured")
+                    return
+                try:
+                    claims = jwt.decode(token, key_source, algorithms=["EdDSA"], audience="shield", options={"require": ["exp", "iat", "jti", "aud", "sub"]})
+                except Exception:
+                    self._send_error(HTTPStatus.UNAUTHORIZED, "invalid or expired policy token")
+                    return
+                tenant_id = str(claims.get("tenant_id") or "").strip()
+                device_id = str(claims.get("device_id") or "").strip()
+                agent_id = str(claims.get("sub") or "").strip()
+                policy_doc = claims.get("policy")
+                if not tenant_id or not device_id or not agent_id or not isinstance(policy_doc, dict):
+                    self._send_error(HTTPStatus.UNPROCESSABLE_ENTITY, "policy token is missing binding scope or policy")
+                    return
+                expected_hash = "sha256:" + hashlib.sha256(json.dumps(policy_doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+                if str(claims.get("policy_hash") or "") != expected_hash:
+                    self._send_error(HTTPStatus.UNPROCESSABLE_ENTITY, "policy hash does not match signed policy")
+                    return
+                claim_version = str(claims.get("policy_version") or "").strip()
+                if claim_version:
+                    policy_doc = dict(policy_doc)
+                    policy_doc.setdefault("policy_version", claim_version)
+                device = store.get_device(tenant_id=tenant_id, device_id=device_id)
+                bound_agent = str((device or {}).get("integrity_agent_id") or "").strip()
+                if device is None or bound_agent != agent_id:
+                    self._send_error(HTTPStatus.FORBIDDEN, "policy token does not match an active device-agent binding")
+                    return
+                if not store.consume_policy_push_jti(jti=str(claims["jti"]), tenant_id=tenant_id, device_id=device_id, expires_at=str(claims["exp"])):
+                    self._send_error(HTTPStatus.CONFLICT, "policy token replayed")
+                    return
+                try:
+                    bundle = store.put_policy(tenant_id=tenant_id, device_id=device_id, policy_doc=policy_doc)
+                except ConfigError as exc:
+                    self._send_error(HTTPStatus.UNPROCESSABLE_ENTITY, str(exc))
+                    return
+                self._send_json({"ok": True, "device_id": device_id, "agent_id": agent_id, "policy_version": bundle.version, "policy_hash": bundle.hash, "jti": claims["jti"]})
                 return
 
             if parsed.path == "/api/shield/auth/logout":
@@ -548,6 +754,8 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 device_id = str(body.get("device_id") or "")
                 agent_id = str(body.get("agent_id") or "").strip()
+                expected_agent_id = body.get("expected_agent_id")
+                expected_agent_id = str(expected_agent_id).strip() if expected_agent_id is not None else None
                 if not device_id or not agent_id:
                     self._send_error(HTTPStatus.BAD_REQUEST, "device_id and agent_id are required")
                     return
@@ -561,12 +769,59 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                         registration_status = "registered"
                 except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
                     payload = {"oracle_registered": None}
+                binding_payload = _binding_bytes(tenant_id=tenant_id, device_id=device_id, agent_id=agent_id)
+                proof_fields: dict[str, Any] = {
+                    "version": "xibalba.shield.device-agent-binding.v1",
+                    "payload_sha256": hashlib.sha256(binding_payload).hexdigest(),
+                }
+                device_token = str(body.get("device_token") or "")
+                if device_token:
+                    if not store.authenticate_device(tenant_id=tenant_id, device_id=device_id, token=device_token):
+                        self._send_error(HTTPStatus.FORBIDDEN, "device attestation token is invalid")
+                        return
+                    proof_fields["device_hmac"] = hmac.new(device_token.encode("utf-8"), binding_payload, hashlib.sha256).hexdigest()
+                supplied_signature = str(body.get("agent_signature") or "")
+                supplied_public_key = str(body.get("agent_public_key") or "")
+                if supplied_signature and supplied_public_key and verify_signature is not None and fingerprint_for_pubkey is not None:
+                    try:
+                        public_key = base64.b64decode(supplied_public_key, validate=True)
+                        signature = base64.b64decode(supplied_signature, validate=True)
+                        if f"did:integrity:{fingerprint_for_pubkey(public_key)}" != agent_id:
+                            raise ValueError("agent public key does not identify the requested agent")
+                        if not verify_signature(public_key, binding_payload, signature):
+                            raise ValueError("agent signature does not verify")
+                        proof_fields["agent_signature"] = supplied_signature
+                        proof_fields["agent_public_key"] = supplied_public_key
+                    except (ValueError, TypeError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                if not proof_fields.get("device_hmac") and not proof_fields.get("agent_signature"):
+                    # Keep old operator flows readable, but label them explicitly as a digest;
+                    # only the two-attestation form is cryptographic binding evidence.
+                    proof_fields = {"version": "legacy-sha256", "payload_sha256": hashlib.sha256(binding_payload).hexdigest()}
+                binding_proof = json.dumps(proof_fields, sort_keys=True, separators=(",", ":"))
                 try:
-                    device = store.bind_integrity_agent(tenant_id=tenant_id, device_id=device_id, agent_id=agent_id, registration_status=registration_status)
+                    device = store.bind_integrity_agent(tenant_id=tenant_id, device_id=device_id, agent_id=agent_id, registration_status=registration_status, expected_agent_id=expected_agent_id, binding_proof=binding_proof)
                 except (KeyError, ValueError) as exc:
-                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    self._send_error(HTTPStatus.CONFLICT if "concurrently" in str(exc) else HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json({"agent": _enrich_device(device), "registration": {"status": registration_status, "oracle": payload, "requires_signature": registration_status != "registered"}}, status=HTTPStatus.OK)
+                return
+
+            if parsed.path.startswith("/api/shield/devices/") and "/agent-bindings/" in parsed.path:
+                prefix, suffix = parsed.path.split("/agent-bindings/", 1)
+                device_id = prefix[len("/api/shield/devices/"):].strip("/")
+                agent_id, action = suffix.strip("/").rsplit("/", 1)
+                tenant_id = str(body.get("tenant_id") or "")
+                if action not in {"detach", "revoke"} or not device_id or not agent_id or not self._require_admin(tenant_id=tenant_id):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "tenant_id, device_id, agent_id, and a valid action are required")
+                    return
+                try:
+                    pair = store.set_device_agent_binding_status(tenant_id=tenant_id, device_id=device_id, agent_id=agent_id, status="detached" if action == "detach" else "revoked")
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                self._send_json({"binding": pair})
                 return
 
             if parsed.path == "/api/shield/admin-tokens":
@@ -967,6 +1222,24 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     if parsed.path == "/api/shield/decisions":
                         decision = body.get("decision", body)
                         row_id = store.record_decision(tenant_id=tenant_id, device_id=device_id, decision=decision)
+                        # Mirror authenticated, non-synthetic decisions into the durable
+                        # Cortex outbox.  Local persistence remains authoritative; a
+                        # publication failure is retried by the independent worker.
+                        if not bool(decision.get("synthetic")):
+                            try:
+                                from ..agent_core.cortex_memory import CortexMemoryProvider
+                                provider = CortexMemoryProvider.from_environment(device_id=device_id)
+                                if provider is not None:
+                                    event_ref = decision.get("event_ref") if isinstance(decision.get("event_ref"), dict) else {}
+                                    event_id = str(event_ref.get("event_id") or f"shield-decision-{row_id}")
+                                    provider._enqueue({
+                                        "content": json.dumps({"event": decision, "decision": decision}, sort_keys=True, separators=(",", ":")),
+                                        "source": {"kind": "shield_event", "agent_id": provider.agent_id, "device_id": device_id, "event_id": event_id},
+                                        "status": "candidate",
+                                        "evidence_class": "observed_event",
+                                    }, event_id)
+                            except Exception:
+                                pass
                         self._send_json({"ok": True, "id": row_id}, status=HTTPStatus.CREATED)
                     elif parsed.path == "/api/shield/metrics":
                         metrics = body.get("metrics", body)
@@ -1015,6 +1288,21 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             single tenant_id it was issued for). A tenant-scoped token can never read or write a
             different tenant's data.
             """
+            if dev_disable_admin_auth:
+                try:
+                    client_is_loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+                    origin = self.headers.get("Origin", "").strip()
+                    origin_host = urlparse(origin).hostname if origin else None
+                    origin_is_loopback = not origin or origin_host == "localhost" or (
+                        origin_host is not None and ipaddress.ip_address(origin_host).is_loopback
+                    )
+                    if client_is_loopback and origin_is_loopback:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+                self._send_error(HTTPStatus.FORBIDDEN, "development auth bypass is restricted to loopback clients and origins")
+                return False
+
             auth = self.headers.get("Authorization", "")
             prefix = "Bearer "
             token = auth[len(prefix):] if auth.startswith(prefix) else ""
@@ -1367,13 +1655,20 @@ def _configure_tls(server: ThreadingHTTPServer, *, tls_cert: Path, tls_key: Path
     server.mtls_enabled = bool(tls_client_ca)  # type: ignore[attr-defined]
 
 
-def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", tls_cert: Path | None = None, tls_key: Path | None = None, tls_client_ca: Path | None = None, tls_port: int | None = None) -> ThreadingHTTPServer:
+def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", tls_cert: Path | None = None, tls_key: Path | None = None, tls_client_ca: Path | None = None, tls_port: int | None = None, dev_disable_admin_auth: bool = False) -> ThreadingHTTPServer:
     if bool(tls_cert) != bool(tls_key):
         raise ValueError("TLS requires both --tls-cert and --tls-key")
     if tls_client_ca and not tls_cert:
         raise ValueError("TLS client CA requires server TLS certificate and key")
+    if dev_disable_admin_auth:
+        try:
+            loopback_host = host == "localhost" or ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            loopback_host = False
+        if not loopback_host:
+            raise ValueError("development auth bypass requires a loopback host")
     store = ShieldStore(db_path)
-    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin)
+    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin, dev_disable_admin_auth=dev_disable_admin_auth)
     server = ThreadingHTTPServer((host, port), handler)
     if tls_port is not None:
         if not tls_cert or not tls_key:
@@ -1401,6 +1696,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", ""))
     parser.add_argument("--admin-token-file", type=Path, default=Path(os.getenv("SHIELD_BACKEND_TOKEN_FILE", str(Path.home() / ".xibalba-shield" / "backend-admin.token"))))
+    parser.add_argument("--dev-disable-auth", action="store_true", default=os.getenv("SHIELD_DEV_DISABLE_AUTH", "").strip().lower() in {"1", "true", "yes", "on"}, help="disable admin bearer auth for loopback-only development")
     parser.add_argument("--public-base-url", default=os.getenv("SHIELD_PUBLIC_BASE_URL", ""))
     parser.add_argument("--allowed-origin", default=os.getenv("SHIELD_BACKEND_ALLOWED_ORIGIN", "*"), help="CORS origin for browser callers (e.g. the dashboard)")
     parser.add_argument("--tls-cert", type=Path, default=os.getenv("SHIELD_BACKEND_TLS_CERT") or None, help="PEM server certificate; must be paired with --tls-key")
@@ -1409,7 +1705,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tls-port", type=int, default=int(os.getenv("SHIELD_BACKEND_TLS_PORT", "0")) or None, help="Dedicated HTTPS/mTLS listener port; leaves the primary HTTP listener unchanged")
     args = parser.parse_args(argv)
 
-    if not args.admin_token:
+    if not args.admin_token and not args.dev_disable_auth:
         try:
             args.admin_token, created = load_or_create_admin_token(args.admin_token_file)
         except (OSError, ValueError) as exc:
@@ -1428,10 +1724,13 @@ def main(argv: list[str] | None = None) -> int:
         tls_key=args.tls_key,
         tls_client_ca=args.tls_client_ca,
         tls_port=args.tls_port,
+        dev_disable_admin_auth=args.dev_disable_auth,
     )
     scheme = "https" if getattr(server, "tls_enabled", False) else "http"
     mode = " with mTLS" if getattr(server, "mtls_enabled", False) else ""
     print(f"shield-backend listening on {scheme}://{args.host}:{server.server_port}{mode}")
+    if args.dev_disable_auth:
+        print("shield-backend: WARNING admin authentication is disabled for loopback development", file=sys.stderr)
     tls_server = getattr(server, "tls_server", None)
     tls_thread = None
     if tls_server is not None:

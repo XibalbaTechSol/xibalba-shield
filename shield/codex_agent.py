@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -34,6 +35,17 @@ _SENSITIVE_KEYS = {
     "token", "device_token", "authorization", "password", "secret", "private_key",
     "mnemonic", "seed", "raw_transaction", "calldata", "cmdline", "path", "file",
 }
+_TEXT_SECRET_PATTERNS = (
+    (re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer <redacted>"),
+    (re.compile(r"\b(?:sk|pk|ghp|xoxb|xapp)-[A-Za-z0-9_-]{12,}\b"), "<redacted-token>"),
+    (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "<redacted-email>"),
+)
+
+
+def _redact_text(value: str) -> str:
+    for pattern, replacement in _TEXT_SECRET_PATTERNS:
+        value = pattern.sub(replacement, value)
+    return value[:1_000]
 
 
 def redact_event(event: Mapping[str, Any], *, max_bytes: int = 12_000) -> dict[str, Any]:
@@ -47,7 +59,7 @@ def redact_event(event: Mapping[str, Any], *, max_bytes: int = 12_000) -> dict[s
         if isinstance(value, list):
             return [clean(item, key) for item in value[:50]]
         if isinstance(value, str):
-            return value[:1_000]
+            return _redact_text(value)
         return value
 
     candidate = clean(event)
