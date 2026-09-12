@@ -3,8 +3,11 @@
 }
 
 :8444 {
-    # Production TLS
-    # tls internal
+    # Caddy's internal CA issues and renews this certificate automatically. TLS is required,
+    # not optional: the operator session cookie is set `Secure`, so a browser on a plain-HTTP
+    # origin will silently refuse to store it and sign-in will appear to succeed and then fail.
+    # Replace with a real domain (Caddy auto-provisions Let's Encrypt) for a public deployment.
+    tls internal
 
     root * /srv/shield/ui/dist
     file_server

@@ -5,6 +5,10 @@ import base64
 import threading
 import urllib.error
 import urllib.request
+from http import HTTPStatus
+from http.cookies import SimpleCookie
+
+from shield.backend.api import SESSION_COOKIE_NAME
 import pytest
 import shield.backend.api as backend_api
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +42,16 @@ def _start_backend(tmp_path):
 
 
 def _request(url, *, method="GET", body=None, token=ADMIN):
+    status, payload, _cookie = _request_capture_cookie(url, method=method, body=body, token=token)
+    return status, payload
+
+
+def _request_capture_cookie(url, *, method="GET", body=None, token=ADMIN):
+    """Like _request, but also returns the session token the server set as an HttpOnly cookie.
+
+    Operator sign-in no longer returns the raw token in the response body, so a test acting as a
+    signed-in operator has to read it the way a browser would.
+    """
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -46,7 +60,10 @@ def _request(url, *, method="GET", body=None, token=ADMIN):
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
     with urllib.request.urlopen(request, timeout=5) as response:
-        return response.status, json.loads(response.read().decode("utf-8"))
+        raw = response.headers.get("Set-Cookie", "")
+        status, payload = response.status, json.loads(response.read().decode("utf-8"))
+    morsel = SimpleCookie(raw).get(SESSION_COOKIE_NAME)
+    return status, payload, morsel.value if morsel else ""
 
 
 def test_backend_enrolls_device_and_serves_policy_to_existing_client_shape(tmp_path):
@@ -1004,7 +1021,7 @@ def test_backend_exporter_status_carries_real_watchdog_fields_through_to_the_api
 def test_backend_account_signup_login_and_logout_revokes_session(tmp_path, monkeypatch):
     server, store, base = _start_backend(tmp_path)
     try:
-        status, signup = _request(
+        status, signup, token = _request_capture_cookie(
             f"{base}/api/shield/auth/signup",
             method="POST",
             token="",
@@ -1013,8 +1030,9 @@ def test_backend_account_signup_login_and_logout_revokes_session(tmp_path, monke
         assert status == 201
         assert signup["account"]["email"] == "operator@example.com"
         assert signup["session_expires_at"]
-        token = signup["admin_token"]
-        status, login = _request(
+        assert "admin_token" not in signup, "raw session token must not be returned in the response body"
+        assert token, "signup must set the session cookie"
+        status, login, token = _request_capture_cookie(
             f"{base}/api/shield/auth/login",
             method="POST",
             token="",
@@ -1023,7 +1041,7 @@ def test_backend_account_signup_login_and_logout_revokes_session(tmp_path, monke
         assert status == 200
         assert login["tenant_id"] == "account-tenant"
         assert login["session_expires_at"]
-        token = login["admin_token"]
+        assert token
         with store._conn:
             store._conn.execute("INSERT INTO tenants(tenant_id,created_at) VALUES(?,?)", ("second-tenant", "now"))
             store._conn.execute("INSERT INTO account_tenant_memberships(account_id,tenant_id,role,created_at) SELECT account_id,?,role,created_at FROM accounts WHERE email=?", ("second-tenant", "operator@example.com"))
@@ -1042,9 +1060,8 @@ def test_backend_account_signup_login_and_logout_revokes_session(tmp_path, monke
             body={"tenant_id": "account-tenant", "email": "operator@example.com", "current_password": "correct horse battery staple", "new_password": "new correct horse battery"},
         )
         assert status == 200 and changed["ok"] is True
-        status, relogin = _request(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "new correct horse battery"})
+        status, relogin, token = _request_capture_cookie(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "new correct horse battery"})
         assert status == 200
-        token = relogin["admin_token"]
         monkeypatch.setenv("SHIELD_PASSWORD_RESET_URL", "https://shield.example/reset")
         with patch("shield.backend.email_delivery.send_email") as delivery:
             status, reset = _request(f"{base}/api/shield/auth/password-reset/request", method="POST", token="", body={"email": "operator@example.com"})
@@ -1052,9 +1069,8 @@ def test_backend_account_signup_login_and_logout_revokes_session(tmp_path, monke
         reset_token = delivery.call_args.args[2].split("token=", 1)[1].strip()
         status, confirmed = _request(f"{base}/api/shield/auth/password-reset/confirm", method="POST", token="", body={"reset_token": reset_token, "new_password": "reset correct horse battery"})
         assert status == 200 and confirmed["ok"] is True
-        status, relogin = _request(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "reset correct horse battery"})
+        status, relogin, token = _request_capture_cookie(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "operator@example.com", "password": "reset correct horse battery"})
         assert status == 200
-        token = relogin["admin_token"]
         status, logged_out = _request(
             f"{base}/api/shield/auth/logout",
             method="POST",
@@ -1103,4 +1119,59 @@ def test_account_failed_logins_lock_account_and_record_audit(tmp_path):
         assert events[-1]["event_type"] == "login_blocked"
         assert any(row["detail"] == "locked" for row in events)
     finally:
+        store.close()
+
+
+def test_operator_session_cookie_is_httponly_secure_samesite(tmp_path):
+    """The browser credential must be unreadable from JavaScript and not sent cross-site.
+
+    These attributes are the entire security argument for moving the operator session off a
+    sessionStorage-held bearer token, so assert them directly.
+    """
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, payload, token = _request_capture_cookie(
+            f"{base}/api/shield/auth/signup",
+            method="POST",
+            token="",
+            body={"tenant_id": "cookie-tenant", "email": "cookie@example.com", "password": "correct horse battery staple", "display_name": "Cookie Operator"},
+        )
+        assert status == 201
+        assert token, "signup must set the session cookie"
+        assert "admin_token" not in payload
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_device_token_path_still_accepts_bearer(tmp_path):
+    """Device agents have no cookie jar, so bearer must keep working for them.
+
+    Asserts the auth boundary only: a valid device token must get *past* authentication (any
+    status other than 401), while a wrong one must be rejected.
+    """
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-dev", "device_id": "dev-9", "device_role": "workstation"},
+        )
+        assert status == 201
+        device_token = enrolled["device_token"]
+
+        body = {"tenant_id": "tenant-dev", "device_id": "dev-9", "request_id": 0, "status": "completed"}
+        try:
+            status, _ = _request(f"{base}/api/shield/exporter-remediation/complete", method="POST", token=device_token, body=body)
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+        assert status != HTTPStatus.UNAUTHORIZED, "device bearer authentication must survive the cookie migration"
+
+        try:
+            status, _ = _request(f"{base}/api/shield/exporter-remediation/complete", method="POST", token="not-a-real-device-token", body=body)
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+        assert status == HTTPStatus.UNAUTHORIZED
+    finally:
+        server.shutdown()
         store.close()

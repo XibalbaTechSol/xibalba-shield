@@ -8,13 +8,10 @@ const DEFAULT_CONTROL_PLANE = 'http://127.0.0.1:8765'
 
 export function SignIn({ back, connect }) {
   const [mode, setMode] = useState('login')
-  const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState(() => readSession('shield-auth-notice'))
   const [busy, setBusy] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [tenant, setTenant] = useState('')
-  const [token, setToken] = useState('')
 
   const connectLocal = async () => {
     setBusy(true)
@@ -37,23 +34,11 @@ export function SignIn({ back, connect }) {
   const submit = async (event) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const baseUrl = advanced
-      ? String(form.get('baseUrl') || DEFAULT_CONTROL_PLANE).trim()
-      : DEFAULT_CONTROL_PLANE
+    const baseUrl = DEFAULT_CONTROL_PLANE
     setBusy(true)
     setError('')
 
     try {
-      if (advanced) {
-        const tenant = String(form.get('tenant') || '').trim()
-        const token = String(form.get('token') || '').trim()
-        if (!tenant || !token) throw new Error('Tenant ID and admin token are required')
-        const api = new ShieldApi(baseUrl, tenant, token)
-        await api.dashboard()
-        connect({ tenant, token, baseUrl, account: null })
-        return
-      }
-
       const email = String(form.get('email') || '').trim()
       const password = String(form.get('password') || '')
       const payload = await new ShieldApi(baseUrl, '', '').auth(mode, {
@@ -63,11 +48,12 @@ export function SignIn({ back, connect }) {
         tenant_id: String(form.get('tenant') || '').trim(),
       })
       const tenant = payload.tenant_id
-      const api = new ShieldApi(baseUrl, tenant, payload.admin_token)
+      // No token to carry: the session is an HttpOnly cookie the browser attaches itself.
+      const api = new ShieldApi(baseUrl, tenant, '')
       await api.dashboard()
       connect({
         tenant,
-        token: payload.admin_token,
+        token: '',
         baseUrl,
         account: { ...payload.account, session_expires_at: payload.session_expires_at },
       })
@@ -94,7 +80,7 @@ export function SignIn({ back, connect }) {
           <ShieldCheck aria-hidden="true" />
           <span>
             <b>Local-first authentication</b>
-            <small>Your credentials remain in this browser session.</small>
+            <small>Your session is held in a secure cookie the browser cannot read.</small>
           </span>
         </aside>
       </section>
@@ -105,8 +91,7 @@ export function SignIn({ back, connect }) {
             <LockKeyhole aria-hidden="true" />
           </span>
           {import.meta.env.DEV && <button className="local-connect" type="button" disabled={busy} onClick={connectLocal}><ShieldCheck size={16} /> Connect to local Shield</button>}
-          {!advanced && (
-            <div className="auth-tabs" role="tablist">
+          <div className="auth-tabs" role="tablist">
               <button
                 type="button"
                 role="tab"
@@ -125,25 +110,17 @@ export function SignIn({ back, connect }) {
               >
                 Create account
               </button>
-            </div>
-          )}
+          </div>
           <h2>
-            {advanced
-              ? 'Advanced access'
-              : mode === 'signup'
-              ? 'Create your Shield account'
-              : 'Welcome back'}
+            {mode === 'signup' ? 'Create your Shield account' : 'Welcome back'}
           </h2>
           <p>
-            {advanced
-              ? 'Connect with an administrator token and custom control plane.'
-              : mode === 'signup'
+            {mode === 'signup'
               ? 'Create an operator account for your organization.'
               : 'Enter your email and password to continue.'}
           </p>
 
-          {!advanced ? (
-            <>
+          <>
               <label>
                 Email
                 <input
@@ -213,62 +190,15 @@ export function SignIn({ back, connect }) {
                 </div>
               )}
             </>
-          ) : (
-            <>
-              <label htmlFor="tenant">
-                Organization ID
-              </label>
-              <input
-                id="tenant"
-                name="tenant"
-                value={tenant}
-                onChange={(e) => setTenant(e.target.value)}
-                placeholder="acme-production"
-                autoFocus
-                required
-              />
-              <label htmlFor="token">
-                Admin token
-              </label>
-              <input
-                id="token"
-                name="token"
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                required
-                placeholder="adm_tok_..."
-              />
-              <label htmlFor="baseUrl">
-                Control plane URL
-              </label>
-              <input
-                id="baseUrl"
-                name="baseUrl"
-                defaultValue={DEFAULT_CONTROL_PLANE}
-                required
-              />
-            </>
-          )}
 
           {error && <div className="auth-error" role="alert">{error}</div>}
 
           <button className="primary submit" disabled={busy} type="submit">
-            {busy ? 'Connecting…' : advanced ? 'Connect' : mode === 'signup' ? 'Create account' : 'Sign in'}{' '}
+            {busy ? 'Connecting…' : mode === 'signup' ? 'Create account' : 'Sign in'}{' '}
             <ArrowRight aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className="advanced"
-            onClick={() => {
-              setAdvanced((value) => !value)
-              setError('')
-            }}
-          >
-            {advanced ? 'Back to email sign in' : 'Advanced access'}
-          </button>
           <small className="session-note">
-            <LockKeyhole aria-hidden="true" /> Session-only credentials
+            <LockKeyhole aria-hidden="true" /> HttpOnly session cookie
           </small>
         </form>
       </section>

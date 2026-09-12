@@ -13,7 +13,9 @@ export class ShieldApi {
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     if (this.devProxy && !token) headers['X-Shield-Dev-Auth'] = '1'
     else if (token || this.adminToken) headers.Authorization = `Bearer ${token || this.adminToken}`
-    const response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    // The operator session is an HttpOnly cookie this code cannot read, so it has to ride along
+    // on every request. `adminToken` remains only for machine-minted tokens passed in explicitly.
+    const response = await fetch(url, { method, headers, credentials: 'include', body: body === undefined ? undefined : JSON.stringify(body) })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload.error || payload.message || `${response.status} ${response.statusText}`)
     return payload

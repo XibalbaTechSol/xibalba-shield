@@ -11,6 +11,7 @@ import ssl
 import sys
 import time
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict
@@ -44,6 +45,34 @@ except ImportError:  # pragma: no cover - the production wheel supplies the SDK
     verify_signature = None  # type: ignore[assignment]
 
 DEFAULT_DB_PATH = Path.home() / ".xibalba-shield" / "backend.sqlite3"
+
+SESSION_COOKIE_NAME = "shield_session"
+# Tracks the tenant admin token lifetime the store issues, so the cookie cannot outlive the
+# session record it points at.
+_SESSION_TTL_SECONDS = 24 * 3600
+
+# `Secure` is omitted only for a plain-HTTP loopback dev server. The packaged Caddyfile
+# terminates TLS, where `Secure` must be set or the browser silently drops the cookie.
+_INSECURE_COOKIES = os.environ.get("SHIELD_INSECURE_COOKIES") == "1"
+
+
+def _session_cookie(token: str, *, max_age: int) -> str:
+    """Serialize the operator session cookie.
+
+    `HttpOnly` keeps the token out of JavaScript, so an XSS bug cannot exfiltrate it the way it
+    could the previous sessionStorage-held bearer token. `SameSite=Strict` is what makes this
+    safe without a separate CSRF token: the browser will not attach it to any cross-site request.
+    """
+    parts = [
+        f"{SESSION_COOKIE_NAME}={token}",
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Strict",
+        f"Max-Age={max_age}",
+    ]
+    if not _INSECURE_COOKIES:
+        parts.append("Secure")
+    return "; ".join(parts)
 
 
 def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
@@ -597,11 +626,11 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 tenant_id = str(body.get("tenant_id") or "")
                 if not self._require_admin(tenant_id=tenant_id):
                     return
-                auth = self.headers.get("Authorization", "")
-                token = auth[len("Bearer "):] if auth.startswith("Bearer ") else ""
+                token = self._current_admin_token()
                 revoked = store.revoke_tenant_admin_token(tenant_id=tenant_id, token=token)
                 store.record_auth_event(event_type="logout", tenant_id=tenant_id, detail="revoked" if revoked else "already revoked")
-                self._send_json({"ok": revoked})
+                # Clear the cookie either way so a browser holding a dead session stops presenting it.
+                self._send_json({"ok": revoked}, extra_headers=(("Set-Cookie", _session_cookie("", max_age=0)),))
                 return
 
             if parsed.path == "/api/shield/auth/password":
@@ -636,7 +665,10 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 account, token = result
                 account["id"] = account.pop("account_id")
-                self._send_json({"account": account, "tenant_id": target_tenant, "tenants": store.list_account_tenants(account_id=account["id"]), "admin_token": token, "session_expires_at": store.tenant_admin_token_expiry(tenant_id=target_tenant)})
+                self._send_json(
+                    {"account": account, "tenant_id": target_tenant, "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.tenant_admin_token_expiry(tenant_id=target_tenant)},
+                    extra_headers=(("Set-Cookie", _session_cookie(token, max_age=_SESSION_TTL_SECONDS)),),
+                )
                 return
 
             if parsed.path == "/api/shield/auth/admin/approve":
@@ -715,7 +747,11 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                             raise ValueError("invalid email or password")
                         account, token = result
                         tenant_id = account["tenant_id"]
-                    self._send_json({"account": account, "tenant_id": tenant_id, "tenants": store.list_account_tenants(account_id=account["id"]), "admin_token": token, "session_expires_at": store.tenant_admin_token_expiry(tenant_id=tenant_id)}, status=HTTPStatus.CREATED if parsed.path.endswith("signup") else HTTPStatus.OK)
+                    self._send_json(
+                        {"account": account, "tenant_id": tenant_id, "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.tenant_admin_token_expiry(tenant_id=tenant_id)},
+                        status=HTTPStatus.CREATED if parsed.path.endswith("signup") else HTTPStatus.OK,
+                        extra_headers=(("Set-Cookie", _session_cookie(token, max_age=_SESSION_TTL_SECONDS)),),
+                    )
                 except ValueError as exc:
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                 return
@@ -1303,11 +1339,9 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 self._send_error(HTTPStatus.FORBIDDEN, "development auth bypass is restricted to loopback clients and origins")
                 return False
 
-            auth = self.headers.get("Authorization", "")
-            prefix = "Bearer "
-            token = auth[len(prefix):] if auth.startswith(prefix) else ""
+            token = self._current_admin_token()
             if not token:
-                self._send_error(HTTPStatus.UNAUTHORIZED, "admin token required")
+                self._send_error(HTTPStatus.UNAUTHORIZED, "authentication required: session cookie or admin token")
                 return False
             if admin_token and secrets.compare_digest(token, admin_token):
                 return True
@@ -1340,14 +1374,38 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             host = self.headers.get("Host", f"127.0.0.1:{self.server.server_port}")
             return f"{scheme}://{host}"
 
-        def _send_json(self, payload: dict[str, Any], *, status: HTTPStatus = HTTPStatus.OK) -> None:
+        def _send_json(self, payload: dict[str, Any], *, status: HTTPStatus = HTTPStatus.OK, extra_headers: tuple[tuple[str, str], ...] = ()) -> None:
             raw = json.dumps(payload, sort_keys=True).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
+            if allowed_origin != "*":
+                self.send_header("Access-Control-Allow-Credentials", "true")
+            for name, value in extra_headers:
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(raw)
+
+        def _cookie_session_token(self) -> str:
+            raw = self.headers.get("Cookie")
+            if not raw:
+                return ""
+            morsel = SimpleCookie(raw).get(SESSION_COOKIE_NAME)
+            return morsel.value if morsel else ""
+
+        def _current_admin_token(self) -> str:
+            """Operator credential: cookie first, then bearer.
+
+            Device agents keep using bearer exclusively via _require_device_token; they have no
+            cookie jar, so this fallback is what keeps them working.
+            """
+            token = self._cookie_session_token()
+            if token:
+                return token
+            auth = self.headers.get("Authorization", "")
+            prefix = "Bearer "
+            return auth[len(prefix):] if auth.startswith(prefix) else ""
 
         def _send_html(self, html: str) -> None:
             raw = html.encode("utf-8")

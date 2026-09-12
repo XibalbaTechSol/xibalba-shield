@@ -25,7 +25,9 @@ export default function App() {
   }
 
   const logout = async (notice = '') => {
-    if (connection.tenant && connection.token) {
+    // The session lives in an HttpOnly cookie this code cannot see, so the server call is the
+    // only way to revoke it and clear the cookie. Gate on the tenant alone.
+    if (connection.tenant) {
       try {
         await new ShieldApi(connection.baseUrl, connection.tenant, connection.token).auth(
           'logout',
