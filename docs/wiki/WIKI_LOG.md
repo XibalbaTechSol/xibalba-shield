@@ -189,3 +189,10 @@
   `XIBALBA_CORTEX_URL` and `XIBALBA_CORTEX_TOKEN` through the provider's environment fallback.
 - Reused the command-level enforcement-loop regression that reproduced the hosted
   `AttributeError: Namespace has no attribute 'cortex_url'` failure on `main`.
+
+## [2026-09-12] lint | Restore deterministic wiki publication
+
+- Regenerated `entities/device-context.md`'s table of contents after the Integrity and Cortex
+  binding section was added out of heading order.
+- `python3 scripts/wiki_toc.py --check` now reports all 14 canonical article TOCs current,
+  closing the deterministic pre-publication check that blocked the GitHub Wiki sync workflow.
