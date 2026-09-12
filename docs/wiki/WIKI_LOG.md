@@ -181,3 +181,11 @@
 - Added a development-only Vite authorization proxy and one-click local connection. The browser
   retains only a non-secret marker while the local server reads the tenant token and injects the
   authorization header; production builds do not expose this helper.
+
+## [2026-09-10] update | Restore local-run after Cortex option wiring
+
+- Fixed the `local-run` to shared-run namespace handoff by initializing the optional Cortex URL
+  and token fields before entering `_run`; the command continues to accept operator-provided
+  `XIBALBA_CORTEX_URL` and `XIBALBA_CORTEX_TOKEN` through the provider's environment fallback.
+- Reused the command-level enforcement-loop regression that reproduced the hosted
+  `AttributeError: Namespace has no attribute 'cortex_url'` failure on `main`.
