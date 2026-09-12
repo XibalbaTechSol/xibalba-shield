@@ -80,8 +80,18 @@ class IntegrityExporter:
         async_queue_size: int = 1024,
     ) -> None:
         # Bootstraps (or reuses) a real local DID/keypair the same way pretool_gate.py's
-        # load_bridged_identity does — one identity per device/deployment, persisted under
-        # integrity-sdk's own agent_dir convention so restarts don't mint a new DID each time.
+        # load_bridged_identity does, persisted under integrity-sdk's own agent_dir convention
+        # keyed by `agent_label` so restarts don't mint a new DID each time.
+        #
+        # `agent_label` is an explicit, operator-supplied portable agent identifier -- it is
+        # NOT derived from device_id, and it must stay that way. Per
+        # SPEC-v2.0.0-proposed.md §4.4, "Machine identity MUST NOT determine the portable agent
+        # subject" -- a prior version of this comment described the intent as "one identity per
+        # device/deployment," which reads as exactly the device-bound coupling that rule
+        # forbids. The actual coupling risk here is operational, not structural: every distinct
+        # `agent_label` a caller passes (a CLI flag, a test fixture, a benchmark) mints a
+        # permanent new protocol identity on first use, so callers must reuse one deliberately
+        # chosen label per logical agent rather than inventing ad hoc ones.
         self.agent_id, self.keypair, self.doc = sdk_did.load_or_create_did(agent_label)
         self.bcc_middleware_url = bcc_middleware_url.rstrip("/")
         # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
