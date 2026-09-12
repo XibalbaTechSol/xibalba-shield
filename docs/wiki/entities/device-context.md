@@ -16,8 +16,8 @@ source_files:
 - [Overview](#overview)
 - [AgentRegistry](#agentregistry)
 - [How the policy engine reads this](#how-the-policy-engine-reads-this)
-- [Related pages](#related-pages)
 - [Integrity and Cortex binding](#integrity-and-cortex-binding)
+- [Related pages](#related-pages)
 
 ## Overview
 
