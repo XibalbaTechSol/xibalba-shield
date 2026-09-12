@@ -34,7 +34,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: process.env.SHIELD_DEV_BACKEND_URL || 'http://127.0.0.1:8421',
+        target: process.env.SHIELD_DEV_BACKEND_URL || 'http://127.0.0.1:8765',
         changeOrigin: false,
         configure(proxy) {
           proxy.on('proxyReq', (proxyRequest, request) => {

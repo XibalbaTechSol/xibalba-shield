@@ -4,7 +4,7 @@ import { ShieldApi } from '../api'
 import { Brand } from './Brand'
 import { readSession, removeSession } from '../storage'
 
-const DEFAULT_CONTROL_PLANE = 'http://127.0.0.1:8421'
+const DEFAULT_CONTROL_PLANE = 'http://127.0.0.1:8765'
 
 export function SignIn({ back, connect }) {
   const [mode, setMode] = useState('login')
