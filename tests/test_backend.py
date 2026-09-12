@@ -1175,3 +1175,51 @@ def test_device_token_path_still_accepts_bearer(tmp_path):
     finally:
         server.shutdown()
         store.close()
+
+
+def test_device_assertion_authenticates_over_http(tmp_path):
+    """A signed assertion must authenticate a device end to end, and a foreign key must not.
+
+    This is the migration target: the device proves possession of the Ed25519 key bound to it at
+    registration, instead of replaying a long-lived shared secret.
+    """
+    from integrity_sdk.did import Keypair, fingerprint_for_pubkey
+    from shield.device_assertion import build_assertion
+
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-sig", "device_id": "dev-sig", "device_role": "workstation"},
+        )
+        assert status == 201
+
+        keypair = Keypair.generate()
+        agent_id = f"did:integrity:{fingerprint_for_pubkey(keypair.public_bytes())}"
+        store.bind_integrity_agent(tenant_id="tenant-sig", device_id="dev-sig", agent_id=agent_id, registration_status="registered")
+
+        body = {"tenant_id": "tenant-sig", "device_id": "dev-sig", "request_id": 0, "status": "completed"}
+        endpoint = f"{base}/api/shield/exporter-remediation/complete"
+
+        def _post_with_auth(header_value):
+            request = urllib.request.Request(
+                endpoint,
+                data=json.dumps(body).encode("utf-8"),
+                method="POST",
+                headers={"Accept": "application/json", "Content-Type": "application/json", "Authorization": header_value},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    return response.status
+            except urllib.error.HTTPError as exc:
+                return exc.code
+
+        assertion = build_assertion(keypair=keypair, tenant_id="tenant-sig", device_id="dev-sig", audience=base)
+        assert _post_with_auth(assertion) != HTTPStatus.UNAUTHORIZED, "a valid assertion must authenticate"
+
+        foreign = build_assertion(keypair=Keypair.generate(), tenant_id="tenant-sig", device_id="dev-sig", audience=base)
+        assert _post_with_auth(foreign) == HTTPStatus.UNAUTHORIZED, "a key not bound to the device must be rejected"
+    finally:
+        server.shutdown()
+        store.close()

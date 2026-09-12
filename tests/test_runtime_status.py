@@ -21,7 +21,9 @@ def test_runtime_status_skips_unconfigured_backend():
 
 
 @patch("shield.runtime_status.urlopen", return_value=_Response())
-def test_runtime_status_posts_authenticated_health(mock_urlopen):
+def test_runtime_status_falls_back_to_device_token_without_a_key(mock_urlopen, tmp_path, monkeypatch):
+    """A device enrolled before the assertion migration has no signing key and must keep working."""
+    monkeypatch.setenv("INTEGRITY_DID_HOME", str(tmp_path))
     config = DeviceConfig(
         device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend"
     )
@@ -34,6 +36,36 @@ def test_runtime_status_posts_authenticated_health(mock_urlopen):
     request = mock_urlopen.call_args.args[0]
     assert request.full_url == "http://backend/api/shield/exporter-status"
     assert request.get_header("Authorization") == "Bearer secret"
+
+
+@patch("shield.runtime_status.urlopen", return_value=_Response())
+def test_runtime_status_signs_an_assertion_when_a_key_is_present(mock_urlopen, tmp_path, monkeypatch):
+    """With a device key on disk, the long-lived token must not be sent at all."""
+    from integrity_sdk.did import Keypair
+
+    from shield.device_assertion import ASSERTION_SCHEME, verify_assertion
+    from integrity_sdk.did import fingerprint_for_pubkey
+
+    monkeypatch.setenv("INTEGRITY_DID_HOME", str(tmp_path))
+    keypair = Keypair.generate()
+    key_dir = tmp_path / "xibalba-shield"
+    key_dir.mkdir(parents=True)
+    (key_dir / "private_key.pem").write_bytes(keypair.private_pem())
+
+    config = DeviceConfig(
+        device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend"
+    )
+    assert publish_runtime_status(device_config=config, policy_status={}, opa_status={}) is True
+
+    header = mock_urlopen.call_args.args[0].get_header("Authorization")
+    assert header.startswith(f"{ASSERTION_SCHEME} ")
+    assert "secret" not in header
+    enrolled = f"did:integrity:{fingerprint_for_pubkey(keypair.public_bytes())}"
+    assert verify_assertion(
+        header,
+        expected_audience="http://backend",
+        lookup_enrolled_agent_id=lambda *_: enrolled,
+    ) is not None
 
 
 @patch("shield.runtime_status.urlopen", return_value=_Response())

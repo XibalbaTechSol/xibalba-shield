@@ -37,6 +37,7 @@ from .store import ShieldStore
 from . import remediation
 from ..transaction_gateway import TransactionIntent, TransactionPolicy, evaluate_transaction_intent
 from ..transaction_simulator import SimulationError, simulate_transaction_intent
+from ..device_assertion import ASSERTION_SCHEME, ReplayGuard, verify_assertion
 
 try:
     from integrity_sdk.did import fingerprint_for_pubkey, verify_signature
@@ -287,7 +288,11 @@ if os.environ.get("OIDC_DISCOVERY_URL") and os.environ.get("OIDC_CLIENT_ID"):
         redirect_uri=os.environ.get("OIDC_REDIRECT_URI", "")
     )
 
-def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", dev_disable_admin_auth: bool = False):
+def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", dev_disable_admin_auth: bool = False, device_assertion_audience: str = ""):
+    # Per-process replay guard for device assertions. A multi-process deployment needs a shared
+    # store; until then the short assertion TTL plus audience binding is what bounds replay.
+    _device_replay_guard = ReplayGuard()
+
     auth_attempts: dict[str, list[float]] = {}
 
     def auth_allowed(identity: str) -> bool:
@@ -1351,10 +1356,33 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             return False
 
         def _require_device_token(self, *, tenant_id: str, device_id: str) -> bool:
+            """Authenticate a device agent.
+
+            Accepts a signed short-lived assertion (preferred) or the legacy long-lived
+            device_token. Both are live during migration so enrolled devices keep working; the
+            assertion path is tried first so a device that can sign is never downgraded.
+            """
             auth = self.headers.get("Authorization", "")
+            if not tenant_id or not device_id:
+                self._send_error(HTTPStatus.UNAUTHORIZED, "device token, tenant_id, and device_id are required")
+                return False
+
+            if auth.startswith(f"{ASSERTION_SCHEME} "):
+                claims = verify_assertion(
+                    auth,
+                    expected_audience=device_assertion_audience or self._request_base_url(),
+                    lookup_enrolled_agent_id=store.enrolled_agent_id,
+                    replay_guard=_device_replay_guard,
+                )
+                # A device may only ever speak for itself, even with a valid signature.
+                if claims is None or claims["tenant_id"] != tenant_id or claims["device_id"] != device_id:
+                    self._send_error(HTTPStatus.UNAUTHORIZED, "invalid device assertion")
+                    return False
+                return True
+
             prefix = "Bearer "
             token = auth[len(prefix):] if auth.startswith(prefix) else ""
-            if not tenant_id or not device_id or not token:
+            if not token:
                 self._send_error(HTTPStatus.UNAUTHORIZED, "device token, tenant_id, and device_id are required")
                 return False
             if not store.authenticate_device(tenant_id=tenant_id, device_id=device_id, token=token):

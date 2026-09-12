@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 from .config import DeviceConfig
 from .config.tls import build_client_context
+from .device_assertion import device_auth_header
 
 logger = logging.getLogger("shield.remediation_worker")
 
@@ -79,7 +80,15 @@ class RemediationWorker:
         data = None if body is None else json.dumps(body).encode("utf-8")
         request = Request(
             f"{self._config.backend_url.rstrip('/')}{path}", data=data, method=method,
-            headers={"Authorization": f"Bearer {self._config.device_token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": device_auth_header(
+                    tenant_id=self._config.tenant_id,
+                    device_id=self._config.device_id,
+                    audience=self._config.backend_url.rstrip("/"),
+                    device_token=self._config.device_token,
+                ),
+                "Content-Type": "application/json",
+            },
         )
         try:
             context = build_client_context(self._config)

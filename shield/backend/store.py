@@ -487,6 +487,19 @@ class ShieldStore:
         ).fetchone()
         return bool(row and secrets.compare_digest(row["device_token_hash"], _hash_token(token)))
 
+    def enrolled_agent_id(self, tenant_id: str, device_id: str) -> str | None:
+        """The agent identity bound to this device at registration, if any.
+
+        Signed device assertions verify against this: it is `did:integrity:sha256(pubkey)`, so the
+        verifier can re-derive it from the key an assertion carries and reject a substituted one.
+        Returns None for a device that was never registered, which fails assertion auth closed.
+        """
+        row = self._conn.execute(
+            "SELECT integrity_agent_id FROM devices WHERE tenant_id=? AND device_id=?",
+            (tenant_id, device_id),
+        ).fetchone()
+        return row["integrity_agent_id"] if row and row["integrity_agent_id"] else None
+
     def create_account(self, *, tenant_id: str, email: str, password: str, display_name: str) -> dict[str, Any]:
         tenant_id = tenant_id.strip()
         email = email.strip().lower()

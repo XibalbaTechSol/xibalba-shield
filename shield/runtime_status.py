@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from .config import DeviceConfig
 from .config.tls import build_client_context
+from .device_assertion import device_auth_header
 
 logger = logging.getLogger("shield.runtime_status")
 
@@ -78,7 +79,12 @@ class BackendEvidencePublisher:
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.device_config.device_token}",
+                "Authorization": device_auth_header(
+                    tenant_id=self.device_config.tenant_id,
+                    device_id=self.device_config.device_id,
+                    audience=self.device_config.backend_url.rstrip("/"),
+                    device_token=self.device_config.device_token,
+                ),
             },
             method="POST",
         )
@@ -128,7 +134,12 @@ def publish_runtime_status(
         headers={
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {device_config.device_token}",
+            "Authorization": device_auth_header(
+                tenant_id=device_config.tenant_id,
+                device_id=device_config.device_id,
+                audience=device_config.backend_url.rstrip("/"),
+                device_token=device_config.device_token,
+            ),
         },
         method="POST",
     )
