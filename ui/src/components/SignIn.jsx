@@ -4,7 +4,9 @@ import { ShieldApi } from '../api'
 import { Brand } from './Brand'
 import { readSession, removeSession } from '../storage'
 
-const DEFAULT_CONTROL_PLANE = 'http://127.0.0.1:8765'
+// Same origin as the UI: Caddy (and the Vite dev proxy) serve the UI and /api/* together, which
+// is what lets the Secure, SameSite=Strict session cookie be stored and sent back.
+const DEFAULT_CONTROL_PLANE = window.location.origin
 
 export function SignIn({ back, connect }) {
   const [mode, setMode] = useState('login')

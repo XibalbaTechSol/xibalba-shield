@@ -18,6 +18,10 @@ from typing import Any
 from ..config.loader import ConfigError, PolicyBundle, load_policy_bundle
 
 
+class TenantExistsError(ValueError):
+    """Signup named a tenant that already exists."""
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -163,6 +167,20 @@ class ShieldStore:
                 expires_at TEXT NOT NULL,
                 used_at TEXT,
                 created_at TEXT NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
+            );
+
+            -- One row per operator sign-in, bound to the account and the tenant it was issued for.
+            -- Mirrors Cortex's per-account sessions so concurrent operators never revoke each other.
+            CREATE TABLE IF NOT EXISTS account_sessions (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                expires_at TEXT NOT NULL,
+                revoked_at TEXT,
                 FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
             );
 
@@ -510,7 +528,12 @@ class ShieldStore:
         account_id = secrets.token_hex(16)
         now = _now()
         with self._conn:
-            self._conn.execute("INSERT OR IGNORE INTO tenants (tenant_id, created_at) VALUES (?, ?)", (tenant_id, now))
+            # Self-service signup may only create a new tenant. Joining an existing tenant must go
+            # through a tenant admin; otherwise anyone who can reach this endpoint could name any
+            # tenant and become its tenant_admin.
+            if self._conn.execute("SELECT 1 FROM tenants WHERE tenant_id=?", (tenant_id,)).fetchone():
+                raise TenantExistsError("that tenant already exists; ask a tenant administrator to add you")
+            self._conn.execute("INSERT INTO tenants (tenant_id, created_at) VALUES (?, ?)", (tenant_id, now))
             try:
                 self._conn.execute("INSERT INTO accounts(account_id,tenant_id,email,display_name,password_hash,password_salt,created_at) VALUES(?,?,?,?,?,?,?)", (account_id, tenant_id, email, display_name, digest, salt, now))
             except sqlite3.IntegrityError as exc:
@@ -561,7 +584,7 @@ class ShieldStore:
             self._conn.execute("UPDATE accounts SET failed_attempts=0, locked_until=NULL WHERE account_id=?", (row["account_id"],))
         self.record_auth_event(event_type="login_succeeded", email=normalized, tenant_id=row["tenant_id"])
         account = {"id": row["account_id"], "tenant_id": row["tenant_id"], "email": row["email"], "display_name": row["display_name"], "role": row["role"], "status": row["status"], "email_verified": bool(row["email_verified"]), "approval_status": row["approval_status"], "created_at": row["created_at"], "tenants": self.list_account_tenants(account_id=row["account_id"])}
-        return account, self.mint_tenant_admin_token(tenant_id=row["tenant_id"])
+        return account, self.issue_account_session(account_id=row["account_id"], tenant_id=row["tenant_id"])
 
     def get_account_for_tenant(self, *, tenant_id: str, email: str) -> dict[str, Any] | None:
         row = self._conn.execute("SELECT account_id,tenant_id,email,display_name,status,role,created_at FROM accounts WHERE tenant_id=? AND email=?", (tenant_id, email.strip().lower())).fetchone()
@@ -590,7 +613,7 @@ class ShieldStore:
         account["tenant_id"] = target_tenant_id
         account["role"] = membership["role"]
         self.record_auth_event(event_type="tenant_switched", email=account["email"], tenant_id=target_tenant_id, detail=f"from={current_tenant_id}")
-        return account, self.mint_tenant_admin_token(tenant_id=target_tenant_id)
+        return account, self.issue_account_session(account_id=account["account_id"], tenant_id=target_tenant_id)
 
     def change_account_password(self, *, tenant_id: str, email: str, current_password: str, new_password: str) -> bool:
         normalized = email.strip().lower()
@@ -642,6 +665,87 @@ class ShieldStore:
             account = self._conn.execute("SELECT email,tenant_id FROM accounts WHERE account_id=?", (row["account_id"],)).fetchone()
         self.record_auth_event(event_type="password_reset_completed", email=account["email"] if account else None, tenant_id=account["tenant_id"] if account else None)
         return True
+
+    def issue_account_session(self, *, account_id: str, tenant_id: str, ttl_hours: int = 24) -> str:
+        """Issue an operator session for one account in one tenant.
+
+        Each sign-in gets its own row, so a second operator (or a second browser) never revokes
+        an existing session -- the same model as Cortex's `issue_account_session`.
+        """
+        self._validate_id("tenant_id", tenant_id)
+        token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=ttl_hours)).isoformat()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO account_sessions(id,account_id,tenant_id,token_hash,created_at,expires_at) VALUES(?,?,?,?,?,?)",
+                (secrets.token_hex(16), account_id, tenant_id, _hash_token(token), _now(), expires_at),
+            )
+        return token
+
+    def session_for_token(self, token: str) -> dict[str, Any] | None:
+        """Resolve a live account session, or None if unknown, revoked, or expired."""
+        if not token:
+            return None
+        row = self._conn.execute(
+            """
+            SELECT s.id AS session_id, s.account_id, s.tenant_id, s.created_at, s.expires_at,
+                   a.email, a.display_name, a.status, a.email_verified, a.approval_status
+            FROM account_sessions s JOIN accounts a ON a.account_id = s.account_id
+            WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at > ? AND a.status='active'
+            """,
+            (_hash_token(token), datetime.now(timezone.utc).isoformat()),
+        ).fetchone()
+        if row is None:
+            return None
+        membership = self._conn.execute(
+            "SELECT role FROM account_tenant_memberships WHERE account_id=? AND tenant_id=?", (row["account_id"], row["tenant_id"])
+        ).fetchone()
+        if membership is None:
+            return None
+        with self._conn:
+            self._conn.execute("UPDATE account_sessions SET last_used_at=? WHERE id=?", (_now(), row["session_id"]))
+        return {**dict(row), "role": membership["role"]}
+
+    def account_for_session(self, session: dict[str, Any]) -> dict[str, Any]:
+        """The account payload returned by signup/login/me, shaped for the session's tenant."""
+        return {
+            "id": session["account_id"],
+            "tenant_id": session["tenant_id"],
+            "email": session["email"],
+            "display_name": session["display_name"],
+            "role": session["role"],
+            "status": session["status"],
+            "email_verified": bool(session["email_verified"]),
+            "approval_status": session["approval_status"],
+            "tenants": self.list_account_tenants(account_id=session["account_id"]),
+        }
+
+    def list_account_sessions(self, *, account_id: str, current_session_id: str | None = None) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT id,tenant_id,created_at,last_used_at,expires_at FROM account_sessions WHERE account_id=? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at DESC",
+            (account_id, datetime.now(timezone.utc).isoformat()),
+        ).fetchall()
+        return [{**dict(row), "current": row["id"] == current_session_id} for row in rows]
+
+    def revoke_account_session(self, token: str) -> dict[str, Any] | None:
+        """Revoke the session a token names. Returns the revoked session's account/tenant, if any."""
+        row = self._conn.execute(
+            "SELECT s.id, s.tenant_id, a.email FROM account_sessions s JOIN accounts a ON a.account_id=s.account_id WHERE s.token_hash=? AND s.revoked_at IS NULL",
+            (_hash_token(token),),
+        ).fetchone()
+        if row is None:
+            return None
+        with self._conn:
+            self._conn.execute("UPDATE account_sessions SET revoked_at=? WHERE id=?", (_now(), row["id"]))
+        return dict(row)
+
+    def revoke_account_session_by_id(self, *, account_id: str, session_id: str) -> bool:
+        """Revoke one of the caller's own sessions; never another account's."""
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE account_sessions SET revoked_at=? WHERE id=? AND account_id=? AND revoked_at IS NULL", (_now(), session_id, account_id)
+            )
+        return cur.rowcount > 0
 
     def mint_tenant_admin_token(self, *, tenant_id: str, ttl_hours: int | None = 24) -> str:
         """Issue a fresh admin token scoped to one tenant, replacing any prior token."""

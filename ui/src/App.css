@@ -283,10 +283,10 @@ h1, h2, h3, h4, b {
 }
 
 .hero-logo {
-  width: 54px;
-  height: 54px;
-  border-radius: 12px;
-  margin-bottom: 20px;
+  width: clamp(180px, 26vw, 320px);
+  height: clamp(180px, 26vw, 320px);
+  border-radius: 28px;
+  margin-bottom: 28px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 

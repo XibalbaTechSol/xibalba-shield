@@ -1223,3 +1223,78 @@ def test_device_assertion_authenticates_over_http(tmp_path):
     finally:
         server.shutdown()
         store.close()
+
+
+def _cookie_request(url, *, cookie, method="GET", body=None):
+    """Act as a browser: present the session only as a Cookie header, never as a bearer token."""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if cookie:
+        headers["Cookie"] = f"{SESSION_COOKIE_NAME}={cookie}"
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8")), response.headers.get("Set-Cookie", "")
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode("utf-8") or "{}"), exc.headers.get("Set-Cookie", "")
+
+
+def test_operator_sessions_are_per_account_and_cookie_authenticated(tmp_path):
+    """Two operators in one tenant must not revoke each other (the old one-row-per-tenant bug),
+    and every check here authenticates via the Cookie header the browser actually sends."""
+    server, store, base = _start_backend(tmp_path)
+    try:
+        signup = {"tenant_id": "shared-tenant", "password": "correct horse battery staple", "display_name": "Operator"}
+        _, _, op1 = _request_capture_cookie(f"{base}/api/shield/auth/signup", method="POST", token="", body={**signup, "email": "op1@example.com"})
+        # Signup cannot join an existing tenant, so the second operator is added the way a tenant
+        # admin would add them: an account plus a membership row.
+        _, _, _unused = _request_capture_cookie(f"{base}/api/shield/auth/signup", method="POST", token="", body={**signup, "tenant_id": "op2-home", "email": "op2@example.com"})
+        with store._conn:
+            store._conn.execute("UPDATE accounts SET tenant_id='shared-tenant' WHERE email='op2@example.com'")
+            store._conn.execute("INSERT INTO account_tenant_memberships(account_id,tenant_id,role,created_at) SELECT account_id,'shared-tenant','tenant_admin','now' FROM accounts WHERE email='op2@example.com'")
+        _, _, op2 = _request_capture_cookie(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "op2@example.com", "password": signup["password"]})
+        _, _, op1_second = _request_capture_cookie(f"{base}/api/shield/auth/login", method="POST", token="", body={"email": "op1@example.com", "password": signup["password"]})
+        for cookie in (op1, op2, op1_second):
+            status, _, _ = _cookie_request(f"{base}/api/shield/dashboard-summary?tenant_id=shared-tenant", cookie=cookie)
+            assert status == 200, "a later sign-in must not revoke an earlier session"
+
+        status, me, _ = _cookie_request(f"{base}/api/shield/auth/me", cookie=op2)
+        assert status == 200 and me["account"]["email"] == "op2@example.com" and me["tenant_id"] == "shared-tenant" and me["session_expires_at"]
+
+        status, sessions, _ = _cookie_request(f"{base}/api/shield/auth/sessions", cookie=op1)
+        assert status == 200 and len(sessions["sessions"]) == 2 and sum(item["current"] for item in sessions["sessions"]) == 1
+        other = next(item["id"] for item in sessions["sessions"] if not item["current"])
+        status, _, _ = _cookie_request(f"{base}/api/shield/auth/sessions/revoke", cookie=op1, method="POST", body={"session_id": other})
+        assert status == 200
+        assert _cookie_request(f"{base}/api/shield/auth/me", cookie=op1_second)[0] == 401
+        assert _cookie_request(f"{base}/api/shield/auth/me", cookie=op2)[0] == 200
+
+        # A session cannot reach a tenant it was not issued for.
+        assert _cookie_request(f"{base}/api/shield/dashboard-summary?tenant_id=tenant-a", cookie=op1)[0] == 401
+
+        status, out, set_cookie = _cookie_request(f"{base}/api/shield/auth/logout", cookie=op1, method="POST", body={})
+        assert status == 200 and out["ok"] is True and "Max-Age=0" in set_cookie
+        assert _cookie_request(f"{base}/api/shield/auth/me", cookie=op1)[0] == 401
+
+        # Signing out with an already-dead cookie still succeeds and clears it, like Cortex.
+        status, out, set_cookie = _cookie_request(f"{base}/api/shield/auth/logout", cookie=op1, method="POST", body={})
+        assert status == 200 and out["ok"] is False and "Max-Age=0" in set_cookie
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_signup_cannot_join_an_existing_tenant(tmp_path):
+    """Self-service signup naming an existing tenant used to grant tenant_admin on it."""
+    server, store, base = _start_backend(tmp_path)
+    try:
+        owner = {"tenant_id": "owned-tenant", "email": "owner@example.com", "password": "correct horse battery staple", "display_name": "Owner"}
+        status, _, _ = _cookie_request(f"{base}/api/shield/auth/signup", cookie="", method="POST", body=owner)
+        assert status == 201
+        status, body, set_cookie = _cookie_request(f"{base}/api/shield/auth/signup", cookie="", method="POST", body={**owner, "email": "intruder@example.com", "display_name": "Intruder"})
+        assert status == 400 and "already exists" in body["error"]
+        assert SESSION_COOKIE_NAME not in set_cookie
+        assert store._conn.execute("SELECT COUNT(*) FROM accounts WHERE email='intruder@example.com'").fetchone()[0] == 0
+    finally:
+        server.shutdown()
+        store.close()

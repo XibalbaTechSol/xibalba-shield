@@ -373,6 +373,10 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 self._send_json({"device_id": device_id, "agent_id": agent_id, "memory_namespace": f"shield:{agent_id}", "memories": memories.get("memories", []), "cortex": memories})
                 return
             if parsed.path == "/api/shield/auth/me":
+                session = store.session_for_token(self._current_admin_token())
+                if session is not None:
+                    self._send_json({"account": store.account_for_session(session), "tenant_id": session["tenant_id"], "tenants": store.list_account_tenants(account_id=session["account_id"]), "session_expires_at": session["expires_at"]})
+                    return
                 if not self._require_admin():
                     return
                 tenant_id = query.get("tenant_id", [""])[0]
@@ -381,6 +385,10 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 self._send_json({"account": account})
                 return
             if parsed.path == "/api/shield/auth/sessions":
+                session = store.session_for_token(self._current_admin_token())
+                if session is not None:
+                    self._send_json({"sessions": store.list_account_sessions(account_id=session["account_id"], current_session_id=session["session_id"])})
+                    return
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
@@ -628,14 +636,30 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 return
 
             if parsed.path == "/api/shield/auth/logout":
-                tenant_id = str(body.get("tenant_id") or "")
-                if not self._require_admin(tenant_id=tenant_id):
-                    return
+                # Not gated on a live session: a browser holding an expired or revoked cookie must
+                # still be able to sign out and have the cookie cleared. Matches Cortex's logout.
                 token = self._current_admin_token()
-                revoked = store.revoke_tenant_admin_token(tenant_id=tenant_id, token=token)
-                store.record_auth_event(event_type="logout", tenant_id=tenant_id, detail="revoked" if revoked else "already revoked")
-                # Clear the cookie either way so a browser holding a dead session stops presenting it.
+                revoked_session = store.revoke_account_session(token) if token else None
+                tenant_id = revoked_session["tenant_id"] if revoked_session else str(body.get("tenant_id") or "")
+                revoked = revoked_session is not None
+                if not revoked and token and tenant_id and store.authenticate_tenant_admin(tenant_id=tenant_id, token=token):
+                    revoked = store.revoke_tenant_admin_token(tenant_id=tenant_id, token=token)
+                store.record_auth_event(event_type="logout", email=revoked_session["email"] if revoked_session else None, tenant_id=tenant_id or None, detail="revoked" if revoked else "already revoked")
                 self._send_json({"ok": revoked}, extra_headers=(("Set-Cookie", _session_cookie("", max_age=0)),))
+                return
+
+            if parsed.path == "/api/shield/auth/sessions/revoke":
+                session = store.session_for_token(self._current_admin_token())
+                if session is None:
+                    self._send_error(HTTPStatus.UNAUTHORIZED, "authentication required: session cookie or admin token")
+                    return
+                session_id = str(body.get("session_id") or "")
+                revoked = store.revoke_account_session_by_id(account_id=session["account_id"], session_id=session_id)
+                store.record_auth_event(event_type="session_revoked", email=session["email"], tenant_id=session["tenant_id"], detail=session_id)
+                if not revoked:
+                    self._send_error(HTTPStatus.NOT_FOUND, "session not found")
+                    return
+                self._send_json({"ok": True})
                 return
 
             if parsed.path == "/api/shield/auth/password":
@@ -671,7 +695,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 account, token = result
                 account["id"] = account.pop("account_id")
                 self._send_json(
-                    {"account": account, "tenant_id": target_tenant, "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.tenant_admin_token_expiry(tenant_id=target_tenant)},
+                    {"account": account, "tenant_id": target_tenant, "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.session_for_token(token)["expires_at"]},
                     extra_headers=(("Set-Cookie", _session_cookie(token, max_age=_SESSION_TTL_SECONDS)),),
                 )
                 return
@@ -745,7 +769,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                         tenant_id = str(body.get("tenant_id") or "")
                         account = store.create_account(tenant_id=tenant_id, email=email, password=password, display_name=str(body.get("display_name") or ""))
                         store.record_auth_event(event_type="account_created", email=email, tenant_id=tenant_id)
-                        token = store.mint_tenant_admin_token(tenant_id=tenant_id)
+                        token = store.issue_account_session(account_id=account["id"], tenant_id=tenant_id)
                     else:
                         result = store.authenticate_account(email=email, password=password)
                         if result is None:
@@ -753,7 +777,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                         account, token = result
                         tenant_id = account["tenant_id"]
                     self._send_json(
-                        {"account": account, "tenant_id": tenant_id, "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.tenant_admin_token_expiry(tenant_id=tenant_id)},
+                        {"account": account, "tenant_id": tenant_id, "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.session_for_token(token)["expires_at"]},
                         status=HTTPStatus.CREATED if parsed.path.endswith("signup") else HTTPStatus.OK,
                         extra_headers=(("Set-Cookie", _session_cookie(token, max_age=_SESSION_TTL_SECONDS)),),
                     )
@@ -1351,6 +1375,9 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             if admin_token and secrets.compare_digest(token, admin_token):
                 return True
             if tenant_id and store.authenticate_tenant_admin(tenant_id=tenant_id, token=token):
+                return True
+            session = store.session_for_token(token) if tenant_id else None
+            if session is not None and session["tenant_id"] == tenant_id:
                 return True
             self._send_error(HTTPStatus.UNAUTHORIZED, "invalid admin token")
             return False

@@ -237,9 +237,9 @@ tr:hover td {
 .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--status-danger); }
 .badge-info { background: rgba(59, 130, 246, 0.2); color: var(--status-info); }
 .hero-logo {
-  width: 96px;
-  height: 96px;
-  border-radius: 20px;
+  width: clamp(180px, 26vw, 320px);
+  height: clamp(180px, 26vw, 320px);
+  border-radius: 28px;
   object-fit: cover;
   margin-bottom: 24px;
   display: block;
