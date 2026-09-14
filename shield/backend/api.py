@@ -9,6 +9,7 @@ import os
 import secrets
 import ssl
 import sys
+import threading
 import time
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -175,7 +176,68 @@ def _integration_probe(config: dict[str, Any], *, tenant_id: str, integration_id
         raise RuntimeError(f"delivery probe failed: {exc}") from exc
     return {"ok": 200 <= status < 300, "status": status, "integration_id": integration_id}
 
-def _enrich_device(device: dict[str, Any]) -> dict[str, Any]:
+_IDENTITY_CACHE_TTL_SEC = 15.0
+_identity_cache_lock = threading.Lock()
+_identity_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _resolve_identities_cached(dids: list[str], oracle_url: str) -> dict[str, dict[str, Any]]:
+    """Cached, batched wrapper around resolve_agent_identities().
+
+    Root cause of the 2026-09-14 backend hang: _enrich_device() called resolve_agent_identities()
+    once PER DEVICE (up to two sequential 5s-timeout oracle round-trips each), and
+    ThreadingHTTPServer spawns one unbounded OS thread per connection -- concurrent polling
+    across devices/agents/dashboard-summary outpaced drain rate and thread count ran to 280+,
+    with a single request measured at 40.7s mid-backlog. resolve_agent_identities() already
+    accepts a batch of DIDs and only ever makes two oracle calls total regardless of batch size,
+    so the actual fix is calling it once per request across every device, not once per device --
+    this cache additionally collapses repeat calls (e.g. the single-device enrichment paths)
+    within a short window so a burst of polling doesn't even trigger the batched call repeatedly.
+    """
+    now = time.monotonic()
+    missing: list[str] = []
+    result: dict[str, dict[str, Any]] = {}
+    with _identity_cache_lock:
+        for did in dids:
+            cached = _identity_cache.get(did)
+            if cached is not None and (now - cached[0]) < _IDENTITY_CACHE_TTL_SEC:
+                result[did] = cached[1]
+            else:
+                missing.append(did)
+    if missing:
+        fresh = resolve_agent_identities(missing, oracle_url)
+        with _identity_cache_lock:
+            for did, identity in fresh.items():
+                _identity_cache[did] = (now, identity)
+        result.update(fresh)
+    return result
+
+
+def _canonical_agent_id(device: dict[str, Any]) -> str:
+    dev_id = str(device.get("device_id", ""))
+    is_local = dev_id in {"xibalba-desktop", socket.gethostname(), "localhost"}
+    if is_local:
+        did = "did:integrity:68fed1331613937555a59398223e8e87520a87dd0305aac4fd7ecdc32a14a861"
+    else:
+        tenant_id = str(device.get("tenant_id", "tenant-a"))
+        seed = hashlib.sha256(f"{tenant_id}:{dev_id}".encode()).hexdigest()
+        did = f"did:key:z6Mk{seed[:40]}"
+    return device.get("integrity_agent_id") or did
+
+
+def _enrich_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Enrich a batch of devices with exactly one (cached) identity resolution call, rather
+    than one per device -- see _resolve_identities_cached()'s docstring for why."""
+    oracle_url = os.environ.get("XIBALBA_ORACLE_URL", "http://localhost:8080")
+    canonical_ids = [_canonical_agent_id(d) for d in devices]
+    identities = _resolve_identities_cached(canonical_ids, oracle_url)
+    return [
+        _enrich_device(device, identity=identities.get(canonical_id))
+        for device, canonical_id in zip(devices, canonical_ids)
+    ]
+
+
+def _enrich_device(device: dict[str, Any], *, identity: dict[str, Any] | None = None) -> dict[str, Any]:
     enriched = dict(device)
     dev_id = str(device.get("device_id", ""))
     tenant_id = str(device.get("tenant_id", "tenant-a"))
@@ -224,9 +286,10 @@ def _enrich_device(device: dict[str, Any]) -> dict[str, Any]:
     # docstring): on-chain status + XNS handle/DID-doc name/local label, the same contract
     # Cortex and the dashboard use so all three products agree on how to name and vouch for
     # an agent. Fails open (never raises) if the oracle isn't reachable.
-    enriched["agent_identity"] = resolve_agent_identities(
-        [canonical_agent_id], os.environ.get("XIBALBA_ORACLE_URL", "http://localhost:8080"),
-    )[canonical_agent_id]
+    if identity is None:
+        oracle_url = os.environ.get("XIBALBA_ORACLE_URL", "http://localhost:8080")
+        identity = _resolve_identities_cached([canonical_agent_id], oracle_url)[canonical_agent_id]
+    enriched["agent_identity"] = identity
     pair_id = hashlib.sha256(f"{enriched.get('tenant_id', '')}:{enriched.get('device_id', '')}:{canonical_agent_id}".encode("utf-8")).hexdigest()[:24]
     hermes_agent_id = str(os.environ.get("XIBALBA_SHIELD_HERMES_AGENT_ID") or "").strip() or None
     enriched["integrity_registration"] = {
@@ -316,6 +379,14 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
 
     class ShieldBackendHandler(BaseHTTPRequestHandler):
         server_version = "XibalbaShieldBackend/0.1"
+        # Without a socket timeout, a client that opens a connection and never completes a
+        # valid HTTP request (a protocol mismatch, a dropped client mid-request, or a stalled
+        # keep-alive peer) blocks that request's handler thread in a raw socket read forever --
+        # permanently consuming one of _BoundedThreadingHTTPServer's fixed thread-pool slots.
+        # Observed directly 2026-09-14: a wrong-protocol diagnostic curl against this port held
+        # a slot indefinitely with the bound in place. 30s comfortably covers a slow legitimate
+        # client without leaving a stuck connection able to starve the pool for good.
+        timeout = 30
 
         def do_OPTIONS(self) -> None:  # noqa: N802 -- CORS preflight, same convention as
             # xibalba-cortex's local_api.py -- without this a browser-based caller (e.g. the
@@ -423,7 +494,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 if not self._require_admin(tenant_id=tenant_id):
                     return
                 if len(parts) == 3:
-                    self._send_json({"devices": [_enrich_device(d) for d in store.list_devices(tenant_id=tenant_id)]})
+                    self._send_json({"devices": _enrich_devices(store.list_devices(tenant_id=tenant_id))})
                     return
                 if len(parts) == 4:
                     device = store.get_device(tenant_id=tenant_id, device_id=parts[3])
@@ -572,7 +643,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
-                devices = [_enrich_device(d) for d in store.list_devices(tenant_id=tenant_id) if not d.get("synthetic")]
+                devices = _enrich_devices([d for d in store.list_devices(tenant_id=tenant_id) if not d.get("synthetic")])
                 grouped: dict[str, dict[str, Any]] = {}
                 for device in devices:
                     agent_id = str(device.get("agent_id") or device.get("did"))
@@ -1765,6 +1836,40 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 6) if denominator else None
 
 
+class _BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer capped at a fixed number of concurrent request threads.
+
+    Second, independent line of defense against the 2026-09-14 hang (see
+    _resolve_identities_cached()'s docstring for the primary fix -- batching + caching identity
+    resolution). Even with that fix, unbounded per-connection threading is itself a latent
+    amplifier for any future slow downstream call: acquiring the semaphore in process_request
+    (which runs in the single accept-loop thread) blocks new connections from spawning a thread
+    once the cap is hit, turning an unbounded explosion into bounded queuing. Ported from the
+    identical fix applied to xibalba-cortex's local_api.py the same day.
+    """
+
+    daemon_threads = True
+    max_concurrent_requests = 32
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._request_semaphore = threading.BoundedSemaphore(self.max_concurrent_requests)
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_semaphore.release()
+
+    def process_request(self, request, client_address) -> None:
+        self._request_semaphore.acquire()
+        threading.Thread(
+            target=self.process_request_thread,
+            args=(request, client_address),
+            daemon=self.daemon_threads,
+        ).start()
+
+
 def _configure_tls(server: ThreadingHTTPServer, *, tls_cert: Path, tls_key: Path, tls_client_ca: Path | None = None) -> None:
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -1791,11 +1896,11 @@ def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_
             raise ValueError("development auth bypass requires a loopback host")
     store = ShieldStore(db_path)
     handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin, dev_disable_admin_auth=dev_disable_admin_auth)
-    server = ThreadingHTTPServer((host, port), handler)
+    server = _BoundedThreadingHTTPServer((host, port), handler)
     if tls_port is not None:
         if not tls_cert or not tls_key:
             raise ValueError("--tls-port requires both --tls-cert and --tls-key")
-        tls_server = ThreadingHTTPServer((host, tls_port), handler)
+        tls_server = _BoundedThreadingHTTPServer((host, tls_port), handler)
         _configure_tls(tls_server, tls_cert=tls_cert, tls_key=tls_key, tls_client_ca=tls_client_ca)
         server.tls_server = tls_server  # type: ignore[attr-defined]
         server.tls_enabled = False  # type: ignore[attr-defined]
