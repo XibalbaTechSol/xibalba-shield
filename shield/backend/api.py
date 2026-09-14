@@ -32,6 +32,8 @@ try:
 except ImportError:  # pragma: no cover - production dependency is installed with Shield
     jwt = None  # type: ignore[assignment]
 
+from integrity_sdk.agent_identity import resolve_agent_identities
+
 from ..config import ConfigError
 from .store import ShieldStore
 from . import remediation
@@ -218,6 +220,13 @@ def _enrich_device(device: dict[str, Any]) -> dict[str, Any]:
     enriched["did"] = did
     enriched["agent_id"] = device.get("integrity_agent_id") or did
     canonical_agent_id = enriched["agent_id"]
+    # Standardized 2026-09-13 identity resolution (see integrity_sdk.agent_identity's own
+    # docstring): on-chain status + XNS handle/DID-doc name/local label, the same contract
+    # Cortex and the dashboard use so all three products agree on how to name and vouch for
+    # an agent. Fails open (never raises) if the oracle isn't reachable.
+    enriched["agent_identity"] = resolve_agent_identities(
+        [canonical_agent_id], os.environ.get("XIBALBA_ORACLE_URL", "http://localhost:8080"),
+    )[canonical_agent_id]
     pair_id = hashlib.sha256(f"{enriched.get('tenant_id', '')}:{enriched.get('device_id', '')}:{canonical_agent_id}".encode("utf-8")).hexdigest()[:24]
     hermes_agent_id = str(os.environ.get("XIBALBA_SHIELD_HERMES_AGENT_ID") or "").strip() or None
     enriched["integrity_registration"] = {

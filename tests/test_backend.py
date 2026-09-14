@@ -21,6 +21,20 @@ from shield.backend.store import ShieldStore
 ADMIN = "test-admin-token"
 
 
+@pytest.fixture(autouse=True)
+def _no_real_oracle_identity_lookups(monkeypatch):
+    """`_enrich_device` calls integrity_sdk.agent_identity.resolve_agent_identities (added
+    2026-09-13 for the cross-product identity-display standard), which makes real HTTP calls
+    to an oracle backend. This suite has no oracle running and must not depend on one --
+    stubbed to the function's own documented fail-open shape so every existing assertion
+    about agent_id/did/etc. is unaffected.
+    """
+    monkeypatch.setattr(
+        "shield.backend.api.resolve_agent_identities",
+        lambda dids, oracle_url, **kw: {did: {"did": did, "on_chain": False, "seen": False, "handle": None, "name": None, "local_label": None, "wallet_address": None, "display_name": did} for did in dids},
+    )
+
+
 def test_backend_admin_token_is_generated_once_without_logging_value(tmp_path):
     path = tmp_path / "state" / "admin.token"
     first, created = load_or_create_admin_token(path)
