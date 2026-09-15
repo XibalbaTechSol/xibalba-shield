@@ -269,6 +269,15 @@ class ShieldStore:
                 received_at TEXT NOT NULL,
                 FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
             );
+            -- Without these, dashboard_summary()'s `GROUP BY action WHERE tenant_id=?` and
+            -- `ORDER BY id DESC WHERE tenant_id=?` both fall back to a full table scan once
+            -- `decisions` grows large -- confirmed at 2.87M+ rows taking ~19s per dashboard
+            -- load (2026-09-15 telemetry-validation session), which is what the operator UI's
+            -- "Connecting..." stall on every login was actually waiting on.
+            CREATE INDEX IF NOT EXISTS idx_decisions_tenant_action
+                ON decisions(tenant_id, action);
+            CREATE INDEX IF NOT EXISTS idx_decisions_tenant_id_desc
+                ON decisions(tenant_id, id DESC);
 
             CREATE TABLE IF NOT EXISTS metrics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
