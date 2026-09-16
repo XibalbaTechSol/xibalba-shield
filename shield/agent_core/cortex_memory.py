@@ -8,11 +8,16 @@ import sqlite3
 import hashlib
 import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from ..codex_agent import redact_event
+
+
+_OUTBOX_MAX_BYTES = 16 * 1024 * 1024
+_OUTBOX_MAX_PAYLOAD_BYTES = 64 * 1024
+_OUTBOX_MAX_FLUSH_ROWS = 10
+_OUTBOX_MAX_WORKERS = 1
 
 
 class CortexMemoryProvider:
@@ -39,11 +44,31 @@ class CortexMemoryProvider:
 
     def _connect_outbox(self) -> sqlite3.Connection:
         self.outbox_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.outbox_path)
+        conn = sqlite3.connect(self.outbox_path, timeout=1.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=1000")
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=FULL")
         return conn
+
+    def _outbox_size_bytes(self) -> int:
+        return sum(
+            path.stat().st_size
+            for path in (
+                self.outbox_path,
+                Path(f"{self.outbox_path}-wal"),
+                Path(f"{self.outbox_path}-shm"),
+            )
+            if path.exists()
+        )
+
+    def _increment_metric(self, name: str) -> None:
+        with self._connect_outbox() as conn:
+            conn.execute(
+                "INSERT INTO cortex_outbox_metrics(name,value) VALUES(?,1) "
+                "ON CONFLICT(name) DO UPDATE SET value=value+1",
+                (name,),
+            )
 
     def _init_outbox(self) -> None:
         with self._connect_outbox() as conn:
@@ -62,6 +87,12 @@ class CortexMemoryProvider:
 
     def _enqueue(self, payload: dict[str, Any], event_id: str) -> None:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > _OUTBOX_MAX_PAYLOAD_BYTES:
+            self._increment_metric("oversize_dropped_total")
+            return
+        if self._outbox_size_bytes() + len(encoded.encode("utf-8")) > _OUTBOX_MAX_BYTES:
+            self._increment_metric("capacity_dropped_total")
+            return
         with self._connect_outbox() as conn:
             conn.execute("INSERT OR IGNORE INTO cortex_outbox(id,payload_json,created_at) VALUES(?,?,?)", (event_id, encoded, time.time()))
 
@@ -91,13 +122,12 @@ class CortexMemoryProvider:
     def flush(self, *, limit: int = 20) -> dict[str, int]:
         now = time.time()
         with self._connect_outbox() as conn:
-            rows = conn.execute("SELECT * FROM cortex_outbox WHERE status='pending' AND next_attempt_at <= ? ORDER BY created_at LIMIT ?", (now, max(1, min(int(limit), 1000)))).fetchall()
-        workers = max(1, min(int(os.environ.get("XIBALBA_CORTEX_OUTBOX_WORKERS", "1")), 32))
-        if workers == 1 or len(rows) < 2:
-            delivered = sum(1 for row in rows if self._publish(row))
-        else:
-            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="cortex-outbox") as pool:
-                delivered = sum(pool.map(self._publish, rows))
+            rows = conn.execute("SELECT * FROM cortex_outbox WHERE status='pending' AND next_attempt_at <= ? ORDER BY created_at LIMIT ?", (now, max(1, min(int(limit), _OUTBOX_MAX_FLUSH_ROWS)))).fetchall()
+        # The environment variable is intentionally not allowed to raise the
+        # concurrency ceiling. One process/device is the durable retry boundary;
+        # parallel publishers can duplicate claims and amplify an unavailable
+        # Cortex endpoint into a connection storm.
+        delivered = sum(1 for row in rows if self._publish(row))
         with self._connect_outbox() as conn:
             pending = conn.execute("SELECT COUNT(*) FROM cortex_outbox WHERE status='pending'").fetchone()[0]
             dead = conn.execute("SELECT COUNT(*) FROM cortex_outbox WHERE status='dead_letter'").fetchone()[0]

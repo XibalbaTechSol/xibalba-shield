@@ -79,3 +79,27 @@ def test_cortex_outbox_allowlist_and_dead_letter_metric(tmp_path):
     assert payload["source"]["metadata"]["redaction_proof"]
     assert provider.status()["dead_letter"] == 1
     assert provider.metrics()["dead_letter_total"] == 1
+
+
+def test_cortex_outbox_ignores_unsafe_parallelism_and_batch_size(tmp_path, monkeypatch):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    for index in range(25):
+        provider._enqueue({"content": str(index)}, f"event-{index}")
+    monkeypatch.setenv("XIBALBA_CORTEX_OUTBOX_WORKERS", "32")
+    monkeypatch.setattr(provider, "_publish", lambda row: True)
+    result = provider.flush(limit=1000)
+    assert result["attempted"] == 10
+    assert result["delivered"] == 10
+
+
+def test_cortex_outbox_rejects_oversize_payloads(tmp_path):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    provider._enqueue({"content": "x" * 70000}, "oversize")
+    assert provider.status()["pending"] == 0
+    assert provider.metrics()["oversize_dropped_total"] == 1
