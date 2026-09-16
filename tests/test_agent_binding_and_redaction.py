@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shield.agent_core.cortex_memory as cortex_memory
 from shield.backend.store import ShieldStore
 from shield.codex_agent import redact_event
 from shield.agent_core.cortex_memory import CortexMemoryProvider
@@ -103,3 +104,16 @@ def test_cortex_outbox_rejects_oversize_payloads(tmp_path):
     provider._enqueue({"content": "x" * 70000}, "oversize")
     assert provider.status()["pending"] == 0
     assert provider.metrics()["oversize_dropped_total"] == 1
+
+
+def test_cortex_outbox_rejects_when_storage_ceiling_is_reached(tmp_path, monkeypatch):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    monkeypatch.setattr(
+        cortex_memory, "_OUTBOX_MAX_BYTES", provider._outbox_size_bytes() + 1,
+    )
+    provider._enqueue({"content": "bounded"}, "capacity")
+    assert provider.status()["pending"] == 0
+    assert provider.metrics()["capacity_dropped_total"] == 1
