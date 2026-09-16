@@ -109,14 +109,23 @@ class CortexMemoryProvider:
         except Exception as exc:  # noqa: BLE001 -- durable retry boundary
             attempts = int(row["attempts"]) + 1
             status = "dead_letter" if attempts >= self.max_attempts else "pending"
-            with self._connect_outbox() as conn:
-                conn.execute("UPDATE cortex_outbox SET attempts=?, next_attempt_at=?, status=?, last_error=? WHERE id=?", (attempts, time.time() + min(300, 2 ** min(attempts, 8)), status, str(exc)[:500], row["id"]))
-                if status == "dead_letter":
-                    conn.execute("INSERT INTO cortex_outbox_metrics(name,value) VALUES('dead_letter_total',1) ON CONFLICT(name) DO UPDATE SET value=value+1")
+            try:
+                with self._connect_outbox() as conn:
+                    conn.execute("UPDATE cortex_outbox SET attempts=?, next_attempt_at=?, status=?, last_error=? WHERE id=?", (attempts, time.time() + min(300, 2 ** min(attempts, 8)), status, str(exc)[:500], row["id"]))
+                    if status == "dead_letter":
+                        conn.execute("INSERT INTO cortex_outbox_metrics(name,value) VALUES('dead_letter_total',1) ON CONFLICT(name) DO UPDATE SET value=value+1")
+            except sqlite3.OperationalError:
+                # A competing local writer must not turn a transient delivery
+                # failure into a systemd restart loop. The row remains pending
+                # and the next bounded cadence will retry it.
+                return False
             return False
-        with self._connect_outbox() as conn:
-            conn.execute("UPDATE cortex_outbox SET status='sent', sent_at=? WHERE id=?", (time.time(), row["id"]))
-            conn.execute("INSERT INTO cortex_outbox_metrics(name,value) VALUES('delivered_total',1) ON CONFLICT(name) DO UPDATE SET value=value+1")
+        try:
+            with self._connect_outbox() as conn:
+                conn.execute("UPDATE cortex_outbox SET status='sent', sent_at=? WHERE id=?", (time.time(), row["id"]))
+                conn.execute("INSERT INTO cortex_outbox_metrics(name,value) VALUES('delivered_total',1) ON CONFLICT(name) DO UPDATE SET value=value+1")
+        except sqlite3.OperationalError:
+            return False
         return True
 
     def flush(self, *, limit: int = 20, include_counts: bool = True) -> dict[str, int | None]:
