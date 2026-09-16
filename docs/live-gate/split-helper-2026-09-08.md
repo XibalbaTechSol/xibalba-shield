@@ -37,3 +37,23 @@ unit fix and coordinated restart, the live status reported:
 
 This remains local development evidence. The CA and credentials must be replaced by deployment-
 managed trust material before production use.
+
+## Revalidation — 2026-09-15
+
+The active root-owned helper and non-root endpoint were rechecked after a harmless
+`/tmp/ai/shadow-canary` launch. The canary reached `SIGSTOP`, and the recorded decision carried
+the live device ID, process event ID, invocation correlation ID, policy hash/version, and
+`contain` action. Remote export remained fail-closed and queued because the live authorization
+path was unavailable; local enforcement was not bypassed.
+
+The Shield virtual-environment suite (excluding the separately bounded real-venv installer
+test) completed with **331 passed, 12 skipped** in 112.18 seconds. The skipped cases are root or
+external-stack gates. The full validator's 180-second ceiling remains insufficient for the
+separate real-venv installer test, which exceeded a five-minute bounded run; this is retained as
+an open performance/tooling gate rather than counted as a pass.
+
+The pushed packaging templates now declare service caps: endpoint 512 MiB/50% CPU, helper
+1 GiB/100% CPU, Cortex outbox 256 MiB/25% CPU, and backend 512 MiB/50% CPU, with task and file
+descriptor limits. These templates have not yet been installed into `/etc/systemd/system` on
+this host because the validation session has no root elevation; the live units therefore still
+report their previous unlimited values.
