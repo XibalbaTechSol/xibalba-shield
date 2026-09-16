@@ -17,7 +17,7 @@ StartLimitBurst=3
 [Service]
 Environment=XIBALBA_CORTEX_OUTBOX_WORKERS=1
 ExecStart=
-ExecStart=/opt/xibalba-shield/venv/bin/python -m shield.cortex_outbox_worker --device-id xibalba-HP-Desktop-M01-F0xxx --batch-size 10 --interval 30
+ExecStart=/opt/xibalba-shield/venv/bin/python -m shield.cortex_outbox_worker --device-id ${SHIELD_DEVICE_ID} --batch-size 10 --interval 30
 Restart=on-failure
 RestartSec=30
 TimeoutStopSec=10
