@@ -12,6 +12,11 @@ EnvironmentFile=-/etc/xibalba-shield/shield.env
 ExecStart=/usr/local/bin/xibalba-shield-run
 Restart=on-failure
 RestartSec=5s
+MemoryMax=512M
+MemorySwapMax=512M
+CPUQuota=50%
+TasksMax=256
+LimitNOFILE=2048
 StateDirectory=xibalba-shield
 LogsDirectory=xibalba-shield
 # Dedicated non-root system account (created by scripts/install_linux_agent.sh), not root
