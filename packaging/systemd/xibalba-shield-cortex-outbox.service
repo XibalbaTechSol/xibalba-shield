@@ -2,15 +2,19 @@
 Description=Xibalba Shield durable Cortex outbox worker
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
 User=xibalba-shield
 Group=xibalba-shield
 EnvironmentFile=-/etc/xibalba-shield/shield.env
-ExecStart=/usr/local/bin/shield-cortex-outbox --device-id ${SHIELD_DEVICE_ID} --batch-size 100 --interval 1
-Restart=always
-RestartSec=5
+Environment=XIBALBA_CORTEX_OUTBOX_WORKERS=1
+ExecStart=/usr/local/bin/shield-cortex-outbox --device-id ${SHIELD_DEVICE_ID} --batch-size 10 --interval 30
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=10
 MemoryMax=256M
 MemorySwapMax=256M
 CPUQuota=25%
