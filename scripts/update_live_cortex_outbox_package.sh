@@ -6,6 +6,7 @@ set -euo pipefail
 # durable outbox database untouched.
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 python_bin=${PYTHON_BIN:-/opt/xibalba-shield/venv/bin/python}
+uv_bin=${UV_BIN:-/home/xibalba/.local/bin/uv}
 unit=xibalba-shield-cortex-outbox.service
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -13,8 +14,9 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 [[ -x "$python_bin" ]] || { echo "missing live Python: $python_bin" >&2; exit 1; }
+[[ -x "$uv_bin" ]] || { echo "missing uv installer: $uv_bin" >&2; exit 1; }
 
-"$python_bin" -m pip install --no-deps --upgrade "$repo_root"
+"$uv_bin" pip install --python "$python_bin" --no-deps --reinstall "$repo_root"
 
 "$python_bin" - <<'PY'
 from shield.agent_core import cortex_memory
