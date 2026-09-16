@@ -119,7 +119,7 @@ class CortexMemoryProvider:
             conn.execute("INSERT INTO cortex_outbox_metrics(name,value) VALUES('delivered_total',1) ON CONFLICT(name) DO UPDATE SET value=value+1")
         return True
 
-    def flush(self, *, limit: int = 20) -> dict[str, int]:
+    def flush(self, *, limit: int = 20, include_counts: bool = True) -> dict[str, int | None]:
         now = time.time()
         with self._connect_outbox() as conn:
             rows = conn.execute("SELECT * FROM cortex_outbox WHERE status='pending' AND next_attempt_at <= ? ORDER BY created_at LIMIT ?", (now, max(1, min(int(limit), _OUTBOX_MAX_FLUSH_ROWS)))).fetchall()
@@ -128,6 +128,8 @@ class CortexMemoryProvider:
         # parallel publishers can duplicate claims and amplify an unavailable
         # Cortex endpoint into a connection storm.
         delivered = sum(1 for row in rows if self._publish(row))
+        if not include_counts:
+            return {"attempted": len(rows), "delivered": delivered, "pending": None, "dead_letter": None}
         with self._connect_outbox() as conn:
             pending = conn.execute("SELECT COUNT(*) FROM cortex_outbox WHERE status='pending'").fetchone()[0]
             dead = conn.execute("SELECT COUNT(*) FROM cortex_outbox WHERE status='dead_letter'").fetchone()[0]

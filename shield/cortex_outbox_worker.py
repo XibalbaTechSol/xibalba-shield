@@ -25,7 +25,10 @@ def main() -> None:
     if provider is None:
         raise SystemExit("XIBALBA_CORTEX_URL, XIBALBA_CORTEX_TOKEN, and XIBALBA_AGENT_ID are required")
     while True:
-        provider.flush(limit=max(1, min(args.batch_size, 1000)))
+        # Counts require scanning the potentially multi-gigabyte outbox. The
+        # worker is a delivery loop, not a status endpoint; status callers can
+        # request counts explicitly without making every cadence expensive.
+        provider.flush(limit=max(1, min(args.batch_size, 1000)), include_counts=False)
         if args.once:
             return
         time.sleep(max(0.25, args.interval))

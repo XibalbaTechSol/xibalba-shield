@@ -96,6 +96,19 @@ def test_cortex_outbox_ignores_unsafe_parallelism_and_batch_size(tmp_path, monke
     assert result["delivered"] == 10
 
 
+def test_cortex_outbox_worker_flush_can_skip_unbounded_counts(tmp_path):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    provider._enqueue({"content": "bounded"}, "event-1")
+    provider._publish = lambda row: True
+
+    result = provider.flush(limit=10, include_counts=False)
+
+    assert result == {"attempted": 1, "delivered": 1, "pending": None, "dead_letter": None}
+
+
 def test_cortex_outbox_rejects_oversize_payloads(tmp_path):
     provider = CortexMemoryProvider(
         base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
