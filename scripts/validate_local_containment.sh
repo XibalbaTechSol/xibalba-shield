@@ -72,10 +72,17 @@ done
 if command -v curl >/dev/null 2>&1; then
   echo
   echo "Current authenticated runtime status:"
-  curl --silent --show-error --connect-timeout 2 \
-    -H 'Authorization: Bearer dev' \
-    'http://127.0.0.1:8421/api/shield/exporter-status?tenant_id=tenant-a' \
-    || echo "backend status unavailable"
+  ADMIN_TOKEN_FILE="${SHIELD_ADMIN_TOKEN_FILE:-${HOME}/.xibalba-shield/backend-admin.token}"
+  if [[ -r "${ADMIN_TOKEN_FILE}" ]]; then
+    # Feed the header through stdin so the secret is not exposed in the curl
+    # command line or in process listings.
+    printf 'Authorization: Bearer %s\n' "$(<"${ADMIN_TOKEN_FILE}")" |
+      curl --silent --show-error --connect-timeout 2 -H @- \
+        'http://127.0.0.1:8421/api/shield/exporter-status?tenant_id=tenant-a' \
+        || echo "backend status unavailable"
+  else
+    echo "backend status unavailable: admin token file is not readable"
+  fi
 fi
 
 exit "${RESULT}"
