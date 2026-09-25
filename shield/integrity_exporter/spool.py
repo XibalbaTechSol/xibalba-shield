@@ -43,7 +43,12 @@ _DEFAULT_MAX_BACKOFF_SECONDS = 3600.0
 def _connect(db_path: Path | str) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    # The exporter and watchdog retry cycle can enter this single-device spool from
+    # separate threads. Match the Core middleware spool's bounded lock wait so a
+    # transient writer collision does not immediately turn an already-signed
+    # decision into an evidence-loss log entry.
+    conn = sqlite3.connect(str(path), timeout=5.0)
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS spool (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +60,7 @@ def _connect(db_path: Path | str) -> sqlite3.Connection:
             last_error TEXT
         )"""
     )
+    conn.commit()
     return conn
 
 
@@ -121,11 +127,16 @@ def run_retry_cycle(
                 "UPDATE spool SET attempts = ?, next_retry_at = ?, last_error = ? WHERE id = ?",
                 (new_attempts, now + _backoff_seconds(new_attempts), str(exc), row_id),
             )
+            # Release the write lock before attempting the next network row. Keeping
+            # this transaction open across the submit loop lets a slow/unreachable BCC
+            # endpoint block a new decision's enqueue path and turn durable evidence
+            # into `database is locked` loss.
+            conn.commit()
             still_pending += 1
         else:
             conn.execute("DELETE FROM spool WHERE id = ?", (row_id,))
+            conn.commit()
             delivered += 1
-    conn.commit()
     conn.close()
     return RetryCycleResult(delivered=delivered, still_pending=still_pending)
 

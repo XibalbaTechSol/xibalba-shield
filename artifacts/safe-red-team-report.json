@@ -1,0 +1,27 @@
+{
+  "action_counts": {
+    "contain": 20,
+    "deny": 10
+  },
+  "decision_rows": 118,
+  "expected_actions": {
+    "smb-contain-shadow-ai-processes": "contain",
+    "smb-deny-unregistered-agent-tools": "deny",
+    "smb-escalate-sensitive-file-write": "contain"
+  },
+  "failures": [],
+  "generated_at": "2026-09-24T06:41:28.498620Z",
+  "ignored_background_rows": 88,
+  "iterations": 10,
+  "log_path": "/var/log/xibalba-shield/decisions.jsonl",
+  "note": "Synthetic disposable fixtures routed through the live EventRouter; not production detection or threat prevalence evidence.",
+  "profile": "smb",
+  "rule_counts": {
+    "smb-contain-shadow-ai-processes": 10,
+    "smb-deny-unregistered-agent-tools": 10,
+    "smb-escalate-sensitive-file-write": 10
+  },
+  "schema": "shield.safe_red_team_report.v1",
+  "status": "pass",
+  "synthetic": true
+}

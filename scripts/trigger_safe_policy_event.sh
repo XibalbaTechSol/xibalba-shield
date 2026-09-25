@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# End-to-end, harmless policy trigger for the SMB shadow-AI process rule.
+# End-to-end, harmless policy trigger for the local shadow-AI process rule.
 # This copies /bin/sleep into a disposable path containing /ai/shadow-agent,
 # executes it briefly, waits for the real Shield event log, then resumes the
 # process if the local contain action stopped it. No kill, cgroup freeze, or
@@ -17,6 +17,8 @@ command -v sha256sum >/dev/null || { echo "Missing sha256sum" >&2; exit 1; }
 command -v awk >/dev/null || { echo "Missing awk" >&2; exit 1; }
 
 log_path="${SHIELD_DECISION_LOG:-/var/log/xibalba-shield/decisions.jsonl}"
+test_seconds="${SHIELD_POLICY_TEST_SECONDS:-600}"
+wait_seconds="${SHIELD_POLICY_WAIT_SECONDS:-120}"
 root_dir="$(mktemp -d /tmp/xibalba-shield-policy-test.XXXXXX)"
 test_dir="$root_dir/ai/shadow-agent"
 test_bin="$test_dir/policy-test"
@@ -41,15 +43,20 @@ before_lines=0
 echo "Launching harmless policy test binary"
 echo "  path:   $test_bin"
 echo "  sha256: $test_hash"
-"$test_bin" 120 &
+echo "  wait:   ${wait_seconds}s (bounded)"
+"$test_bin" "$test_seconds" &
 pid="$!"
 echo "  pid:    $pid"
 
 matched="false"
-for _ in {1..60}; do
+for _ in $(seq 1 "$((wait_seconds * 2))"); do
+  # The installed policy may identify this decision as either the source
+  # Rego rule (smb-contain-shadow-ai-processes) or the runtime local-risk
+  # gate (_local-risk-containment). Correlate on this exact disposable path
+  # and the contain action so stale/unrelated decisions cannot satisfy the
+  # observation window.
   if [[ -f "$log_path" ]] && tail -n +$((before_lines + 1)) "$log_path" \
-    | grep -Fq 'smb-contain-shadow-ai-processes' \
-    && tail -n +$((before_lines + 1)) "$log_path" \
+    | grep -F "$test_bin" \
     | grep -Fq '"action": "contain"'; then
     matched="true"
     break
@@ -60,11 +67,12 @@ done
 if [[ "$matched" == "true" ]]; then
   echo "PASS Shield emitted a decision for the test process"
   tail -n +$((before_lines + 1)) "$log_path" \
-    | grep -F 'smb-contain-shadow-ai-processes' \
+    | grep -F "$test_bin" \
+    | grep -F '"action": "contain"' \
     | sed -E 's/(cmdline|command_line|argv)":?[^,}]*/\1":"[redacted]/g' \
     | tail -3
 else
-  echo "FAIL no matching Shield decision appeared within 30 seconds" >&2
+  echo "FAIL no matching Shield decision appeared within ${wait_seconds} seconds" >&2
   exit 2
 fi
 

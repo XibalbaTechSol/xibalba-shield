@@ -1381,7 +1381,7 @@ wheels = [
 [[package]]
 name = "integrity-sdk"
 version = "0.1.0"
-source = { git = "https://github.com/XibalbaTechSol/integrity-core.git?subdirectory=integrity-sdk&rev=b761015a721596e56b2e6f466c8d572ec8d6c2dd#b761015a721596e56b2e6f466c8d572ec8d6c2dd" }
+source = { editable = "../integrity-core/integrity-sdk" }
 dependencies = [
     { name = "base58" },
     { name = "cbor2" },
@@ -1397,6 +1397,40 @@ dependencies = [
     { name = "psutil" },
     { name = "requests" },
     { name = "web3" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40.0" },
+    { name = "base58", specifier = ">=2.1.0" },
+    { name = "cbor2", specifier = ">=5.6.0" },
+    { name = "cryptography", specifier = ">=42.0.0" },
+    { name = "eth-account", specifier = ">=0.13.0" },
+    { name = "eth-utils", specifier = ">=5.1.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "jcs", specifier = ">=0.2.1" },
+    { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=0.3.0" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
+    { name = "mlflow-skinny", specifier = ">=3.0.0" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0.0" },
+    { name = "opentelemetry-api", specifier = ">=1.42.1" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.42.1" },
+    { name = "opentelemetry-sdk", specifier = ">=1.42.1" },
+    { name = "pandas", marker = "extra == 'anthropic'", specifier = ">=2.0.0" },
+    { name = "pandas", marker = "extra == 'autolog'", specifier = ">=2.0.0" },
+    { name = "pandas", marker = "extra == 'langchain'", specifier = ">=2.0.0" },
+    { name = "pandas", marker = "extra == 'openai'", specifier = ">=2.0.0" },
+    { name = "psutil", specifier = ">=5.9.0" },
+    { name = "requests", specifier = ">=2.31.0" },
+    { name = "web3", specifier = ">=7.4.0" },
+]
+provides-extras = ["autolog", "openai", "anthropic", "langchain", "mcp"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mcp", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-cov", specifier = ">=5.0.0" },
 ]
 
 [[package]]
@@ -3249,7 +3283,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "integrity-sdk", git = "https://github.com/XibalbaTechSol/integrity-core.git?subdirectory=integrity-sdk&rev=b761015a721596e56b2e6f466c8d572ec8d6c2dd" },
+    { name = "integrity-sdk", editable = "../integrity-core/integrity-sdk" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "mlflow", specifier = ">=3.15.1" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.13.0" },

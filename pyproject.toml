@@ -20,18 +20,9 @@ classifiers = [
 dependencies = [
     # One-way dependency on integrity-sdk (protocol spec §14.1), imported the same way any
     # third-party agent runtime would use it -- no privileged API, no special-cased access.
-    # Git subdirectory dependency keeps clean CI runners independent of a sibling checkout.
-    # Immutable cross-repository pin: this revision signs invocation_id into BCC commitments.
-    # Advance only after the corresponding Integrity Protocol contract and evidence gates pass.
-    # Bumped 2026-09-14: adds integrity_sdk.agent_identity (needed by this repo's device
-    # identity-resolution code) and moves canonical BCC signing from json.dumps(sort_keys=True)
-    # to RFC 8785 JCS. Verified JCS-compatible against the live bcc-middleware/oracle deployment
-    # before bumping (a throwaway JCS-signed commitment round-tripped with authorized: True, no
-    # signature error) -- see this repo's handoff doc for the verification record. Pinned to
-    # 7a1f9c0 rather than an earlier commit because agent_identity.py does not exist before it;
-    # that commit also carries unrelated same-night dashboard/userapi work bundled in the same
-    # push, which is a known, accepted wart here, not an oversight.
-    "integrity-sdk @ git+https://github.com/XibalbaTechSol/integrity-core.git@b761015a721596e56b2e6f466c8d572ec8d6c2dd#subdirectory=integrity-sdk",
+    # Local-first authority: uv resolves this to the sibling Integrity-core checkout below.
+    # Shield and Cortex must consume the same newest SDK tree as the Core workspace.
+    "integrity-sdk",
     "mlflow>=3.15.1",
     "jsonschema>=4.23.0",
     "pyjwt[crypto]>=2.13.0",
@@ -48,6 +39,9 @@ shield-cortex-outbox = "shield.cortex_outbox_worker:main"
 
 [tool.setuptools.packages.find]
 include = ["shield*"]
+
+[tool.uv.sources]
+integrity-sdk = { path = "../integrity-core/integrity-sdk", editable = true }
 
 [tool.setuptools.package-data]
 shield = ["policies/rego/*.rego", "sensors/ebpf/*.bpf.c"]
