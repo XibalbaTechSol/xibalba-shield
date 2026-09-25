@@ -19,7 +19,32 @@ import { ShieldApi } from '../api'
 import { Brand } from './Brand'
 import { Overview } from './Overview'
 import { ResourceView } from './ResourceView'
-import { readSession } from '../storage'
+import { readSession, writeSession } from '../storage'
+
+function sharedScopeFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return { agentId: params.get('agent_id') || '', storeId: params.get('store_id') || '' }
+  } catch {
+    return { agentId: '', storeId: '' }
+  }
+}
+
+function writeSharedScope(agentId, storeId = '') {
+  try {
+    const url = new URL(window.location.href)
+    if (agentId) url.searchParams.set('agent_id', agentId); else url.searchParams.delete('agent_id')
+    if (storeId) url.searchParams.set('store_id', storeId); else url.searchParams.delete('store_id')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  } catch {}
+}
+
+async function fetchCortexNamespaces() {
+  const response = await fetch('/cortex-api/api/agents', { credentials: 'include', headers: { Accept: 'application/json' } })
+  if (!response.ok) throw new Error(`Cortex namespace roster unavailable (${response.status})`)
+  const payload = await response.json()
+  return (payload.agents || []).filter((agent) => agent.agent_id && agent.store_id)
+}
 
 const NAV = [
   ['overview', Gauge, 'Command center', 'COMMAND CENTER'],
@@ -37,6 +62,12 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
   const [realOnly, setRealOnly] = useState(() => readSession('shield-real-only') !== 'false')
   const [menu, setMenu] = useState(false)
   const [view, setView] = useState('overview')
+  const [selectedAgentId, setSelectedAgentId] = useState(() => {
+    const shared = sharedScopeFromUrl()
+    return shared.agentId || readSession('shield-selected-agent')
+  })
+  const [selectedStoreId, setSelectedStoreId] = useState(() => sharedScopeFromUrl().storeId)
+  const [sharedNamespaces, setSharedNamespaces] = useState([])
   const [data, setData] = useState({
     summary: null,
     agents: [],
@@ -79,8 +110,9 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
       api.hermesStatus(),
       api.hermesDeliveries(),
       api.runtimeResources(),
+      fetchCortexNamespaces().catch(() => []),
     ])
-    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox, hermes, hermesDeliveries, resources] = results
+    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox, hermes, hermesDeliveries, resources, cortexNamespaces] = results
     const live = summary.status === 'fulfilled'
     const summaryDevices = summary.status === 'fulfilled' ? (summary.value.devices || []) : []
     const visibleDevices = (devices.status === 'fulfilled' ? devices.value.devices : summaryDevices)
@@ -117,6 +149,20 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
       resources: resources.status === 'fulfilled' ? resources.value.resources : current.resources,
     }))
 
+    if (cortexNamespaces.status === 'fulfilled') setSharedNamespaces(cortexNamespaces.value)
+
+    if (agents.status === 'fulfilled') {
+      const available = agents.value.agents || []
+      const shared = sharedScopeFromUrl()
+      const current = available.some((agent) => agent.agent_id === selectedAgentId)
+        ? selectedAgentId
+        : (shared.agentId && available.some((agent) => agent.agent_id === shared.agentId) ? shared.agentId : available[0]?.agent_id || '')
+      if (current) {
+        setSelectedAgentId(current)
+        writeSession('shield-selected-agent', current)
+      }
+    }
+
     const failure = summary.reason?.message || 'Authentication failed'
     if (!live && /401|unauthorized|invalid admin token|admin token required/i.test(failure)) {
       logout('Session expired. Sign in again to reconnect to this tenant.')
@@ -129,7 +175,13 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
         : { state: 'error', message: failure }
     )
     setRefreshing(false)
-  }, [api, logout, realOnly])
+  }, [api, logout, realOnly, selectedAgentId])
+
+  const namespaceOptions = sharedNamespaces.length
+    ? sharedNamespaces.map((agent) => ({ ...agent, namespaceKey: `${agent.store_id}\0${agent.agent_id}` }))
+    : data.agents.flatMap((group) => (group.available_agents || []).map((agent) => ({ ...agent, store_id: '', namespaceKey: agent.agent_id })))
+  const selectedNamespace = namespaceOptions.find((agent) => agent.agent_id === selectedAgentId && agent.store_id === selectedStoreId)
+    || namespaceOptions.find((agent) => agent.agent_id === selectedAgentId)
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
@@ -229,6 +281,27 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
             <p>{connection.tenant} · {connection.baseUrl}</p>
           </div>
           <div className="tools">
+            <label className="shared-agent-picker">
+              <span>Namespace</span>
+              <select
+                aria-label="Shared agent namespace"
+                value={selectedNamespace?.namespaceKey || ''}
+                onChange={(event) => {
+                  const next = event.target.value
+                  const selected = namespaceOptions.find((agent) => agent.namespaceKey === next)
+                  if (!selected) return
+                  setSelectedAgentId(selected.agent_id)
+                  setSelectedStoreId(selected.store_id || '')
+                  writeSession('shield-selected-agent', selected.agent_id)
+                  writeSharedScope(selected.agent_id, selected.store_id || '')
+                }}
+              >
+                <option value="">Select agent</option>
+                {namespaceOptions.map((agent) => (
+                  <option key={agent.namespaceKey} value={agent.namespaceKey}>{agent.name || agent.agent_name || agent.agent_id} · {agent.store_id ? (agent.writable === false || agent.store_access === 'read_only' ? 'read only' : 'writable') : 'Shield local'}</option>
+                ))}
+              </select>
+            </label>
             <button
               aria-label="Refresh data"
               title="Refresh"

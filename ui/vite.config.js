@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
@@ -8,6 +8,15 @@ function devAdminToken() {
   if (process.env.SHIELD_DEV_ADMIN_TOKEN) return process.env.SHIELD_DEV_ADMIN_TOKEN.trim()
   const tenant = process.env.SHIELD_DEV_TENANT || 'tenant-a'
   try { return readFileSync(process.env.SHIELD_DEV_ADMIN_TOKEN_FILE || resolve(homedir(), `.xibalba-shield/${tenant}-admin-token`), 'utf8').trim() } catch { return '' }
+}
+
+// Keep Cortex's operator token server-side for local development.  Shield's
+// browser must use the same namespace authority as Cortex without receiving a
+// bearer token or depending on a cross-app cookie.
+function cortexDevToken() {
+  const cortexHome = process.env.CORTEX_HOME || resolve(homedir(), '.hermes/xibalba-cortex')
+  const tokenFile = process.env.CORTEX_DEV_TOKEN_FILE || resolve(cortexHome, '.viewer-dev.token')
+  try { return existsSync(tokenFile) ? readFileSync(tokenFile, 'utf8').trim() : '' } catch { return '' }
 }
 
 const devAuthDisabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.SHIELD_DEV_DISABLE_AUTH || '').trim().toLowerCase())
@@ -34,7 +43,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: process.env.SHIELD_DEV_BACKEND_URL || 'http://127.0.0.1:8421',
+        // The legacy Shield control plane on 8765 and the retired validation
+        // backend on 8421 are intentionally offline. Dedicated local UI work
+        // uses the current backend on 8435 instead.
+        target: process.env.SHIELD_DEV_BACKEND_URL || 'http://127.0.0.1:8435',
         changeOrigin: false,
         configure(proxy) {
           proxy.on('proxyReq', (proxyRequest, request) => {
@@ -44,6 +56,15 @@ export default defineConfig({
               proxyRequest.removeHeader('x-shield-dev-auth')
             }
           })
+        },
+      },
+      '/cortex-api': {
+        target: process.env.CORTEX_LOCAL_API_URL || 'http://127.0.0.1:8420',
+        changeOrigin: false,
+        rewrite: (path) => path.replace(/^\/cortex-api/, ''),
+        configure(proxy) {
+          const token = cortexDevToken()
+          if (token) proxy.on('proxyReq', (proxyRequest) => proxyRequest.setHeader('Authorization', `Bearer ${token}`))
         },
       },
     },
