@@ -28,5 +28,8 @@ if [[ -n "${SHIELD_RESPONDER_ARGS:-}" ]]; then
   read -r -a responder_args <<<"$SHIELD_RESPONDER_ARGS"
   args+=("${responder_args[@]}")
 fi
+if [[ "${SHIELD_DEV_UNSAFE_RESPONDERS:-false}" == "true" ]]; then
+  args+=(--unsafe-local-responders)
+fi
 
 exec /usr/local/bin/shield "${args[@]}"

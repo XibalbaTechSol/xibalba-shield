@@ -12,10 +12,10 @@ EnvironmentFile=-/etc/xibalba-shield/shield.env
 ExecStart=/usr/local/bin/xibalba-shield-run
 Restart=on-failure
 RestartSec=5s
-MemoryMax=512M
-MemorySwapMax=512M
-CPUQuota=50%
-TasksMax=256
+MemoryMax=128M
+MemorySwapMax=128M
+CPUQuota=25%
+TasksMax=64
 LimitNOFILE=2048
 StateDirectory=xibalba-shield
 LogsDirectory=xibalba-shield
@@ -39,7 +39,11 @@ ProtectKernelTunables=false
 # BCC must read /lib/modules/<kernel>/build to compile the embedded probe.
 # Keep module loading itself constrained by the capability bounding set below.
 ProtectKernelModules=false
-ProtectControlGroups=true
+# Gated cgroup responders require a delegated service subtree. The responder
+# proof artifact remains mandatory; delegation only makes the proven operation
+# technically possible and does not enable it by itself.
+ProtectControlGroups=false
+Delegate=yes
 ProtectClock=true
 ProtectHostname=true
 # BCC resolves the architecture-specific syscall symbol through /proc.
@@ -54,8 +58,10 @@ SystemCallArchitectures=native
 UMask=0077
 # The main process consumes events from the root helper and needs only the
 # narrowly-scoped signal capability to freeze a process owned by another UID.
-CapabilityBoundingSet=CAP_KILL
-AmbientCapabilities=CAP_KILL
+# CAP_KILL supports the explicit destructive gate; CAP_NET_ADMIN is required
+# only for the separately gated, destination-scoped nftables responder.
+CapabilityBoundingSet=CAP_KILL CAP_NET_ADMIN
+AmbientCapabilities=CAP_KILL CAP_NET_ADMIN
 # SystemCallFilter=/MemoryDenyWriteExecute= are deliberately NOT set here: BCC's
 # BPF(text=...) JIT-compiles the eBPF C source via an embedded LLVM in this process's own
 # userspace before loading it via the bpf() syscall, and guessing which syscall-filter

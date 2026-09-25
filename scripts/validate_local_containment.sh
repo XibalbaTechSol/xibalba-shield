@@ -32,13 +32,13 @@ mkdir -p "${CANARY_DIR}"
 cp /usr/bin/sleep "${CANARY}"
 chmod 0755 "${CANARY}"
 
-echo "Starting harmless canary: ${CANARY} 30"
-"${CANARY}" 30 &
+echo "Starting harmless canary: ${CANARY} 120"
+"${CANARY}" 120 &
 PID=$!
 echo "canary_pid=${PID}"
 
 state=""
-for attempt in $(seq 1 20); do
+for attempt in $(seq 1 60); do
   state="$(ps -o stat= -p "${PID}" 2>/dev/null | tr -d ' ' || true)"
   printf 'poll=%02d state=%s\n' "${attempt}" "${state:-gone}"
   if [[ "${state}" == T* ]]; then
@@ -61,11 +61,16 @@ fi
 echo
 echo "Recent matching local audit records:"
 for log in \
+  "/var/log/xibalba-shield/decisions.jsonl" \
   "${HOME}/.xibalba-shield/decisions.jsonl" \
   "/root/.xibalba-shield/decisions.jsonl"; do
   if [[ -f "${log}" ]]; then
     echo "-- ${log}"
-    rg 'smb-contain-shadow-ai-processes|shadow-canary' "${log}" | tail -5 || true
+    if command -v rg >/dev/null 2>&1; then
+      rg 'smb-contain-shadow-ai-processes|shadow-canary' "${log}" | tail -5 || true
+    else
+      grep -E 'smb-contain-shadow-ai-processes|shadow-canary' "${log}" | tail -5 || true
+    fi
   fi
 done
 
