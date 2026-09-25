@@ -7,10 +7,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/xibalba-shield/backend.env
-# Keep the packaged service on the same control-plane port used by the UI/Caddy
-# reverse proxy and by shield-backend's default.  A mismatch here makes login
-# appear to succeed against one process and subsequent session checks hit another.
-ExecStart=/opt/xibalba-shield/venv/bin/shield-backend --host 127.0.0.1 --port 8421 --db-path /home/xibalba/.xibalba-shield/backend.sqlite3 --admin-token-file /home/xibalba/.xibalba-shield/backend-admin.token
+# Keep the packaged service on the dedicated local control-plane port used by
+# xibalba-shield's UI. Retired 8421/8765 control planes must not be revived by
+# an install or restart.
+ExecStart=/opt/xibalba-shield/venv/bin/shield-backend --host 127.0.0.1 --port 8435 --db-path /home/xibalba/.xibalba-shield/backend.sqlite3 --admin-token-file /home/xibalba/.xibalba-shield/backend-admin.token
 Restart=on-failure
 RestartSec=3s
 MemoryMax=512M
