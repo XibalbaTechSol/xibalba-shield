@@ -1,0 +1,13 @@
+[Unit]
+Description=Xibalba Shield bounded development red-team loop
+After=xibalba-shield.service
+ConditionPathExists=/home/xibalba/Projects/xibalba-shield/scripts/run_safe_red_team_loop.py
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/xibalba/Projects/xibalba-shield
+Environment=SHIELD_ENV=development
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/flock -n /run/xibalba-shield-red-team.lock /usr/bin/python3 scripts/run_safe_red_team_loop.py smb --iterations 10 --output artifacts/safe-red-team-report.json
+RuntimeMaxSec=180

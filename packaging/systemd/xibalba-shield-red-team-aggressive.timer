@@ -1,0 +1,9 @@
+[Unit]
+Description=One-shot aggressive Xibalba Shield development red-team burst
+
+[Timer]
+OnBootSec=1min
+Unit=xibalba-shield-red-team-aggressive.service
+
+[Install]
+WantedBy=timers.target

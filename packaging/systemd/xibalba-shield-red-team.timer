@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic Xibalba Shield development red-team loop
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=xibalba-shield-red-team.service
+
+[Install]
+WantedBy=timers.target
