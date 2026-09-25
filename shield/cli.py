@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def _make_sensor(
     dev_interval: float,
     sensitive_paths: list[str],
     privileged_socket: str | None = None,
+    dev_scenario: str | None = None,
 ):
     if name == "process-exec":
         if privileged_socket:
@@ -62,7 +64,7 @@ def _make_sensor(
     if name == "dev":
         from .sensors.dev_generator import DevModeSensor
 
-        return DevModeSensor(device_id=device_id, interval_sec=dev_interval)
+        return DevModeSensor(device_id=device_id, interval_sec=dev_interval, policy_scenario=dev_scenario)
     raise ValueError(f"unknown sensor {name!r}")  # unreachable: argparse `choices` already enforces this
 
 
@@ -186,6 +188,15 @@ def _run(args: argparse.Namespace) -> int:
         device_config = DeviceConfig(device_id=args.device_id, tenant_id=args.tenant_id or "",
                                      device_role=args.device_role or "",
                                      bcc_middleware_url=args.bcc_middleware_url or DeviceConfig.bcc_middleware_url)
+
+    if getattr(args, "dev_scenario", None):
+        if args.sensor != "dev" or not args.no_containment or os.environ.get("SHIELD_ENV") != "development":
+            print(
+                "shield run: --dev-scenario requires --sensor dev, --no-containment, "
+                "and SHIELD_ENV=development",
+                file=sys.stderr,
+            )
+            return 2
 
     # Exporter URLs: an explicit --bcc-middleware-url/--oracle-url flag always wins (this is
     # what lets docker-compose's shield service point at container-network hostnames); absent
@@ -321,6 +332,17 @@ def _run(args: argparse.Namespace) -> int:
         from .agent_core import NftFlowBlocker, ProductionReadiness
 
         readiness = ProductionReadiness.from_mapping()
+        if args.unsafe_local_responders:
+            if os.environ.get("SHIELD_ENV") != "development" or os.environ.get("SHIELD_DEV_UNSAFE_RESPONDERS") != "true":
+                print("shield run: --unsafe-local-responders requires SHIELD_ENV=development and SHIELD_DEV_UNSAFE_RESPONDERS=true", file=sys.stderr)
+                return 1
+            print("WARNING: development-only responder override enabled; production readiness proofs are bypassed", file=sys.stderr)
+            readiness = ProductionReadiness.from_mapping({
+                **{key: True for key in ("policy_signature_verified", "agent_identity_verified", "kernel_probe_verified", "audit_receipt_verified", "rollback_verified", "operator_approval")},
+                "kill_runtime_tested": True,
+                "cgroup_runtime_tested": True,
+                "network_runtime_tested": True,
+            })
         if args.responder_readiness:
             try:
                 readiness = ProductionReadiness.from_artifact(
@@ -351,12 +373,71 @@ def _run(args: argparse.Namespace) -> int:
     from .agent_core.cortex_memory import CortexMemoryProvider
     memory_provider = CortexMemoryProvider.from_environment(device_id=device_config.device_id, base_url=args.cortex_url, token=args.cortex_token)
 
+    # Tenant settings are advisory for local enforcement but authoritative for the
+    # bounded Hermes profile. The watchdog refreshes them later; this startup read makes
+    # the initial publisher honor the UI profile without changing host-managed secrets.
+    hermes_settings = dict(device_config.effective_settings)
+    if device_config.backend_url and device_config.device_token:
+        try:
+            from .config import fetch_device_settings
+
+            fetched = fetch_device_settings(device_config=device_config, timeout_sec=2.0)
+            hermes_settings = dict(fetched.settings)
+            device_config.effective_settings = dict(fetched.settings)
+            device_config.settings_version = fetched.settings_version
+            device_config.settings_updated_at = fetched.updated_at
+        except Exception as exc:  # noqa: BLE001 -- optional downstream sync cannot stop local enforcement
+            print(f"shield run: Hermes settings sync unavailable; using host defaults: {exc}", file=sys.stderr)
+
+    hermes_publisher = None
+    hermes_spool_path = os.environ.get("SHIELD_HERMES_SPOOL", "").strip()
+    hermes_key_path = os.environ.get("SHIELD_HERMES_KEY", "").strip()
+    configured_hermes_agent = str(hermes_settings.get("hermesAgentId") or "").strip()
+    host_hermes_agent = os.environ.get("XIBALBA_SHIELD_HERMES_AGENT_ID", "").strip()
+    if configured_hermes_agent and host_hermes_agent and configured_hermes_agent != host_hermes_agent:
+        print("shield run: Hermes agent identity does not match the host-managed runtime identity", file=sys.stderr)
+        return 1
+    if hermes_settings.get("hermesEnabled") is not False and (hermes_spool_path or hermes_key_path):
+        if not (hermes_spool_path and hermes_key_path):
+            print("shield run: SHIELD_HERMES_SPOOL and SHIELD_HERMES_KEY must be configured together", file=sys.stderr)
+            return 1
+        try:
+            from .hermes_contract import build_event
+            from .hermes_transport import HermesSpool
+
+            hermes_spool = HermesSpool.from_key_path(
+                hermes_spool_path,
+                hermes_key_path,
+                max_bytes=int(hermes_settings.get("hermesSpoolMaxBytes", 16 * 1024 * 1024)),
+                max_batch=int(hermes_settings.get("hermesMaxBatch", 10)),
+            )
+            hermes_scope = str(hermes_settings.get("hermesEventScope", "all"))
+
+            def hermes_publisher(event, decision):
+                event_class = str(getattr(event, "klass", ""))
+                if hermes_scope == "network" and event_class != "network_flow":
+                    return
+                if hermes_scope == "decisions" and event_class == "network_flow":
+                    return
+                action = getattr(getattr(decision, "decision", None), "action", "log_only")
+                enforcement = None
+                if action == "contain":
+                    enforcement = {"action": "freeze", "status": "pending", "target_ref": getattr(getattr(event, "process", None), "pid", None)}
+                envelope = build_event(
+                    event, decision, device_role=device_config.device_role or "workstation",
+                    sensor=args.sensor, transport="local-spool", enforcement=enforcement,
+                )
+                hermes_spool.publish(envelope, delivery_id=envelope["delivery"]["delivery_id"])
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"shield run: invalid Hermes transport configuration: {exc}", file=sys.stderr)
+            return 1
+
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
                          decision_sink=evidence_publisher.publish_decision,
                          enforcement_outcome_sink=evidence_publisher.publish_outcome,
-                         memory_provider=memory_provider)
+                         memory_provider=memory_provider, hermes_publisher=hermes_publisher)
 
     try:
         sensor = _make_sensor(
@@ -366,6 +447,7 @@ def _run(args: argparse.Namespace) -> int:
             args.dev_interval,
             device_config.sensitive_paths,
             getattr(args, "privileged_socket", None),
+            getattr(args, "dev_scenario", None),
         )
     except PermissionError as exc:
         print(f"shield run: {exc}", file=sys.stderr)
@@ -647,6 +729,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="process-exec/file-write/tcp-connect need root (real eBPF); dev needs neither (synthetic)")
     p_run.add_argument("--dev-interval", type=float, default=1.0,
                        help="seconds between synthetic events, --sensor dev only (default: 1.0)")
+    p_run.add_argument("--dev-scenario", choices=("smb", "professional-services", "regulated"), default=None,
+                       help="development-only policy fixture sequence; requires --sensor dev and --no-containment")
     p_run.add_argument("--device-config", type=Path, default=None, help="device/tenant config file")
     p_run.add_argument("--device-id", default=None, help="required if --device-config is not given")
     p_run.add_argument("--tenant-id", default=None)
@@ -683,6 +767,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="enable cgroup v2 freeze only when its readiness proofs pass")
     p_run.add_argument("--enable-block-flow", action="store_true",
                        help="enable scoped nftables blocks only when readiness proofs pass")
+    p_run.add_argument("--unsafe-local-responders", action="store_true",
+                       help="DEVELOPMENT ONLY: bypass readiness proofs when explicitly marked SHIELD_ENV=development")
     p_run.add_argument("--slm-backend", choices=("none", "simulated", "local"), default="none",
                        help="Tier-2 escalation backend for Tier-1 'escalate' decisions: 'none' "
                             "(default, unchanged behavior), 'simulated' (deterministic, synthetic "

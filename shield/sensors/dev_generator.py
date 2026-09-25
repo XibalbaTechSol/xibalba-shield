@@ -24,6 +24,8 @@ from ..schemas.events import (
     AgentEvent,
     AgentInfo,
     DnsInfo,
+    FileActivity,
+    FileInfo,
     NetworkFlow,
     NetworkFlowInfo,
     NormalizedEvent,
@@ -44,12 +46,14 @@ class DevModeSensor:
     `device_id` is threaded through every emitted event so a caller can correlate them
     against a specific `DeviceContext`."""
 
-    def __init__(self, device_id: str, *, interval_sec: float = 1.0, seed: int | None = None):
+    def __init__(self, device_id: str, *, interval_sec: float = 1.0, seed: int | None = None,
+                 policy_scenario: str | None = None):
         self.device_id = device_id
         self.interval_sec = interval_sec
         self._rng = random.Random(seed)
         self._pid_counter = itertools.count(1000)
         self._last_event_at: str | None = None
+        self.policy_scenario = policy_scenario
 
     def _next_process_event(self) -> ProcessActivity:
         name, base, ppid, parent_name = self._rng.choice(_SAMPLE_PROCESSES)
@@ -90,7 +94,114 @@ class DevModeSensor:
             activity=AgentActivity(type="inference", risk_level=self._rng.choice(["low", "medium", "high"])),
         )
 
+    def policy_fixtures(self) -> list[NormalizedEvent]:
+        """Return safe, explicitly development-only events that exercise live routing.
+
+        These are not kernel observations. They exist for validating the complete
+        sensor -> EventRouter -> policy -> decision sink -> UI path without touching a
+        real workload. Callers must use ``--no-containment`` for these fake PIDs.
+        """
+        if self.policy_scenario == "smb":
+            return [
+                ProcessActivity(
+                    device_id=self.device_id,
+                    process=ProcessInfo(pid=next(self._pid_counter), name="policy-fixture",
+                                        exe_path="/opt/ai/shadow-agent/run"),
+                    activity=Activity(type="launch", severity="medium"),
+                ),
+                ProcessActivity(
+                    device_id=self.device_id,
+                    process=ProcessInfo(pid=next(self._pid_counter), name="policy-fixture",
+                                        exe_path="/opt/llm-tools/model-runner"),
+                    activity=Activity(type="launch", severity="medium"),
+                ),
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:unregistered", name="policy-fixture-agent"),
+                    context=AgentContext(tools_called=["read_file"]),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+                FileActivity(
+                    device_id=self.device_id,
+                    process=ProcessInfo(pid=next(self._pid_counter), name="policy-fixture"),
+                    file=FileInfo(path="/etc/shield/policy-test", name="policy-test"),
+                    activity=Activity(type="write", severity="high"),
+                ),
+                FileActivity(
+                    device_id=self.device_id,
+                    process=ProcessInfo(pid=next(self._pid_counter), name="policy-fixture"),
+                    file=FileInfo(path="/home/test/.ssh/authorized_keys", name="authorized_keys"),
+                    activity=Activity(type="write", severity="high"),
+                ),
+            ]
+        if self.policy_scenario == "professional-services":
+            return [
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:unregistered", name="policy-fixture-agent"),
+                    context=AgentContext(tools_called=["read_file"]),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:unapproved-routing", name="policy-fixture-agent"),
+                    context=AgentContext(model_endpoint="https://unapproved.example/model"),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:client-context", name="policy-fixture-agent"),
+                    context=AgentContext(data_sources=["customer_records"]),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:financial-context", name="policy-fixture-agent"),
+                    context=AgentContext(data_sources=["financial_docs"]),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+            ]
+        if self.policy_scenario == "regulated":
+            return [
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:unregistered", name="policy-fixture-agent"),
+                    context=AgentContext(tools_called=["read_file"]),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:high-risk-output", name="policy-fixture-agent"),
+                    context=AgentContext(tools_called=["publish_output"]),
+                    activity=AgentActivity(type="output", risk_level="high"),
+                ),
+                AgentEvent(
+                    device_id=self.device_id,
+                    agent=AgentInfo(agent_id="did:test:phi-context", name="policy-fixture-agent"),
+                    context=AgentContext(data_sources=["patient_record"]),
+                    activity=AgentActivity(type="inference", risk_level="high"),
+                ),
+                FileActivity(
+                    device_id=self.device_id,
+                    process=ProcessInfo(pid=next(self._pid_counter), name="policy-fixture"),
+                    file=FileInfo(path="/etc/shield/policy-test", name="policy-test"),
+                    activity=Activity(type="write", severity="high"),
+                ),
+            ]
+        return []
+
     def events(self) -> Iterator[NormalizedEvent]:
+        if self.policy_scenario:
+            fixtures = self.policy_fixtures()
+            if not fixtures:
+                raise ValueError(f"unknown policy scenario {self.policy_scenario!r}")
+            while True:
+                for event in fixtures:
+                    self._last_event_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    yield event
+                    if self.interval_sec > 0:
+                        time.sleep(self.interval_sec)
+
         generators = [self._next_process_event, self._next_network_event, self._next_agent_event]
         while True:
             self._last_event_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

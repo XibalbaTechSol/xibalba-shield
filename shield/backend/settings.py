@@ -36,6 +36,18 @@ SETTING_RULES: dict[str, tuple[type, set[Any] | None]] = {
     "guardrailRetrieval": (bool, None),
     "guardrailOutputChecks": (bool, None),
     "guardrailPostAction": (bool, None),
+    # Hermes is a downstream, analysis-only consumer. Key material remains host-managed.
+    "hermesEnabled": (bool, None),
+    "hermesAgentId": (str, None),
+    "hermesTransport": (str, {"local-spool"}),
+    "hermesAnalysisOnly": (bool, None),
+    "hermesRedactionMode": (str, {"strict"}),
+    "hermesEventScope": (str, {"all", "decisions", "network"}),
+    "hermesSpoolPath": (str, None),
+    "hermesKeyPath": (str, None),
+    "hermesMaxBatch": (int, None),
+    "hermesSpoolMaxBytes": (int, None),
+    "hermesAutoRetry": (bool, None),
 }
 
 
@@ -58,6 +70,16 @@ def validate_settings(settings: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("approvalThreshold must be between 0 and 100")
         if key in {"containmentCooldown", "evidenceRetention"} and value < 0:
             raise ValueError(f"{key} must be non-negative")
+        if key == "hermesAnalysisOnly" and value is not True:
+            raise ValueError("hermesAnalysisOnly must remain enabled")
+        if key == "hermesAgentId" and len(value) > 256:
+            raise ValueError("hermesAgentId must be at most 256 characters")
+        if key in {"hermesSpoolPath", "hermesKeyPath"} and len(value) > 512:
+            raise ValueError(f"{key} must be at most 512 characters")
+        if key == "hermesMaxBatch" and not 1 <= value <= 10:
+            raise ValueError("hermesMaxBatch must be between 1 and 10")
+        if key == "hermesSpoolMaxBytes" and not 65536 <= value <= 16 * 1024 * 1024:
+            raise ValueError("hermesSpoolMaxBytes must be between 65536 and 16777216")
         result[key] = value
     return result
 

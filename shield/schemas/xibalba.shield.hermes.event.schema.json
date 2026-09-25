@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xibalba.dev/schemas/xibalba.shield.hermes.event/1.0.0",
+  "title": "Xibalba Shield Hermes Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "event_id", "emitted_at", "observed_at", "device", "source", "event", "policy", "enforcement", "privacy", "delivery"],
+  "properties": {
+    "schema": {"const": "xibalba.shield.hermes.event"},
+    "schema_version": {"const": "1.0.0"},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9._:-]+$"},
+    "emitted_at": {"type": "string", "format": "date-time", "maxLength": 64},
+    "observed_at": {"type": "string", "format": "date-time", "maxLength": 64},
+    "device": {
+      "type": "object", "additionalProperties": false,
+      "required": ["device_id", "tenant_id", "role"],
+      "properties": {
+        "device_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "tenant_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "role": {"type": "string", "maxLength": 64}
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["component", "sensor", "transport"],
+      "properties": {
+        "component": {"const": "shield"},
+        "sensor": {"type": "string", "maxLength": 64},
+        "transport": {"type": "string", "enum": ["local-spool", "local-unix-socket", "backend-outbox"]}
+      }
+    },
+    "event": {
+      "type": "object", "additionalProperties": false,
+      "required": ["class", "action", "severity", "risk_score", "confidence"],
+      "properties": {
+        "class": {"type": "string", "enum": ["process_activity", "file_activity", "network_flow", "agent_event", "sensor_health", "exporter_health", "configuration_change"]},
+        "action": {"type": "string", "maxLength": 64},
+        "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+        "risk_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "process": {"$ref": "#/$defs/process"},
+        "file": {"$ref": "#/$defs/file"},
+        "network": {"$ref": "#/$defs/network"},
+        "agent": {"$ref": "#/$defs/agent"},
+        "sensor_health": {"$ref": "#/$defs/health"},
+        "exporter_health": {"$ref": "#/$defs/health"},
+        "configuration_change": {"$ref": "#/$defs/configuration_change"}
+      }
+    },
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["action", "rule_id", "rule_name", "policy_version", "policy_hash", "reason_code", "human_review_required"],
+      "properties": {
+        "action": {"type": "string", "enum": ["allow", "log_only", "deny", "escalate", "contain"]},
+        "rule_id": {"type": "string", "maxLength": 256},
+        "rule_name": {"type": "string", "maxLength": 256},
+        "policy_version": {"type": "string", "maxLength": 128},
+        "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "reason_code": {"type": "string", "enum": ["RULE_MATCH", "NO_MATCH", "OPA_UNAVAILABLE", "LOCAL_RISK_GATE", "MALFORMED_EVENT"]},
+        "human_review_required": {"type": "boolean"}
+      }
+    },
+    "enforcement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requested", "action", "status", "target_ref", "error_code"],
+      "properties": {
+        "requested": {"type": "boolean"},
+        "action": {"type": "string", "enum": ["none", "freeze", "quarantine", "kill", "block_flow"]},
+        "status": {"type": "string", "enum": ["not_requested", "pending", "completed", "failed", "denied"]},
+        "target_ref": {"type": ["string", "null"], "maxLength": 256},
+        "error_code": {"type": ["string", "null"], "maxLength": 128}
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["redaction_version", "redacted", "redaction_proof", "omitted_fields"],
+      "properties": {
+        "redaction_version": {"const": "pii-redaction-1"},
+        "redacted": {"const": true},
+        "redaction_proof": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "omitted_fields": {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 64}
+      }
+    },
+    "delivery": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_logged", "queued", "delivery_id", "acknowledged", "attempt"],
+      "properties": {
+        "local_logged": {"type": "boolean"},
+        "queued": {"type": "boolean"},
+        "delivery_id": {"type": "string", "maxLength": 256},
+        "acknowledged": {"type": "boolean"},
+        "attempt": {"type": "integer", "minimum": 0, "maximum": 100000}
+      }
+    }
+  },
+  "$defs": {
+    "process": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "pid": {"type": "integer", "minimum": 0}, "ppid": {"type": "integer", "minimum": 0},
+        "name": {"type": "string", "maxLength": 128}, "parent_name": {"type": "string", "maxLength": 128},
+        "path_class": {"type": "string", "enum": ["system", "user-home", "temporary", "runtime", "other", "unknown"]},
+        "path_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+        "hash_sha256": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "maxLength": 128}, "ext": {"type": "string", "maxLength": 32},
+        "path_class": {"type": "string", "enum": ["system", "user-home", "temporary", "runtime", "other", "unknown"]},
+        "path_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "network": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "source_scope": {"type": "string", "enum": ["private", "loopback", "link_local", "public", "unknown"]},
+        "destination_scope": {"type": "string", "enum": ["private", "loopback", "link_local", "public", "unknown"]},
+        "src_port": {"type": "integer", "minimum": 0, "maximum": 65535}, "dst_port": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "protocol": {"type": "string", "maxLength": 16}, "direction": {"type": "string", "enum": ["inbound", "outbound"]}
+      }
+    },
+    "agent": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "agent_ref": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "type": {"type": "string", "maxLength": 64}, "data_source_count": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "tool_count": {"type": "integer", "minimum": 0, "maximum": 1000}
+      }
+    },
+    "health": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"status": {"type": "string", "maxLength": 64}, "lost_events": {"type": "integer", "minimum": 0}, "queue_depth": {"type": "integer", "minimum": 0}, "drop_count": {"type": "integer", "minimum": 0}}
+    },
+    "configuration_change": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"setting_group": {"type": "string", "maxLength": 64}, "version": {"type": "string", "maxLength": 128}, "approved": {"type": "boolean"}}
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "xibalba.shield.hermes.event",
+  "schema_version": "1.0.0",
+  "event_id": "evt-fixture-1",
+  "emitted_at": "2026-09-19T00:00:00Z",
+  "observed_at": "2026-09-19T00:00:00Z",
+  "device": {"device_id": "device-opaque", "tenant_id": "tenant-opaque", "role": "workstation"},
+  "source": {"component": "shield", "sensor": "linux-ebpf-process", "transport": "local-spool"},
+  "event": {"class": "process_activity", "action": "exec", "severity": "low", "risk_score": 0.0, "confidence": 0.0, "process": {"pid": 1234, "ppid": 1, "name": "python", "parent_name": "init", "path_class": "system", "path_hash": null, "hash_sha256": null}},
+  "policy": {"action": "log_only", "rule_id": "", "rule_name": "", "policy_version": "1.0.0", "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "reason_code": "NO_MATCH", "human_review_required": false},
+  "enforcement": {"requested": false, "action": "none", "status": "not_requested", "target_ref": null, "error_code": null},
+  "privacy": {"redaction_version": "pii-redaction-1", "redacted": true, "redaction_proof": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "omitted_fields": ["cmdline", "raw_path"]},
+  "delivery": {"local_logged": true, "queued": true, "delivery_id": "evt-fixture-1", "acknowledged": false, "attempt": 0}
+}

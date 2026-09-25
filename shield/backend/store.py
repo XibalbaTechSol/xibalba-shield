@@ -269,6 +269,28 @@ class ShieldStore:
                 received_at TEXT NOT NULL,
                 FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
             );
+            -- Routine unmatched observations are counters plus one bounded sample per minute,
+            -- rather than one full decision JSON row per observed process event.
+            CREATE TABLE IF NOT EXISTS decision_observation_rollups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                event_class TEXT NOT NULL,
+                rule_id TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                bucket_start TEXT NOT NULL,
+                observation_count INTEGER NOT NULL DEFAULT 1,
+                first_received_at TEXT NOT NULL,
+                last_received_at TEXT NOT NULL,
+                sample_json TEXT NOT NULL,
+                UNIQUE (tenant_id, device_id, action, event_class, rule_id, severity, bucket_start),
+                FOREIGN KEY (tenant_id, device_id) REFERENCES devices(tenant_id, device_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_decision_rollups_tenant_bucket
+                ON decision_observation_rollups(tenant_id, bucket_start DESC);
+            CREATE INDEX IF NOT EXISTS idx_decision_rollups_bucket
+                ON decision_observation_rollups(bucket_start, id);
             -- Without these, dashboard_summary()'s `GROUP BY action WHERE tenant_id=?` and
             -- `ORDER BY id DESC WHERE tenant_id=?` both fall back to a full table scan once
             -- `decisions` grows large -- confirmed at 2.87M+ rows taking ~19s per dashboard
@@ -397,6 +419,29 @@ class ShieldStore:
                 FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS tenant_network_config (
+                tenant_id TEXT PRIMARY KEY,
+                config_json TEXT NOT NULL,
+                config_version TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS network_config_change_requests (
+                request_id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                proposed_config_json TEXT NOT NULL,
+                previous_config_json TEXT NOT NULL,
+                proposed_version TEXT NOT NULL,
+                status TEXT NOT NULL,
+                requested_by TEXT NOT NULL,
+                approved_by TEXT,
+                created_at TEXT NOT NULL,
+                decided_at TEXT,
+                rolled_back_at TEXT,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS transaction_intents (
                 intent_hash TEXT PRIMARY KEY,
                 tenant_id TEXT NOT NULL,
@@ -452,10 +497,51 @@ class ShieldStore:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
         if "approval_status" not in account_columns:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved'")
+        # Time indexes make the hourly, bounded telemetry retention pass independent
+        # of the decision-history table size. They are cheap on a fresh dev reset.
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_decisions_received_at ON decisions(received_at, id)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_metrics_received_at ON metrics(received_at, id)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_detection_quality_received_at ON detection_quality(received_at, id)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_enforcement_outcomes_received_at ON enforcement_outcomes(received_at, id)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_test_events_recorded_at ON test_events(recorded_at, id)")
         self._conn.commit()
         # Backfill membership rows for accounts created before the membership table existed.
         self._conn.execute("INSERT OR IGNORE INTO account_tenant_memberships(account_id,tenant_id,role,created_at) SELECT account_id,tenant_id,role,created_at FROM accounts")
         self._conn.commit()
+
+    def prune_telemetry(self, *, max_age_days: int = 1, limit: int = 1000) -> dict[str, int]:
+        """Delete an indexed, bounded slice of expired diagnostic history.
+
+        Local signed commitments and control-plane configuration live in separate stores
+        and are deliberately outside this retention policy.
+        """
+        if max_age_days < 1 or limit < 1:
+            raise ValueError("max_age_days and limit must be positive")
+        cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - max_age_days * 86400))
+        tables = {
+            "decisions": "received_at",
+            "metrics": "received_at",
+            "detection_quality": "received_at",
+            "enforcement_outcomes": "received_at",
+            "test_events": "recorded_at",
+        }
+        removed: dict[str, int] = {}
+        with self._conn:
+            for table, time_column in tables.items():
+                cursor = self._conn.execute(
+                    f"DELETE FROM {table} WHERE id IN (SELECT id FROM {table} "
+                    f"WHERE {time_column} < ? ORDER BY {time_column}, id LIMIT ?)",
+                    (cutoff, min(int(limit), 5000)),
+                )
+                removed[table] = max(0, int(cursor.rowcount))
+            cursor = self._conn.execute(
+                "DELETE FROM decision_observation_rollups WHERE id IN ("
+                "SELECT id FROM decision_observation_rollups WHERE bucket_start < ? "
+                "ORDER BY bucket_start, id LIMIT ?)" ,
+                (cutoff, min(int(limit), 5000)),
+            )
+            removed["decision_observation_rollups"] = max(0, int(cursor.rowcount))
+        return removed
 
     def enroll_device(
         self,
@@ -991,6 +1077,27 @@ class ShieldStore:
         export = decision.get("export", {})
         export_ok = bool(export.get("decision_exported") or export.get("authorized"))
         synthetic = bool(decision.get("synthetic") or decision.get("_demo"))
+        received_at = _now()
+        if action in {"allow", "log_only"} and rule_id == "_no_match":
+            bucket_start = datetime.now(timezone.utc).replace(second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with self._conn:
+                cursor = self._conn.execute(
+                    """
+                    INSERT INTO decision_observation_rollups
+                        (tenant_id, device_id, action, event_class, rule_id, severity, bucket_start,
+                         observation_count, first_received_at, last_received_at, sample_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                    ON CONFLICT(tenant_id, device_id, action, event_class, rule_id, severity, bucket_start)
+                    DO UPDATE SET observation_count=observation_count+1, last_received_at=excluded.last_received_at
+                    RETURNING id, observation_count
+                    """,
+                    (tenant_id, device_id, action, event_class, rule_id, severity, bucket_start,
+                     received_at, received_at, json.dumps(decision, sort_keys=True)),
+                )
+                row = cursor.fetchone()
+                if int(row["observation_count"]) == 1:
+                    self._touch_device(tenant_id, device_id)
+            return int(row["id"])
         with self._conn:
             cursor = self._conn.execute(
                 """
@@ -998,7 +1105,7 @@ class ShieldStore:
                     (tenant_id, device_id, decision_json, action, event_class, rule_id, severity, export_ok, synthetic, received_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (tenant_id, device_id, json.dumps(decision, sort_keys=True), action, event_class, rule_id, severity, int(export_ok), int(synthetic), _now()),
+                (tenant_id, device_id, json.dumps(decision, sort_keys=True), action, event_class, rule_id, severity, int(export_ok), int(synthetic), received_at),
             )
             self._touch_device(tenant_id, device_id)
         return int(cursor.lastrowid)
@@ -1075,6 +1182,82 @@ class ShieldStore:
         except (TypeError, json.JSONDecodeError):
             return {}
         return value if isinstance(value, dict) else {}
+
+    def get_network_config_record(self, *, tenant_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT config_json, config_version, updated_at FROM tenant_network_config WHERE tenant_id=?", (tenant_id,)
+        ).fetchone()
+        if not row:
+            return {"config": {}, "config_version": None, "updated_at": None}
+        return {"config": json.loads(row["config_json"]), "config_version": row["config_version"], "updated_at": row["updated_at"]}
+
+    def put_network_config(self, *, tenant_id: str, config: dict[str, Any], actor_id: str = "control-plane") -> dict[str, Any]:
+        from ..network_config import NetworkConfig
+
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        NetworkConfig.from_mapping(config)
+        canonical = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        version = "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        now = _now()
+        with self._conn:
+            self._conn.execute("INSERT INTO tenants (tenant_id, created_at) VALUES (?, ?) ON CONFLICT(tenant_id) DO NOTHING", (tenant_id, now))
+            self._conn.execute(
+                """INSERT INTO tenant_network_config (tenant_id, config_json, config_version, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(tenant_id) DO UPDATE SET config_json=excluded.config_json, config_version=excluded.config_version, updated_at=excluded.updated_at""",
+                (tenant_id, canonical, version, now),
+            )
+        return {"config": config, "config_version": version, "updated_at": now, "updated_by": actor_id}
+
+    def create_network_config_change_request(self, *, tenant_id: str, proposed_config: dict[str, Any], requested_by: str = "tenant-admin") -> dict[str, Any]:
+        from ..network_config import NetworkConfig
+
+        NetworkConfig.from_mapping(proposed_config)
+        previous = self.get_network_config_record(tenant_id=tenant_id)["config"]
+        canonical = json.dumps(proposed_config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        version = "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        request_id = "network-change-" + secrets.token_hex(8)
+        now = _now()
+        with self._conn:
+            self._conn.execute("INSERT INTO tenants (tenant_id, created_at) VALUES (?, ?) ON CONFLICT(tenant_id) DO NOTHING", (tenant_id, now))
+            self._conn.execute("INSERT INTO network_config_change_requests VALUES(?,?,?,?,?,?,?,?,?,?,?)", (request_id, tenant_id, canonical, json.dumps(previous, sort_keys=True), version, "pending", requested_by, None, now, None, None))
+        return {"request_id": request_id, "tenant_id": tenant_id, "proposed_config": proposed_config, "proposed_version": version, "status": "pending", "requested_by": requested_by, "created_at": now}
+
+    def list_network_config_change_requests(self, *, tenant_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute("SELECT * FROM network_config_change_requests WHERE tenant_id=? ORDER BY created_at DESC", (tenant_id,)).fetchall()
+        return [{"request_id": row["request_id"], "tenant_id": row["tenant_id"], "proposed_config": json.loads(row["proposed_config_json"]), "proposed_version": row["proposed_version"], "status": row["status"], "requested_by": row["requested_by"], "approved_by": row["approved_by"], "created_at": row["created_at"], "decided_at": row["decided_at"], "rolled_back_at": row["rolled_back_at"]} for row in rows]
+
+    def decide_network_config_change_request(self, *, tenant_id: str, request_id: str, approver_id: str, approve: bool) -> dict[str, Any]:
+        row = self._conn.execute("SELECT * FROM network_config_change_requests WHERE tenant_id=? AND request_id=?", (tenant_id, request_id)).fetchone()
+        if row is None:
+            raise KeyError("network configuration change request not found")
+        if row["status"] != "pending":
+            raise ValueError("network configuration change request is not pending")
+        status = "approved" if approve else "rejected"
+        now = _now()
+        with self._conn:
+            if approve:
+                self._conn.execute("INSERT INTO tenant_network_config (tenant_id,config_json,config_version,updated_at) VALUES(?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET config_json=excluded.config_json,config_version=excluded.config_version,updated_at=excluded.updated_at", (tenant_id, row["proposed_config_json"], row["proposed_version"], now))
+            self._conn.execute("UPDATE network_config_change_requests SET status=?,approved_by=?,decided_at=? WHERE tenant_id=? AND request_id=?", (status, approver_id if approve else None, now, tenant_id, request_id))
+        return {"request_id": request_id, "status": status, "approved_by": approver_id if approve else None, "decided_at": now}
+
+    def rollback_network_config_change_request(self, *, tenant_id: str, request_id: str, actor_id: str) -> dict[str, Any]:
+        row = self._conn.execute("SELECT * FROM network_config_change_requests WHERE tenant_id=? AND request_id=?", (tenant_id, request_id)).fetchone()
+        if row is None:
+            raise KeyError("network configuration change request not found")
+        if row["status"] != "approved":
+            raise ValueError("only an approved network configuration change can be rolled back")
+        previous = json.loads(row["previous_config_json"])
+        from ..network_config import NetworkConfig
+        NetworkConfig.from_mapping(previous) if previous else None
+        canonical = json.dumps(previous, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        version = "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        now = _now()
+        with self._conn:
+            self._conn.execute("INSERT INTO tenant_network_config (tenant_id,config_json,config_version,updated_at) VALUES(?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET config_json=excluded.config_json,config_version=excluded.config_version,updated_at=excluded.updated_at", (tenant_id, canonical, version, now))
+            self._conn.execute("UPDATE network_config_change_requests SET status='rolled_back',rolled_back_at=? WHERE tenant_id=? AND request_id=?", (now, tenant_id, request_id))
+        return {"request_id": request_id, "status": "rolled_back", "rolled_back_at": now, "rolled_back_by": actor_id}
 
     def get_tenant_settings_record(self, *, tenant_id: str) -> dict[str, Any]:
         settings = self.get_tenant_settings(tenant_id=tenant_id)
@@ -1546,6 +1729,29 @@ class ShieldStore:
             """,
             (tenant_id,),
         ).fetchall()
+        observation_rows = self._conn.execute(
+            """
+            SELECT action, SUM(observation_count) AS count
+            FROM decision_observation_rollups
+            WHERE tenant_id=?
+            GROUP BY action
+            """,
+            (tenant_id,),
+        ).fetchall()
+        decisions_by_action = {row["action"]: int(row["count"]) for row in decision_rows}
+        for row in observation_rows:
+            decisions_by_action[row["action"]] = decisions_by_action.get(row["action"], 0) + int(row["count"])
+        observation_samples = self._conn.execute(
+            """
+            SELECT device_id, action, event_class, rule_id, severity, observation_count,
+                   bucket_start, first_received_at, last_received_at, sample_json
+            FROM decision_observation_rollups
+            WHERE tenant_id=?
+            ORDER BY bucket_start DESC, id DESC
+            LIMIT 25
+            """,
+            (tenant_id,),
+        ).fetchall()
         latest_rows = self._conn.execute(
             """
             SELECT decision_json, received_at
@@ -1576,11 +1782,39 @@ class ShieldStore:
             """,
             (tenant_id,),
         ).fetchone()
+        event_class_rows = self._conn.execute(
+            """
+            SELECT event_class, SUM(count) AS count FROM (
+                SELECT event_class, COUNT(*) AS count
+                FROM decisions WHERE tenant_id=? GROUP BY event_class
+                UNION ALL
+                SELECT event_class, SUM(observation_count) AS count
+                FROM decision_observation_rollups WHERE tenant_id=? GROUP BY event_class
+            ) GROUP BY event_class
+            """,
+            (tenant_id, tenant_id),
+        ).fetchall()
         return {
             "tenant_id": tenant_id,
             "device_count": len(devices),
             "devices": devices,
-            "decisions_by_action": {row["action"]: row["count"] for row in decision_rows},
+            "decisions_by_action": decisions_by_action,
+            "event_class_counts": {row["event_class"]: int(row["count"]) for row in event_class_rows},
+            "decision_observation_rollups": [
+                {
+                    "device_id": row["device_id"],
+                    "action": row["action"],
+                    "event_class": row["event_class"],
+                    "rule_id": row["rule_id"],
+                    "severity": row["severity"],
+                    "count": int(row["observation_count"]),
+                    "bucket_start": row["bucket_start"],
+                    "first_received_at": row["first_received_at"],
+                    "last_received_at": row["last_received_at"],
+                    "sample_decision": json.loads(row["sample_json"]),
+                }
+                for row in observation_samples
+            ],
             "latest_decisions": [
                 {"received_at": row["received_at"], "decision": json.loads(row["decision_json"])}
                 for row in latest_rows

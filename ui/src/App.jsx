@@ -16,6 +16,7 @@ export default function App() {
   const [connection, setConnection] = useState(() =>
     JSON.parse(readSession('shield-connection', '{}'))
   )
+  const [consoleTheme, setConsoleTheme] = useState(() => readSession('shield-console-theme', 'legacy'))
 
   const connect = (conn) => {
     setConnection(conn)
@@ -56,5 +57,5 @@ export default function App() {
     return <SignIn back={() => setView('landing')} connect={connect} />
   }
 
-  return <Dashboard connection={connection} logout={logout} />
+  return <Dashboard connection={connection} logout={logout} theme={consoleTheme} onThemeChange={setConsoleTheme} />
 }

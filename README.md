@@ -29,6 +29,16 @@ policy metadata, and cleans up the OPA child process. This is local smoke/runtim
 does not claim production supervision, deployment readiness, Windows lifecycle coverage, or live
 Integrity export.
 
+## Hermes Shield agent boundary
+
+The Settings → Hermes Agent panel configures a tenant-scoped, analysis-only profile. Enrolled
+agents fetch the validated profile at startup and apply only bounded delivery controls:
+enablement, event scope, batch size, and the 16 MiB spool ceiling. The HMAC key and spool
+directory remain host-managed through `SHIELD_HERMES_KEY` and `SHIELD_HERMES_SPOOL`; saving the
+browser profile never creates, reads, or rotates key material. Operators can inspect safe local
+transport counters through the authenticated `GET /api/shield/hermes-status` endpoint. Hermes
+does not authorize Shield decisions or enforcement.
+
 This repository is the **immune system** in a three-repository ecosystem designed as a living
 organism. (`integrity-dashboard` — the operator presentation layer, previously developed as a
 separate `integrity-mvp` repository — now lives inside `integrity-core` as a component, not a
@@ -671,6 +681,7 @@ Systemd artifacts:
 
 - `packaging/systemd/xibalba-shield.service`
 - `packaging/systemd/xibalba-shield-ebpf-helper.service`
+- `packaging/logrotate/xibalba-shield`
 - `packaging/systemd/shield.env.example`
 
 Runbook:
@@ -682,11 +693,19 @@ The endpoint unit runs `shield run` as a supervised non-root process, using `/et
 Helper scripts:
 
 - `scripts/install_linux_agent.sh`: installs the package and systemd unit.
+- `scripts/verify_resource_controls.sh`: verifies live systemd CPU/memory/task ceilings and log rotation; run after a root-level install.
 - `scripts/generate_local_mtls_ca.sh`: creates a local-development CA plus server/client certificates; never use these credentials as a production trust root.
 - `scripts/repair_device_config_tls.sh`: installs the local client credentials, switches the device config to `https://127.0.0.1:8443`, and restarts the endpoint.
 - `scripts/rotate_backend_token.sh` / `scripts/rotate_tenant_admin_token.sh`: rotate backend credentials without printing token values.
 - `scripts/update_policy_bundle.sh`: fetches a tenant policy, validates it, and reloads/restarts the service.
 - `scripts/burn_in.py`: records root-free throughput, CPU/RSS, decision mix, false-positive review stats, and optional Shield ADR/precision/time-to-contain from labeled event JSONL.
+
+The process-exec sensor reports every observed `execve` from the host. Each event is then
+evaluated by OPA, emitted through telemetry, and appended to the decision log. A high host
+process-churn rate therefore increases CPU and log volume linearly; it is not an internal
+timer or retry loop. The packaged agent is capped at 128 MiB RAM and 25% CPU, the helper at
+256 MiB RAM and 50% CPU, and the decision log rotates at 100 MiB with seven compressed
+rotations. These controls must be verified against the installed units, not only the checkout.
 
 ## E2E Validation
 

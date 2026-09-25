@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Check, Crosshair, FileCheck2, Fingerprint, Globe2, LockKeyhole, Radar, RotateCcw, Settings2, Shield, SquareTerminal, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, Check, Crosshair, FileCheck2, Fingerprint, LockKeyhole, Radar, RotateCcw, Settings2, Shield, SquareTerminal, Workflow } from 'lucide-react'
 import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
@@ -79,25 +79,22 @@ export function Landing({ next }) {
           </div>
         </div>
 
-        <div className="hero-art" aria-hidden="true">
-          <div className="ring r1" />
-          <div className="ring r2" />
-          <div className="core">
-            <Shield />
-            <b>Policy verified</b>
+        <div className="hero-art command-preview" aria-label="Shield command center preview">
+          <div className="preview-topbar"><span><Shield size={14} /> COMMAND CENTER</span><i><span /> LOCAL-FIRST</i></div>
+          <div className="preview-heading"><div><h2>Operational readiness</h2><p>Evidence-backed status across the enforcement boundary.</p></div><strong>Read-only authority</strong></div>
+          <div className="preview-body">
+            <div className="preview-capabilities">
+              {[
+                ['Endpoint observation', 'Verified locally', 'green'],
+                ['Local policy engine', 'Verified locally', 'green'],
+                ['Hermes', 'Analysis only', 'blue'],
+                ['Gateway authority', 'Awaiting authorization', 'amber'],
+                ['Backend ownership', 'Requires operator review', 'red'],
+              ].map(([label, state, tone]) => <div className="preview-row" key={label}><span className={`preview-dot ${tone}`} /><b>{label}</b><em>{state}</em><span className="preview-arrow">→</span></div>)}
+            </div>
+            <aside className="preview-actions"><h3>Next operator actions</h3><ol><li>Identify gateway model/API</li><li>Define disposable lab scope</li><li>Resolve service ownership</li></ol><small>External control stays blocked until authorized.</small></aside>
           </div>
-          <div className="signal s1">
-            <Activity />
-            <span>Process event<b>Allowed</b></span>
-          </div>
-          <div className="signal s2">
-            <LockKeyhole />
-            <span>Write attempt<b>Contained</b></span>
-          </div>
-          <div className="signal s3">
-            <Globe2 />
-            <span>Network call<b>Verified</b></span>
-          </div>
+          <div className="preview-footer"><span><Activity size={13} /> Observed locally</span><span><FileCheck2 size={13} /> Evaluated deterministically</span><span><LockKeyhole size={13} /> Containment remains host-authoritative</span></div>
         </div>
       </section>
 

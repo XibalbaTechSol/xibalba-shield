@@ -33,6 +33,9 @@ export class ShieldApi {
   agents() { return this.request('/api/shield/agents') }
   agentBindings(deviceId) { return this.request(`/api/shield/devices/${encodeURIComponent(deviceId)}/agent-bindings`) }
   cortexOutbox() { return this.request('/api/shield/cortex-outbox') }
+  hermesStatus() { return this.request('/api/shield/hermes-status') }
+  hermesDeliveries() { return this.request('/api/shield/hermes-deliveries') }
+  runtimeResources() { return this.request('/api/shield/runtime-resources') }
   cortexMemories(deviceId, agentId, limit = 20) { return this.request(`/api/shield/cortex-memories?device_id=${encodeURIComponent(deviceId)}&agent_id=${encodeURIComponent(agentId)}&limit=${limit}`) }
   registerAgent(deviceId, agentId, oracleUrl = '') { return this.request('/api/shield/agents/register', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, agent_id: agentId, oracle_url: oracleUrl }, tenant: false }) }
   agentBindingAction(deviceId, agentId, action) { return this.request(`/api/shield/devices/${encodeURIComponent(deviceId)}/agent-bindings/${encodeURIComponent(agentId)}/${action}`, { method: 'POST', body: { tenant_id: this.tenantId }, tenant: false }) }
@@ -41,6 +44,10 @@ export class ShieldApi {
   exporterRemediation(deviceId, action = 'retry', reason = '') { return this.request('/api/shield/exporter-remediation', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, action, reason }, tenant: false }) }
   integrations() { return this.request('/api/shield/integrations') }
   settings() { return this.request('/api/shield/settings') }
+  networkConfig() { return this.request('/api/shield/network/config') }
+  saveNetworkConfig(config) { return this.request('/api/shield/network/config', { method: 'POST', body: { tenant_id: this.tenantId, config }, tenant: false }) }
+  networkConfigChangeRequests() { return this.request('/api/shield/network/config/change-requests') }
+  decideNetworkConfigChange(requestId, action, actorId = 'tenant-admin') { return this.request(`/api/shield/network/config/change-requests/${encodeURIComponent(requestId)}`, { method: 'POST', body: { tenant_id: this.tenantId, action, approver_id: actorId, actor_id: actorId }, tenant: false }) }
   saveSettings(settings) { return this.request('/api/shield/settings', { method: 'POST', body: { tenant_id: this.tenantId, settings }, tenant: false }) }
   settingsAudit() { return this.request('/api/shield/settings/audit') }
   settingsChangeRequests() { return this.request('/api/shield/settings/change-requests') }

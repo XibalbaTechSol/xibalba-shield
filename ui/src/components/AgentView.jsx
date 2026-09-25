@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Activity, CheckCircle2, Cpu, HardDrive, LockKeyhole, Network, RefreshCw, ShieldCheck, Wifi } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Activity, CheckCircle2, Cpu, HardDrive, LockKeyhole, Network, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react'
 
 const DEFAULT_RESPONDER_CAPABILITIES = {
   freeze_process: true,
@@ -15,6 +15,92 @@ const RESPONDER_DEFINITIONS = [
   { key: 'block_flow', label: 'Block network flow', description: 'Install a policy-scoped network block through a validated runtime.', icon: Network },
 ]
 
+function AgentDetailDrawer({ selected, setSelected, cortexMemories, inspectCortexMemories, registerSelectedAgent, registrationMessage, remediation, setRemediation, queueRemediation }) {
+  const pair = selected.device_agent_pair || {}
+  const hybrid = selected.hybrid_architecture || {}
+  const cloud = hybrid.cloud_reasoning || {}
+  const sensor = selected.exporter_status?.sensors || selected.sensors || {}
+  const sensorAttached = sensor.attached ?? /attached/i.test(String(selected.ebpf_sensor || ''))
+  const status = selected.registration_status || selected.status || 'unverified'
+  const statusLabel = status.replaceAll('_', ' ')
+  const facts = [
+    ['Last seen', selected.last_seen_at || 'Unavailable', 'time'],
+    ['Kernel', selected.kernel_version || 'Unavailable', 'value'],
+    ['IP address', selected.ip_address || 'Unavailable', 'value'],
+    ['eBPF sensor', sensorAttached ? `Attached${sensor.attach_mode ? ` · ${sensor.attach_mode}` : ''}` : 'Unverified', sensorAttached ? 'good' : 'warn'],
+  ]
+
+  return (
+    <aside className="device-detail-backdrop redesigned-agent-detail" role="presentation" onClick={() => setSelected(null)}>
+      <section className="agent-detail-drawer" role="dialog" aria-modal="true" aria-label="Agent detail" onClick={(event) => event.stopPropagation()}>
+        <header className="agent-detail-hero">
+          <div className="agent-detail-heading">
+            <div className="agent-detail-icon"><Cpu size={20} /></div>
+            <div>
+              <p className="agent-detail-kicker">Endpoint identity</p>
+              <h2>{selected.device_id}</h2>
+              <p>{selected.device_role || 'Workstation'} · {selected.registration_status === 'pending_signature' ? 'enrollment pending' : selected.status || 'unverified'}</p>
+            </div>
+          </div>
+          <button type="button" className="agent-detail-close" aria-label="Close agent details" onClick={() => setSelected(null)}><X size={18} /></button>
+          <div className={`agent-detail-status status-${status}`}><span />{statusLabel}</div>
+        </header>
+
+        {selected.loading ? <p className="device-detail-loading">Loading authenticated agent state…</p> : selected.error ? <p className="form-message error agent-detail-error">{selected.error}</p> : (
+          <div className="agent-detail-body">
+            <section className="agent-detail-facts" aria-label="Runtime facts">
+              {facts.map(([label, value, tone]) => <div key={label} className={`agent-fact ${tone}`}><small>{label}</small><b>{value}</b></div>)}
+            </section>
+
+            <section className="agent-detail-section" aria-labelledby="identity-title">
+              <div className="agent-detail-section-heading"><div><p className="agent-detail-kicker">Canonical binding</p><h3 id="identity-title">One endpoint, one agent, one namespace</h3></div><span className="agent-detail-proof"><ShieldCheck size={14} /> scoped</span></div>
+              <div className="agent-detail-identity-grid">
+                <div><small>Shield agent ID</small><code>{pair.shield_agent_id || selected.agent_id || selected.did || 'Unbound'}</code></div>
+                <div><small>Integrity DID</small><code>{selected.did || 'Unavailable'}</code></div>
+                <div><small>Memory scope</small><b>{selected.memory_scope || 'Unavailable'}</b></div>
+                <div><small>Pair ID</small><code>{pair.pair_id || 'Not bound'}</code></div>
+              </div>
+            </section>
+
+            <section className="agent-detail-section routing-section" aria-labelledby="routing-title">
+              <div className="agent-detail-section-heading"><div><p className="agent-detail-kicker">Hybrid routing</p><h3 id="routing-title">Local authority stays local</h3></div><span className="agent-detail-proof neutral">redaction boundary</span></div>
+              <p className="agent-detail-description">Shield evaluates and enforces on the endpoint. Hermes receives only redacted events, while Cortex stores evidence inside the namespace shown below.</p>
+              <div className="routing-path">
+                <div className="routing-node active"><span className="routing-node-icon"><ShieldCheck size={16} /></span><div><b>Shield</b><small>Enforcement authority</small></div><strong>ACTIVE</strong></div>
+                <div className="routing-connector"><span>redacted events only</span></div>
+                <div className={`routing-node ${cloud.status === 'configured' ? 'configured' : 'muted'}`}><span className="routing-node-icon"><Activity size={16} /></span><div><b>Hermes</b><small>{cloud.status === 'configured' ? 'Analysis only' : 'Not configured'}</small></div><strong>{cloud.status === 'configured' ? 'READY' : 'OFF'}</strong></div>
+                <div className="routing-connector"><span>agent-scoped memory</span></div>
+                <div className={`routing-node ${pair.memory_namespace || cloud.memory_namespace ? 'configured' : 'muted'}`}><span className="routing-node-icon"><HardDrive size={16} /></span><div><b>Cortex</b><small>{cloud.memory_namespace || pair.memory_namespace || 'Namespace unavailable'}</small></div><strong>{cloud.memory_namespace || pair.memory_namespace ? 'SCOPED' : 'UNBOUND'}</strong></div>
+              </div>
+            </section>
+
+            <section className="agent-detail-section memory-section" aria-labelledby="memory-title">
+              <div className="agent-detail-section-heading"><div><p className="agent-detail-kicker">Cortex evidence</p><h3 id="memory-title">Selected agent memory</h3></div><span className="agent-detail-proof neutral">read-only</span></div>
+              <p className="agent-detail-description">Only the Cortex partition bound to this device and canonical Shield agent can be inspected.</p>
+              <button type="button" className="detail-secondary-action" onClick={() => inspectCortexMemories(selected)}><HardDrive size={15} /> Inspect Cortex memory</button>
+              {cortexMemories?.loading && <p className="small muted">Loading authenticated Cortex memory…</p>}
+              {cortexMemories?.error && <div className="detail-state error"><X size={15} /><span>{cortexMemories.error}</span></div>}
+              {cortexMemories && !cortexMemories.loading && !cortexMemories.error && <div className="memory-result"><b>{(cortexMemories.memories || []).length} memories</b><code>{cortexMemories.memory_namespace || 'namespace unavailable'}</code></div>}
+            </section>
+
+            <section className={`agent-detail-action ${selected.registration_status === 'pending_signature' ? 'attention' : ''}`} aria-labelledby="registration-title">
+              <div><p className="agent-detail-kicker">Integrity identity</p><h3 id="registration-title">{selected.registration_status === 'pending_signature' ? 'Complete agent verification' : 'Register Shield agent'}</h3><p>{selected.registration_status === 'pending_signature' ? 'The binding is saved locally. Complete the on-chain signature before publishing agent telemetry.' : 'Verify the canonical DID and bind this device to the agent-scoped Cortex namespace.'}</p></div>
+              <button type="button" className="detail-primary-action" onClick={registerSelectedAgent}><ShieldCheck size={15} /> {selected.registration_status === 'pending_signature' ? 'Retry verification' : 'Register / verify'}</button>
+              {registrationMessage && <p className="form-message" aria-live="polite">{registrationMessage}</p>}
+            </section>
+
+            <section className="agent-detail-action worker-action" aria-labelledby="worker-title">
+              <div><p className="agent-detail-kicker">Worker-backed action</p><h3 id="worker-title">Exporter remediation</h3><p>Queue an auditable request for the exporter worker. This does not bypass policy or containment gates.</p></div>
+              <div className="worker-controls"><select className="form-select" value={remediation.action} onChange={(event) => setRemediation({ action: event.target.value, message: '' })}><option value="retry">Retry failed exports</option><option value="reconnect">Reconnect exporter</option><option value="flush">Flush pending queue</option></select><button type="button" className="detail-secondary-action" onClick={queueRemediation}>Queue action</button></div>
+              {remediation.message && <p className="form-message" aria-live="polite">{remediation.message}</p>}
+            </section>
+          </div>
+        )}
+      </section>
+    </aside>
+  )
+}
+
 export function AgentView({ data, refresh, api }) {
   const [selected, setSelected] = useState(null)
   const [remediation, setRemediation] = useState({ action: 'retry', message: '' })
@@ -26,7 +112,11 @@ export function AgentView({ data, refresh, api }) {
   const [bindings, setBindings] = useState([])
   const [pairAction, setPairAction] = useState(null)
   const [pairMessage, setPairMessage] = useState('')
-  useEffect(() => { if (selected?.device_id) loadBindings(selected.device_id) }, [selected?.device_id])
+  const loadBindings = useCallback(async (deviceId) => {
+    try { setBindings((await api.agentBindings(deviceId)).bindings || []) }
+    catch (error) { setPairMessage(error instanceof Error ? error.message : String(error)) }
+  }, [api])
+  useEffect(() => { if (selected?.device_id) loadBindings(selected.device_id) }, [loadBindings, selected?.device_id])
   useEffect(() => {
     let cancelled = false
     api.settings().then(({ settings = {} }) => {
@@ -81,7 +171,6 @@ export function AgentView({ data, refresh, api }) {
     return live || {}
   }, [data.exporter])
   const responderCapabilities = { ...DEFAULT_RESPONDER_CAPABILITIES, ...(responderStatus.capabilities || {}), ...(data.responder_capabilities || {}) }
-  const loadBindings = async (deviceId) => { try { setBindings((await api.agentBindings(deviceId)).bindings || []) } catch (error) { setPairMessage(error instanceof Error ? error.message : String(error)) } }
   const changePairStatus = async (agentId, action) => {
     if (!selected?.device_id || !window.confirm(`${action === 'revoke' ? 'Revoke' : 'Detach'} this exact device/agent pair?`)) return
     setPairAction(`${agentId}:${action}`); setPairMessage('')
@@ -89,6 +178,7 @@ export function AgentView({ data, refresh, api }) {
     catch (error) { setPairMessage(error instanceof Error ? error.message : String(error)) }
     finally { setPairAction(null) }
   }
+  if (selected) return <AgentDetailDrawer selected={selected} setSelected={setSelected} cortexMemories={cortexMemories} inspectCortexMemories={inspectCortexMemories} registerSelectedAgent={registerSelectedAgent} registrationMessage={registrationMessage} remediation={remediation} setRemediation={setRemediation} queueRemediation={queueRemediation} />
   return <section className="resource agent-workspace">{selected && <section className="settings-card" aria-label="Device agent pair management"><div className="settings-card-header"><div className="settings-card-title"><ShieldCheck size={18} /><h3>Device / agent pairs</h3></div><span className="live-status-pill">{bindings.filter((binding) => !binding.unbound_at).length} active</span></div><p className="settings-card-desc">Every action targets the selected <b>device_id + agent_id</b> pair. Detach is reversible; revoke is terminal.</p>{bindings.filter((binding) => !binding.unbound_at).map((binding) => <div className="agent-roster-row" key={binding.id}><div><b>{selected.device_id}</b><small>{binding.agent_id}</small></div><button type="button" className="secondary-btn" disabled={Boolean(pairAction)} onClick={() => changePairStatus(binding.agent_id, 'detach')}>{pairAction === `${binding.agent_id}:detach` ? 'Detaching…' : 'Detach'}</button><button type="button" className="secondary-btn danger" disabled={Boolean(pairAction)} onClick={() => changePairStatus(binding.agent_id, 'revoke')}>{pairAction === `${binding.agent_id}:revoke` ? 'Revoking…' : 'Revoke'}</button></div>)}{bindings.filter((binding) => !binding.unbound_at).length === 0 && <p className="small muted">No active pairs on this device.</p>}{pairMessage && <p className="form-message" aria-live="polite">{pairMessage}</p>}</section>}
     <header>
       <p className="eyebrow">SHIELD AGENT OPERATIONS</p>
@@ -98,17 +188,17 @@ export function AgentView({ data, refresh, api }) {
     </header>
     <div className="agent-toolbar"><span><span className="status-dot green" /> {devices.length} enrolled device{devices.length === 1 ? '' : 's'}</span><span className="evidence-label">Each device is scoped to one canonical Shield agent and Cortex memory namespace.</span><button type="button" className="secondary-btn" onClick={refresh}><RefreshCw size={14} /> Refresh agents</button></div>
     {devices.length > 0 && <section className="hybrid-architecture-card" aria-labelledby="hybrid-architecture-title"><div><p className="eyebrow">HYBRID IDENTITY BOUNDARY</p><h3 id="hybrid-architecture-title">One device · one Shield agent · one Cortex namespace</h3><p>Shield enforces locally. Redacted events may be reasoned about by the dedicated Hermes cloud agent, while Cortex memory remains keyed to the selected Shield agent.</p></div><div className="hybrid-pair-list">{devices.map((device) => { const pair = device.device_agent_pair || {}; const hybrid = device.hybrid_architecture || {}; const cloud = hybrid.cloud_reasoning || {}; return <article className="hybrid-pair" key={pair.pair_id || device.device_id}><div className="hybrid-pair-heading"><HardDrive size={15} /><b>{pair.device_id || device.device_id}</b><span className="live-status-pill">{hybrid.mode || 'hybrid'}</span></div><dl><div><dt>Shield agent</dt><dd>{pair.shield_agent_id || device.agent_id || 'unbound'}</dd></div><div><dt>Pair ID</dt><dd>{pair.pair_id || '—'}</dd></div><div><dt>Local authority</dt><dd>{hybrid.local_enforcement?.status === 'active' ? 'Shield · active' : 'Unverified'}</dd></div><div><dt>Cloud reasoning</dt><dd>{cloud.status === 'configured' ? `Hermes · ${cloud.agent_id}` : 'Hermes · not configured'}</dd></div><div><dt>Cortex memory</dt><dd>{cloud.memory_namespace || pair.memory_namespace || '—'}</dd></div></dl></article> })}</div></section>}
-    {data.cortexOutbox && <section className={`outbox-status-card ${data.cortexOutbox.dead_letter ? 'has-warning' : ''}`} aria-label="Cortex delivery status"><div><p className="eyebrow">CORTEX DELIVERY</p><h3>Durable cloud publication</h3><p>{data.cortexOutbox.pending ? `${data.cortexOutbox.pending} events are waiting for Cortex acknowledgement.` : 'No events are waiting for Cortex acknowledgement.'} Failed attempts move to a dead-letter queue.</p>{data.cortexOutbox.dead_letter > 0 && <p className="form-message error" role="status">{data.cortexOutbox.dead_letter} events need operator review.</p>}</div><div className="outbox-metrics"><span><b>{data.cortexOutbox.pending || 0}</b><small>pending</small></span><span><b>{data.cortexOutbox.sent || 0}</b><small>sent</small></span><span className={data.cortexOutbox.dead_letter ? 'danger' : ''}><b>{data.cortexOutbox.dead_letter || 0}</b><small>dead-letter</small></span><span><b>{data.cortexOutbox.delivered_total || 0}</b><small>delivered</small></span></div></section>}
-    <section className="settings-card" aria-labelledby="real-agent-roster-title"><div className="settings-card-header"><div className="settings-card-title"><ShieldCheck size={18} /><h3 id="real-agent-roster-title">Real agents observed on this device</h3></div><span className="live-status-pill"><Activity size={13} /> No fixtures</span></div><p className="settings-card-desc">Only identities emitted by this device’s authenticated decisions/outcomes are listed. Select an agent in the host runtime to exercise its policy and memory boundary.</p>{realAgentRoster.length === 0 ? <p className="small muted">No agent-bearing real events have been observed yet.</p> : <div className="agent-roster">{realAgentRoster.map((agent) => <div className="agent-roster-row" key={`${agent.device_id}:${agent.agent_id}`}><div><b>{agent.name}</b><small>{agent.agent_id}</small></div><span>{agent.source}</span><button type="button" className="secondary-btn" onClick={async () => { try { const result = await api.testEvents(agent.agent_id); setAgentTelemetry({ agentId: agent.agent_id, events: result.test_events || [] }) } catch (error) { setAgentTelemetry({ agentId: agent.agent_id, error: error instanceof Error ? error.message : String(error) }) } }}>Inspect telemetry</button></div>)}</div>}{agentTelemetry && <p className="form-message" aria-live="polite">{agentTelemetry.error || `${agentTelemetry.events.length} authenticated telemetry records for ${agentTelemetry.agentId}.`}</p>}</section>
+    {data.cortexOutbox && <section className={`outbox-status-card ${data.cortexOutbox.dead_letter || (data.cortexOutbox.pending > 0 && !realAgentRoster.length) ? 'has-warning' : ''}`} aria-label="Cortex delivery status"><div><p className="eyebrow">CORTEX DELIVERY</p><h3>Durable cloud publication</h3><p>{data.cortexOutbox.pending ? `${data.cortexOutbox.pending} events are waiting for Cortex acknowledgement.` : 'No events are waiting for Cortex acknowledgement.'} Failed attempts move to a dead-letter queue.</p>{data.cortexOutbox.pending > 0 && !realAgentRoster.length && <p className="form-message" role="status">Pending records are not currently attributable to an authenticated agent identity; they remain device-scoped until binding is verified.</p>}{data.cortexOutbox.dead_letter > 0 && <p className="form-message error" role="status">{data.cortexOutbox.dead_letter} events need operator review.</p>}</div><div className="outbox-metrics"><span><b>{data.cortexOutbox.pending || 0}</b><small>pending</small></span><span><b>{data.cortexOutbox.sent || 0}</b><small>sent</small></span><span className={data.cortexOutbox.dead_letter ? 'danger' : ''}><b>{data.cortexOutbox.dead_letter || 0}</b><small>dead-letter</small></span><span><b>{data.cortexOutbox.delivered_total || 0}</b><small>delivered</small></span></div></section>}
+    <section className="settings-card" aria-labelledby="real-agent-roster-title"><div className="settings-card-header"><div className="settings-card-title"><ShieldCheck size={18} /><h3 id="real-agent-roster-title">Real agents observed on this device</h3></div><span className="live-status-pill"><Activity size={13} /> {realAgentRoster.length ? `${realAgentRoster.length} observed` : 'No observed agents'}</span></div><p className="settings-card-desc">Only identities emitted by this device’s authenticated decisions/outcomes are listed. OS process, file, and network events stay device-scoped until an authenticated agent hook attributes them.</p>{realAgentRoster.length === 0 ? <div className="empty"><ShieldCheck /><h4>No authenticated agent events</h4><p>Process, file, and network observations are present, but none carry an agent identity. Register an agent and exercise its guardrail hook to populate this roster.</p><small>Expected event classes: agent_event, tool_call, model_route, retrieval, output_check, post_action.</small></div> : <div className="agent-roster">{realAgentRoster.map((agent) => <div className="agent-roster-row" key={`${agent.device_id}:${agent.agent_id}`}><div><b>{agent.name}</b><small>{agent.agent_id}</small></div><span>{agent.source}</span><button type="button" className="secondary-btn" onClick={async () => { try { const result = await api.testEvents(agent.agent_id); setAgentTelemetry({ agentId: agent.agent_id, events: result.test_events || [] }) } catch (error) { setAgentTelemetry({ agentId: agent.agent_id, error: error instanceof Error ? error.message : String(error) }) } }}>Inspect telemetry</button></div>)}</div>}{agentTelemetry && <p className="form-message" aria-live="polite">{agentTelemetry.error || `${agentTelemetry.events.length} authenticated telemetry records for ${agentTelemetry.agentId}.`}</p>}</section>
     <section className="responder-panel" aria-labelledby="responder-panel-title">
       <div className="responder-panel-heading">
-        <div><p className="eyebrow">RESPONSE CAPABILITIES</p><h3 id="responder-panel-title">Responder interface</h3><p>Actions are surfaced from the agent contract. Destructive responders stay unavailable until their privileged runtime gates pass.</p></div>
-        <span className="responder-gate"><ShieldCheck size={15} /> Gate enforced</span>
+        <div><p className="eyebrow">RESPONSE CAPABILITIES</p><h3 id="responder-panel-title">Responder interface</h3><p>Actions are surfaced from the agent contract. Process freeze is policy-capable; destructive and workload-boundary responders remain separately gated until their runtime proofs pass.</p></div>
+        <span className="responder-gate"><ShieldCheck size={15} /> Policy-capable · gates enforced</span>
       </div>
       <div className="responder-grid">{RESPONDER_DEFINITIONS.map(({ key, label, description, icon: Icon }) => {
         const enabled = responderCapabilities[key] === true
         return <article className={`responder-card ${enabled ? 'enabled' : 'disabled'}`} key={key}>
-          <div className="responder-card-top"><span className="responder-icon"><Icon size={16} /></span><span className={`responder-status ${enabled ? 'ready' : 'locked'}`}>{enabled ? <><CheckCircle2 size={13} /> Available</> : <><LockKeyhole size={13} /> Gate required</>}</span></div>
+              <div className="responder-card-top"><span className="responder-icon"><Icon size={16} /></span><span className={`responder-status ${enabled ? 'ready' : 'locked'}`}>{enabled ? <><CheckCircle2 size={13} /> Policy-capable</> : <><LockKeyhole size={13} /> Gate required</>}</span></div>
           <h4>{label}</h4><p>{description}</p>
           <button type="button" className="responder-action" disabled aria-disabled="true" title={enabled ? 'Invoked by policy decisions from the authenticated agent' : 'Runtime validation is required before this responder can be enabled'}>{enabled ? 'Policy-driven' : 'Unavailable until validated'}</button>
         </article>

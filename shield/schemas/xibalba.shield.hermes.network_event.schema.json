@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xibalba.dev/schemas/xibalba.shield.hermes.network_event/1.0.0",
+  "title": "Xibalba Shield Hermes Network Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "event_id", "sequence", "observed_at", "network", "device", "event", "policy", "enforcement", "privacy", "delivery"],
+  "properties": {
+    "schema": {"const": "xibalba.shield.hermes.network_event"},
+    "schema_version": {"const": "1.0.0"},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9._:-]+$"},
+    "sequence": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "observed_at": {"type": "string", "format": "date-time", "maxLength": 64},
+    "network": {
+      "type": "object", "additionalProperties": false, "required": ["network_id", "segment_id", "observation_point", "sensor_id"],
+      "properties": {
+        "network_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "segment_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "observation_point": {"type": "string", "enum": ["gateway", "endpoint", "dns", "firewall", "nac", "flow-exporter", "switch", "wifi", "unknown"]},
+        "sensor_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "clock_skew_seconds": {"type": "number", "minimum": -86400, "maximum": 86400}
+      }
+    },
+    "device": {
+      "type": "object", "additionalProperties": false, "required": ["device_id", "identity_source", "posture"],
+      "properties": {
+        "device_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "identity_source": {"type": "string", "enum": ["enrollment", "dhcp", "certificate", "switch", "wifi", "nac", "inferred", "unknown"]},
+        "posture": {"type": "string", "enum": ["known", "unknown", "stale", "noncompliant"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "freshness_seconds": {"type": "integer", "minimum": 0, "maximum": 31536000}
+      }
+    },
+    "event": {
+      "type": "object", "additionalProperties": false, "required": ["class", "action", "confidence"],
+      "properties": {
+        "class": {"type": "string", "enum": ["flow", "dns", "firewall_decision", "device_posture", "segmentation", "sensor_health", "configuration_change", "enforcement_outcome"]},
+        "action": {"type": "string", "maxLength": 64},
+        "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "observed_fact": {"type": "boolean"},
+        "inference": {"type": "boolean"},
+        "flow": {"$ref": "#/$defs/flow"},
+        "dns": {"$ref": "#/$defs/dns"},
+        "health": {"$ref": "#/$defs/health"},
+        "change": {"$ref": "#/$defs/change"}
+      }
+    },
+    "policy": {
+      "type": "object", "additionalProperties": false, "required": ["action", "rule_id", "policy_version", "policy_hash", "reason_code"],
+      "properties": {
+        "action": {"type": "string", "enum": ["allow", "log_only", "deny", "escalate", "isolate", "rate_limit", "redirect"]},
+        "rule_id": {"type": "string", "maxLength": 256},
+        "policy_version": {"type": "string", "maxLength": 128},
+        "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "reason_code": {"type": "string", "enum": ["RULE_MATCH", "NEW_DESTINATION", "POSTURE_FAILURE", "ANOMALY", "POLICY_ENGINE_UNAVAILABLE", "NO_MATCH", "MALFORMED_EVENT"]},
+        "human_review_required": {"type": "boolean"}
+      }
+    },
+    "enforcement": {
+      "type": "object", "additionalProperties": false, "required": ["requested", "action", "status", "target_ref"],
+      "properties": {
+        "requested": {"type": "boolean"},
+        "action": {"type": "string", "enum": ["none", "block_flow", "block_domain", "isolate_device", "move_segment", "revoke_access", "rate_limit", "restore_access"]},
+        "status": {"type": "string", "enum": ["not_requested", "pending", "completed", "failed", "denied"]},
+        "target_ref": {"type": ["string", "null"], "maxLength": 256},
+        "adapter_ref": {"type": ["string", "null"], "maxLength": 256},
+        "idempotency_ref": {"type": ["string", "null"], "maxLength": 256},
+        "error_code": {"type": ["string", "null"], "maxLength": 128}
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false, "required": ["redacted", "redaction_version", "redaction_proof", "omitted_fields"],
+      "properties": {
+        "redacted": {"const": true}, "redaction_version": {"const": "network-pii-1"},
+        "redaction_proof": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "omitted_fields": {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 64}
+      }
+    },
+    "delivery": {
+      "type": "object", "additionalProperties": false, "required": ["queued", "acknowledged", "attempt", "loss_count"],
+      "properties": {
+        "queued": {"type": "boolean"}, "acknowledged": {"type": "boolean"},
+        "attempt": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "loss_count": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "delivery_id": {"type": "string", "maxLength": 256}
+      }
+    }
+  },
+  "$defs": {
+    "flow": {"type": "object", "additionalProperties": false, "required": ["direction", "protocol", "service_class", "destination_class", "destination_ref", "destination_port", "bytes_out", "bytes_in", "connection_count", "duration_ms"], "properties": {
+      "direction": {"type": "string", "enum": ["egress", "ingress", "east_west"]}, "protocol": {"type": "string", "enum": ["tcp", "udp", "icmp", "other"]}, "service_class": {"type": "string", "enum": ["dns", "web", "mail", "ssh", "remote_admin", "unknown"]}, "destination_class": {"type": "string", "enum": ["approved", "known_service", "new", "blocked", "malicious_candidate", "unknown"]}, "destination_ref": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "destination_port": {"type": "integer", "minimum": 0, "maximum": 65535}, "bytes_out": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}, "bytes_in": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}, "connection_count": {"type": "integer", "minimum": 0, "maximum": 1000000}, "duration_ms": {"type": "integer", "minimum": 0, "maximum": 86400000}
+    }},
+    "dns": {"type": "object", "additionalProperties": false, "required": ["query_class", "domain_ref", "answer_class"], "properties": {"query_class": {"type": "string", "enum": ["approved", "new", "blocked", "suspicious", "unknown"]}, "domain_ref": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "answer_class": {"type": "string", "enum": ["approved", "new", "suspicious", "unknown"]}}},
+    "health": {"type": "object", "additionalProperties": false, "properties": {"status": {"type": "string", "maxLength": 64}, "lost_events": {"type": "integer", "minimum": 0}, "queue_depth": {"type": "integer", "minimum": 0}}},
+    "change": {"type": "object", "additionalProperties": false, "properties": {"setting_group": {"type": "string", "maxLength": 64}, "version": {"type": "string", "maxLength": 128}, "approved": {"type": "boolean"}}}
+  }
+}

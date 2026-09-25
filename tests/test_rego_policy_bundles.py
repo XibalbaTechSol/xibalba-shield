@@ -39,7 +39,10 @@ def test_professional_services_rules_and_default(opa: str):
     assert evaluate(opa, "professional-services.rego", {"event": {"agent": {"agent_id": "a"}}, "ctx": ctx()})["rule_id"] == "ps-deny-unregistered-agents"
     assert evaluate(opa, "professional-services.rego", {"event": {"context": {"model_endpoint": "http://example"}}, "ctx": ctx("a")})["rule_id"] == "ps-deny-unapproved-model-routing"
     assert evaluate(opa, "professional-services.rego", {"event": {"context": {"data_sources": ["customer_records"]}}, "ctx": ctx("a")})["rule_id"] == "ps-escalate-client-data-context"
-    assert evaluate(opa, "professional-services.rego", {"event": {"context": {"model_endpoint": "https://approved.example"}}, "ctx": ctx("a")})["rule_id"] == "_no_match"
+    unmatched = evaluate(opa, "professional-services.rego", {"event": {"context": {"model_endpoint": "https://approved.example"}}, "ctx": ctx("a")})
+    assert unmatched["rule_id"] == "_no_match"
+    assert unmatched["allow"] is True
+    assert unmatched["action"] == "log_only"
 
 
 def test_regulated_rules_and_precedence(opa: str):
@@ -56,6 +59,15 @@ def test_smb_unregistered_agent_is_denied(opa: str):
 
     registered = evaluate(opa, "smb.rego", {"event": {"agent": {"agent_id": "known"}}, "ctx": ctx("known")})
     assert registered["rule_id"] == "_no_match"
+    assert registered["allow"] is True
+    assert registered["action"] == "log_only"
+
+
+def test_regulated_unmatched_event_is_log_only(opa: str):
+    result = evaluate(opa, "regulated.rego", {"event": {}, "ctx": ctx("known")})
+    assert result["rule_id"] == "_no_match"
+    assert result["allow"] is True
+    assert result["action"] == "log_only"
 
 
 def test_smb_overlapping_matches_use_json_order(opa: str):

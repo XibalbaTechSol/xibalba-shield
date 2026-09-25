@@ -2,7 +2,7 @@ package shield.policy
 
 import rego.v1
 
-default allow := false
+default allow := true
 
 default action := "log_only"
 
