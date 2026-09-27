@@ -371,7 +371,15 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     from .agent_core.cortex_memory import CortexMemoryProvider
-    memory_provider = CortexMemoryProvider.from_environment(device_id=device_config.device_id, base_url=args.cortex_url, token=args.cortex_token)
+    # Cortex publication is downstream of enforcement: if its outbox cannot be opened
+    # (permissions, read-only path, disk), run without it rather than crash-loop the
+    # sensor. Observed 2026-09-27: an outbox dir owned by another service account took
+    # enforcement down on every start.
+    try:
+        memory_provider = CortexMemoryProvider.from_environment(device_id=device_config.device_id, base_url=args.cortex_url, token=args.cortex_token)
+    except Exception as exc:  # noqa: BLE001 -- never let optional publication stop local enforcement
+        print(f"shield run: Cortex memory publication disabled; outbox unavailable: {exc}", file=sys.stderr)
+        memory_provider = None
 
     # Tenant settings are advisory for local enforcement but authoritative for the
     # bounded Hermes profile. The watchdog refreshes them later; this startup read makes
