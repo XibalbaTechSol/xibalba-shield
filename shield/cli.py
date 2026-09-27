@@ -464,6 +464,7 @@ def _run(args: argparse.Namespace) -> int:
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
+                         enforcement_mode=args.enforcement_mode,
                          decision_sink=evidence_publisher.publish_decision,
                          enforcement_outcome_sink=evidence_publisher.publish_outcome,
                          memory_provider=memory_provider, hermes_publisher=hermes_publisher)
@@ -786,6 +787,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
     p_run.add_argument("--no-containment", action="store_true",
                        help="observe/decide/log/export only -- never actually freeze a process")
+    p_run.add_argument("--enforcement-mode", choices=("observe", "enforce"), default="enforce",
+                       help="policy-pack execution mode; observe records would-actions without responders, enforce preserves current containment behavior (default)")
     p_run.add_argument("--responder-readiness", type=Path, default=None,
                        help="device-bound live-gate proof JSON used to unlock gated responders")
     p_run.add_argument("--responder-proof-max-age", type=int, default=86400,
