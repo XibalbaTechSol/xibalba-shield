@@ -20,6 +20,19 @@ _OUTBOX_MAX_FLUSH_ROWS = 10
 _OUTBOX_MAX_WORKERS = 1
 _OUTBOX_SENT_RETENTION_SECONDS = 86_400
 _OUTBOX_PRUNE_INTERVAL_SECONDS = 900
+# Which decision actions become Cortex memories. Routine `log_only` decisions (no rule
+# matched) keep their full evidence in decisions.jsonl, the Shield backend and
+# BCC -> Oracle; publishing them all turned every benign process start into agent
+# memory (~108k memories, ~1 GB/day observed 2026-09-27). Override with a
+# comma-separated SHIELD_CORTEX_PUBLISH_ACTIONS (e.g. "contain,deny,escalate,log_only").
+_DEFAULT_PUBLISH_ACTIONS = frozenset({"contain", "deny", "escalate"})
+
+
+def _publish_actions_from_env() -> frozenset[str]:
+    raw = os.environ.get("SHIELD_CORTEX_PUBLISH_ACTIONS", "").strip()
+    if not raw:
+        return _DEFAULT_PUBLISH_ACTIONS
+    return frozenset(action.strip() for action in raw.split(",") if action.strip())
 
 
 class CortexMemoryProvider:
@@ -37,6 +50,7 @@ class CortexMemoryProvider:
         max_attempts: int = 8,
         max_payload_bytes: int = _OUTBOX_MAX_PAYLOAD_BYTES,
         max_pending_rows: int = 32,
+        publish_actions: frozenset[str] | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.token = token
@@ -48,6 +62,7 @@ class CortexMemoryProvider:
         self.max_pending_rows = max(1, int(max_pending_rows))
         self.outbox_path = Path(outbox_path or os.environ.get("XIBALBA_CORTEX_OUTBOX", "/var/lib/xibalba-shield/cortex/outbox.sqlite3"))
         self._last_prune_at = 0.0
+        self.publish_actions = publish_actions if publish_actions is not None else _publish_actions_from_env()
         self._init_outbox()
 
     @classmethod
@@ -239,9 +254,19 @@ class CortexMemoryProvider:
         }
 
     def remember_event(self, event: Any, decision: Any) -> None:
+        decision_payload = decision.to_dict() if hasattr(decision, "to_dict") else (decision if isinstance(decision, dict) else {})
+        # PolicyDecision.to_dict() nests the verdict under "decision"; accept a flat
+        # {"action": ...} payload too.
+        inner = decision_payload.get("decision") if isinstance(decision_payload, dict) else None
+        action = inner.get("action") if isinstance(inner, dict) else (
+            decision_payload.get("action") if isinstance(decision_payload, dict) else None
+        )
+        if action not in self.publish_actions:
+            # Out of scope for agent memory by policy, not a delivery failure: nothing
+            # is written (no outbox row, no metric) so routine traffic costs no I/O.
+            return
         raw_event = event.to_dict() if hasattr(event, "to_dict") else (event if isinstance(event, dict) else {"class": type(event).__name__})
         safe_event = redact_event(self._allowlisted_event(raw_event))
-        decision_payload = decision.to_dict() if hasattr(decision, "to_dict") else (decision if isinstance(decision, dict) else {})
         safe_decision = redact_event(self._allowlisted_event(decision_payload if isinstance(decision_payload, dict) else {}))
         content_payload = {"event": safe_event, "decision": safe_decision}
         content = json.dumps(content_payload, sort_keys=True, separators=(",", ":"))

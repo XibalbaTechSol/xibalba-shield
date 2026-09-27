@@ -64,6 +64,7 @@ def test_cortex_outbox_allowlist_and_dead_letter_metric(tmp_path):
     provider = CortexMemoryProvider(
         base_url="http://127.0.0.1:1", token="token", agent_id="did:integrity:agent-a",
         device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3", max_attempts=1,
+        publish_actions=frozenset({"allow", "log_only"}),
     )
     event = SimpleNamespace(to_dict=lambda: {
         "class": "agent_event", "event_id": "evt-1", "device_id": "device-a",
@@ -89,6 +90,7 @@ def test_cortex_outbox_preserves_frozen_correlation_fields(tmp_path):
     provider = CortexMemoryProvider(
         base_url="http://127.0.0.1:1", token="token", agent_id="did:integrity:agent-a",
         device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3", max_attempts=1,
+        publish_actions=frozenset({"allow", "log_only"}),
     )
     event = SimpleNamespace(to_dict=lambda: {
         "class": "agent_event", "event_id": "evt-correlation", "device_id": "device-a",
@@ -223,3 +225,38 @@ def test_outbox_size_counts_live_pages_not_freed_space(tmp_path, monkeypatch):
     assert live < full / 10                # ...but are not counted as capacity
     wal = tmp_path / "outbox.sqlite3-wal"
     assert not wal.exists() or wal.stat().st_size == 0   # checkpoint truncated the WAL
+
+
+def test_cortex_publishes_only_material_decisions_by_default(tmp_path, monkeypatch):
+    """Routine log_only decisions stay out of agent memory (and cost no outbox write);
+    contain/deny/escalate are published. Nested PolicyDecision shape, as the router sends."""
+    import sqlite3
+    from types import SimpleNamespace
+    from shield.agent_core.cortex_memory import CortexMemoryProvider
+
+    monkeypatch.delenv("SHIELD_CORTEX_PUBLISH_ACTIONS", raising=False)
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="t", agent_id="did:integrity:a",
+        device_id="d", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    event = SimpleNamespace(to_dict=lambda: {"class": "process_activity", "event_id": "evt-1"})
+    for i, action in enumerate(["log_only", "contain", "log_only", "deny", "escalate"]):
+        # event_ref as an attribute, like the real PolicyDecision: the outbox row id
+        # is derived from it, so each decision gets its own row.
+        decision = SimpleNamespace(
+            event_ref=SimpleNamespace(event_id=f"evt-{i}"),
+            to_dict=lambda a=action, i=i: {"event_ref": {"event_id": f"evt-{i}"}, "decision": {"action": a}})
+        provider.remember_event(SimpleNamespace(to_dict=lambda i=i: {"class": "process_activity", "event_id": f"evt-{i}"}), decision)
+    with sqlite3.connect(tmp_path / "outbox.sqlite3") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM cortex_outbox").fetchone()[0] == 3
+
+
+def test_cortex_publish_actions_env_override(tmp_path, monkeypatch):
+    from shield.agent_core.cortex_memory import CortexMemoryProvider
+
+    monkeypatch.setenv("SHIELD_CORTEX_PUBLISH_ACTIONS", "contain, log_only")
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="t", agent_id="did:integrity:a",
+        device_id="d", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    assert provider.publish_actions == frozenset({"contain", "log_only"})
