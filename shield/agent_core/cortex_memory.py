@@ -143,8 +143,13 @@ class CortexMemoryProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout):
-                pass
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                receipt = json.loads(response.read().decode("utf-8"))
+                expected_hash = json.loads(row["payload_json"]).get("content_hash")
+                if not isinstance(receipt, dict) or not receipt.get("id"):
+                    raise ValueError("Cortex response did not include a memory id acceptance receipt")
+                if not expected_hash or receipt.get("content_hash") != expected_hash:
+                    raise ValueError("Cortex acceptance receipt content_hash did not match the submitted content")
         except Exception as exc:  # noqa: BLE001 -- durable retry boundary
             attempts = int(row["attempts"]) + 1
             status = "dead_letter" if attempts >= self.max_attempts else "pending"
@@ -224,6 +229,7 @@ class CortexMemoryProvider:
         content_payload = {"event": safe_event, "decision": safe_decision}
         content = json.dumps(content_payload, sort_keys=True, separators=(",", ":"))
         redaction_proof = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        content_hash = f"sha256:{redaction_proof}"
         event_id = str(getattr(getattr(decision, "event_ref", None), "event_id", id(event)))
         invocation_id = (
             safe_decision.get("invocation_id")
@@ -233,6 +239,7 @@ class CortexMemoryProvider:
         provenance = safe_event.get("provenance") or safe_decision.get("provenance")
         payload = {
             "content": content,
+            "content_hash": content_hash,
             "source": {
                 "kind": "shield_event",
                 "locator": f"shield://{self.device_id}/{getattr(getattr(decision, 'event_ref', None), 'event_id', 'event')}",

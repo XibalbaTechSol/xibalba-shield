@@ -6,6 +6,7 @@ from shield.codex_agent import redact_event
 from shield.agent_core.cortex_memory import CortexMemoryProvider
 from types import SimpleNamespace
 import json
+import hashlib
 import time
 
 
@@ -79,6 +80,7 @@ def test_cortex_outbox_allowlist_and_dead_letter_metric(tmp_path):
     assert "decision_secret" not in payload["content"]
     assert "redacted" not in payload["source"]["metadata"]
     assert payload["source"]["metadata"]["redaction_proof"]
+    assert payload["content_hash"] == "sha256:" + hashlib.sha256(payload["content"].encode("utf-8")).hexdigest()
     assert provider.status()["dead_letter"] == 1
     assert provider.metrics()["dead_letter_total"] == 1
 
