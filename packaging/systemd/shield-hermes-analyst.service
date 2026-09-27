@@ -1,0 +1,48 @@
+[Unit]
+Description=Xibalba Shield Hermes analyst (toolless advisory judgment over material events)
+Documentation=file:///home/xibalba/Projects/xibalba-shield/shield/hermes_analyst.py
+After=network-online.target xibalba-shield.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# Runs as the operator account because the model call goes through that account's Hermes
+# install and shared Codex login. It joins the xibalba-shield group only here, so the spool
+# and its HMAC key stay unreadable to interactive shells and other agents running as the
+# same user (they would otherwise be able to forge Shield envelopes).
+User=xibalba
+Group=xibalba
+SupplementaryGroups=xibalba-shield
+# The HMAC key reaches the process as a systemd credential ($CREDENTIALS_DIRECTORY/hermes-key),
+# not as a readable path.
+LoadCredential=hermes-key:/etc/xibalba-shield/hermes.key
+# Cortex URL/token and XIBALBA_AGENT_ID (Shield's DID) -- the same file the Cortex outbox
+# worker uses. SHIELD_DEVICE_ID below is a fallback; the file wins when it sets it.
+Environment=SHIELD_DEVICE_ID=xibalba-HP-Desktop-M01-F0xxx
+EnvironmentFile=/etc/xibalba-shield/cortex.env
+Environment=SHIELD_HERMES_SPOOL=/var/lib/xibalba-shield/hermes-spool
+Environment=SHIELD_ANALYST_PROFILE=xibalba-shield-analyst
+Environment=SHIELD_ANALYST_MAX_PER_HOUR=6
+Environment=SHIELD_ANALYST_MAX_PER_DAY=40
+# P1 shadow: no notifications. P2 sets e.g. SHIELD_ANALYST_NOTIFY_TARGET=telegram in a drop-in.
+Environment=SHIELD_ANALYST_NOTIFY_TARGET=
+StateDirectory=shield-hermes-analyst
+ExecStart=/opt/xibalba-shield/venv/bin/python -m shield.hermes_analyst --interval 30
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Hermes writes its session store, logs and refreshed OAuth tokens under ~/.hermes.
+ReadWritePaths=/home/xibalba/.hermes /var/lib/xibalba-shield/hermes-spool
+MemoryMax=768M
+MemorySwapMax=256M
+CPUQuota=50%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

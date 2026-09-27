@@ -56,3 +56,48 @@ def test_inspect_status_is_read_only_and_reports_dead_letters(tmp_path):
     assert status["acknowledgements"] == 1
     assert status["spool_depth"] == 0
     assert not (root / "pending" / "state.sqlite3").exists()
+
+
+def test_default_spool_refuses_group_access(tmp_path):
+    import os
+    import pytest
+    from shield.hermes_transport import HermesTransportError
+
+    root = tmp_path / "spool"
+    root.mkdir(mode=0o700)
+    os.chmod(root, 0o750)
+    with pytest.raises(HermesTransportError):
+        HermesSpool(root, key=b"k" * 32)
+
+
+def test_group_shared_spool_sets_group_modes_under_strict_umask(tmp_path):
+    # The sensor unit runs with UMask=0077; group_shared must still leave the envelope
+    # group-readable and the state database group-writable for the analyst account.
+    import os
+    import stat
+
+    old_umask = os.umask(0o077)
+    try:
+        spool = HermesSpool(tmp_path / "spool", key=b"k" * 32, group_shared=True)
+        spool.publish(_payload(tmp_path), delivery_id="delivery-g")
+    finally:
+        os.umask(old_umask)
+    root_mode = stat.S_IMODE((tmp_path / "spool").stat().st_mode)
+    assert root_mode == 0o2770
+    envelope = next((tmp_path / "spool" / "pending").glob("*.json"))
+    assert stat.S_IMODE(envelope.stat().st_mode) == 0o640
+    assert stat.S_IMODE(spool.state_path.stat().st_mode) == 0o660
+
+
+def test_group_shared_spool_still_refuses_world_access(tmp_path):
+    import os
+    import pytest
+    from shield.hermes_transport import HermesTransportError
+
+    spool = HermesSpool(tmp_path / "spool", key=b"k" * 32, group_shared=True)
+    os.chmod(spool.root, 0o2775)
+    # Owner re-applies 2770 on open, so simulate a foreign-owned world-readable dir by
+    # checking the guard directly after the chmod the owner would perform is skipped.
+    spool._chmod_if_owner = lambda path, mode: None  # type: ignore[method-assign]
+    with pytest.raises(HermesTransportError):
+        spool._ensure_dirs()

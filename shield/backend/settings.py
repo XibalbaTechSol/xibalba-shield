@@ -42,7 +42,7 @@ SETTING_RULES: dict[str, tuple[type, set[Any] | None]] = {
     "hermesTransport": (str, {"local-spool"}),
     "hermesAnalysisOnly": (bool, None),
     "hermesRedactionMode": (str, {"strict"}),
-    "hermesEventScope": (str, {"all", "decisions", "network"}),
+    "hermesEventScope": (str, {"all", "decisions", "network", "material"}),
     "hermesSpoolPath": (str, None),
     "hermesKeyPath": (str, None),
     "hermesMaxBatch": (int, None),

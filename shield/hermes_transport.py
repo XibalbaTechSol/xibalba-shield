@@ -30,7 +30,7 @@ class HermesTransportError(RuntimeError):
 class HermesSpool:
     """Atomic-file producer/consumer with HMAC authentication and replay state."""
 
-    def __init__(self, root: str | Path, *, key: bytes, max_bytes: int = MAX_SPOOL_BYTES, max_batch: int = MAX_BATCH) -> None:
+    def __init__(self, root: str | Path, *, key: bytes, max_bytes: int = MAX_SPOOL_BYTES, max_batch: int = MAX_BATCH, group_shared: bool = False) -> None:
         if len(key) < 32:
             raise ValueError("Hermes spool key must contain at least 32 bytes")
         if max_bytes < MAX_PAYLOAD_BYTES or max_batch < 1:
@@ -43,6 +43,12 @@ class HermesSpool:
         self.key = bytes(key)
         self.max_bytes = int(max_bytes)
         self.max_batch = min(int(max_batch), MAX_BATCH)
+        # group_shared: the producer (sensor, user xibalba-shield) and the consumer
+        # (shield-hermes-analyst, another account with SupplementaryGroups=xibalba-shield)
+        # share the spool through its group. Modes are set with explicit chmod calls so
+        # they hold under the sensor unit's UMask=0077. World access is still refused.
+        # Default (False) keeps the original single-account 0700/0600 contract.
+        self.group_shared = bool(group_shared)
         self._ensure_dirs()
 
     @classmethod
@@ -51,15 +57,35 @@ class HermesSpool:
         return cls(root, key=key, **kwargs)
 
     def _ensure_dirs(self) -> None:
+        dir_mode = 0o2770 if self.group_shared else 0o700
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         for directory in (self.pending, self.ack, self.dead):
             directory.mkdir(mode=0o700, exist_ok=True)
-        mode = self.root.stat().st_mode & 0o077
-        if mode:
+        if self.group_shared:
+            for directory in (self.root, self.pending, self.ack, self.dead):
+                self._chmod_if_owner(directory, dir_mode)
+            if self.root.stat().st_mode & 0o007:
+                raise HermesTransportError("Hermes spool directory must not be world accessible")
+            for directory in (self.pending, self.ack, self.dead):
+                if not os.access(directory, os.R_OK | os.W_OK | os.X_OK):
+                    raise HermesTransportError(f"Hermes spool directory {directory.name} is not group writable for this account")
+        elif self.root.stat().st_mode & 0o077:
             raise HermesTransportError("Hermes spool directory must not be group/world accessible")
         with self._connect() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS deliveries (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at REAL NOT NULL, detail TEXT)")
             conn.execute("CREATE TABLE IF NOT EXISTS metrics (name TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)")
+        if self.group_shared:
+            # SQLite creates -wal/-shm with the main database file's mode, so 0660 here
+            # is what lets the other account record acknowledgements.
+            for path in (self.state_path, Path(f"{self.state_path}-wal"), Path(f"{self.state_path}-shm")):
+                if path.exists():
+                    self._chmod_if_owner(path, 0o660)
+
+    @staticmethod
+    def _chmod_if_owner(path: Path, mode: int) -> None:
+        # Only the owning account may chmod; the other side verifies access instead.
+        if path.stat().st_uid == os.geteuid():
+            os.chmod(path, mode)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.state_path, timeout=1.0)
@@ -146,6 +172,8 @@ class HermesSpool:
         temporary = self.pending / f".{delivery_id}.{os.getpid()}.tmp"
         try:
             fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            if self.group_shared:
+                os.fchmod(fd, 0o640)  # the umask stripped the group bits from 0o640
             with os.fdopen(fd, "wb") as handle:
                 handle.write(encoded)
                 handle.flush()

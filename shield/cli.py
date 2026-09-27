@@ -405,11 +405,15 @@ def _run(args: argparse.Namespace) -> int:
     if configured_hermes_agent and host_hermes_agent and configured_hermes_agent != host_hermes_agent:
         print("shield run: Hermes agent identity does not match the host-managed runtime identity", file=sys.stderr)
         return 1
+    # Hermes publication is downstream of local enforcement, so a bad spool path, key or
+    # scope disables it with a warning and the sensor keeps enforcing. It never exits:
+    # exiting here crash-loops the sensor (the 2026-09-27 03:16 cortex.env outage class).
+    # Only the identity mismatch above stays fatal -- that is a real identity violation.
     if hermes_settings.get("hermesEnabled") is not False and (hermes_spool_path or hermes_key_path):
-        if not (hermes_spool_path and hermes_key_path):
-            print("shield run: SHIELD_HERMES_SPOOL and SHIELD_HERMES_KEY must be configured together", file=sys.stderr)
-            return 1
         try:
+            if not (hermes_spool_path and hermes_key_path):
+                raise ValueError("SHIELD_HERMES_SPOOL and SHIELD_HERMES_KEY must be configured together")
+            from .agent_core.cortex_memory import _publish_actions_from_env
             from .hermes_contract import build_event
             from .hermes_transport import HermesSpool
 
@@ -418,8 +422,15 @@ def _run(args: argparse.Namespace) -> int:
                 hermes_key_path,
                 max_bytes=int(hermes_settings.get("hermesSpoolMaxBytes", 16 * 1024 * 1024)),
                 max_batch=int(hermes_settings.get("hermesMaxBatch", 10)),
+                group_shared=os.environ.get("SHIELD_HERMES_GROUP_SHARED", "").strip() == "1",
             )
-            hermes_scope = str(hermes_settings.get("hermesEventScope", "all"))
+            # A host-managed scope (the drop-in env) wins over the UI setting.
+            hermes_scope = os.environ.get("SHIELD_HERMES_EVENT_SCOPE", "").strip() or str(hermes_settings.get("hermesEventScope", "all"))
+            if hermes_scope not in {"all", "decisions", "network", "material"}:
+                raise ValueError(f"unknown Hermes event scope {hermes_scope!r}")
+            # "material" = the same action set Shield publishes to Cortex memory
+            # (SHIELD_CORTEX_PUBLISH_ACTIONS, default contain/deny/escalate).
+            material_actions = _publish_actions_from_env()
 
             def hermes_publisher(event, decision):
                 event_class = str(getattr(event, "klass", ""))
@@ -428,17 +439,27 @@ def _run(args: argparse.Namespace) -> int:
                 if hermes_scope == "decisions" and event_class == "network_flow":
                     return
                 action = getattr(getattr(decision, "decision", None), "action", "log_only")
+                if hermes_scope == "material" and action not in material_actions:
+                    return
                 enforcement = None
                 if action == "contain":
                     enforcement = {"action": "freeze", "status": "pending", "target_ref": getattr(getattr(event, "process", None), "pid", None)}
+                # The privileged eBPF helper stamps events with its own SHIELD_TENANT_ID,
+                # which may be unset; the contract requires a tenant, so fall back to the
+                # device config's tenant (the authoritative device->tenant binding).
+                event_for_contract = event
+                if device_config.tenant_id and hasattr(event, "to_dict"):
+                    raw_event = event.to_dict()
+                    if not raw_event.get("tenant_id"):
+                        event_for_contract = {**raw_event, "tenant_id": device_config.tenant_id}
                 envelope = build_event(
-                    event, decision, device_role=device_config.device_role or "workstation",
+                    event_for_contract, decision, device_role=device_config.device_role or "workstation",
                     sensor=args.sensor, transport="local-spool", enforcement=enforcement,
                 )
                 hermes_spool.publish(envelope, delivery_id=envelope["delivery"]["delivery_id"])
-        except (OSError, ValueError, RuntimeError) as exc:
-            print(f"shield run: invalid Hermes transport configuration: {exc}", file=sys.stderr)
-            return 1
+        except Exception as exc:  # noqa: BLE001 -- optional downstream analysis cannot stop local enforcement
+            print(f"shield run: Hermes publication disabled; invalid transport configuration: {exc}", file=sys.stderr)
+            hermes_publisher = None
 
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
