@@ -17,7 +17,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XibalbaTechSol/integrity-core
-          ref: a91bdc37dad6e80d1c6ff32292daa9064f0b380a
+          # Head of integrity-core PR #99: this branch needs its SDK (e.g.
+          # load_or_create_did(agent_id, *, did_home_root)), which main (a91bdc3) lacks.
+          # Bump to integrity-core main once #99 is merged.
+          ref: af7c760ec9cd8733bd9b56baa84991bddf19b246
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
