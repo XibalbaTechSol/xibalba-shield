@@ -16,9 +16,9 @@ did_root="$(dirname "$(dirname "$did_file")")"
 device_config="${SHIELD_DEVICE_CONFIG:-/etc/xibalba-shield/device.json}"
 rpc_url="${RPC_URL:-http://127.0.0.1:8545}"
 oracle_url="${ORACLE_URL:-http://127.0.0.1:8080}"
-bcc_url="${BCC_MIDDLEWARE_URL:-http://127.0.0.1:8001}"
+bcc_url="${BCC_MIDDLEWARE_URL:-http://127.0.0.1:8000}"
 deployments_file="${DEPLOYMENTS_FILE:-/home/xibalba/Projects/integrity-core/deployments.local.json}"
-backend_health_url="${SHIELD_BACKEND_HEALTH_URL:-http://127.0.0.1:8421/api/shield/health}"
+backend_health_url="${SHIELD_BACKEND_HEALTH_URL:-http://127.0.0.1:8435/api/shield/health}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }
 need curl
@@ -91,7 +91,7 @@ import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8")).get("backend_url", ""))
 PY
 )"
-if [[ "$current_backend_url" == "https://127.0.0.1:8443" || "$current_backend_url" == "https://localhost:8443" || "$current_backend_url" == "http://127.0.0.1:8421" ]]; then
+if [[ "$current_backend_url" == "https://127.0.0.1:8443" || "$current_backend_url" == "https://localhost:8443" || "$current_backend_url" == "http://127.0.0.1:8421" || "$current_backend_url" == "http://127.0.0.1:8435" || "$current_backend_url" == "http://127.0.0.1:8765" ]]; then
   curl --fail --silent --show-error "$backend_health_url" >/dev/null || {
     echo "Expected local Shield backend is not healthy at $backend_health_url; device config was not changed." >&2
     exit 1
@@ -105,7 +105,7 @@ from pathlib import Path
 path = Path(sys.argv[1])
 st = path.stat()
 data = json.loads(path.read_text(encoding="utf-8"))
-data["backend_url"] = "http://127.0.0.1:8421"
+data["backend_url"] = "http://127.0.0.1:8435"
 data["backend_ca_file"] = ""
 data["backend_client_cert"] = ""
 data["backend_client_key"] = ""
@@ -121,7 +121,7 @@ except Exception:
     Path(tmp).unlink(missing_ok=True)
     raise
 PY
-  echo "Updated backend_url to http://127.0.0.1:8421"
+  echo "Updated backend_url to http://127.0.0.1:8435"
   echo "  Device config backup: $config_backup"
 fi
 

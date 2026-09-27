@@ -169,7 +169,7 @@ def main() -> int:
         else:
             print(f"INFO {label} active={state['ActiveState']} substate={state['SubState']} pid={state['MainPID']}")
 
-    shield_health = health("http://127.0.0.1:8421/api/shield/health")
+    shield_health = health("http://127.0.0.1:8435/api/shield/health")
     cortex_health = health("http://127.0.0.1:8423/health")
     if shield_health["reachable"] and shield_health["status"] == 200:
         emit("PASS", "Shield health endpoint returned HTTP 200", failures)

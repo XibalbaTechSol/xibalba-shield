@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 DECISIONS_PATH = Path.home() / ".xibalba-shield" / "decisions.jsonl"
-BACKEND_URL = os.environ.get("SHIELD_BACKEND_URL", "http://127.0.0.1:8421").rstrip("/")
+BACKEND_URL = os.environ.get("SHIELD_BACKEND_URL", "http://127.0.0.1:8435").rstrip("/")
 TENANTS = [t.strip() for t in os.environ.get("SHIELD_TENANTS", "tenant-a,dev-tenant").split(",") if t.strip()]
 DEVICE_ID = os.environ.get("SHIELD_DEVICE_ID", "xibalba-desktop")
 DEVICE_TOKEN = os.environ.get("SHIELD_DEVICE_TOKEN", "dev")

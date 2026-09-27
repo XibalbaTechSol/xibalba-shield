@@ -83,7 +83,7 @@ if command -v curl >/dev/null 2>&1; then
     # command line or in process listings.
     printf 'Authorization: Bearer %s\n' "$(<"${ADMIN_TOKEN_FILE}")" |
       curl --silent --show-error --connect-timeout 2 -H @- \
-        'http://127.0.0.1:8421/api/shield/exporter-status?tenant_id=tenant-a' \
+        'http://127.0.0.1:8435/api/shield/exporter-status?tenant_id=tenant-a' \
         || echo "backend status unavailable"
   else
     echo "backend status unavailable: admin token file is not readable"

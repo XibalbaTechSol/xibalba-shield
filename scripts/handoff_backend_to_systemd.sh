@@ -4,7 +4,7 @@ set -euo pipefail
 # Controlled handoff from the known unmanaged local Shield backend to systemd.
 # Default mode is read-only. --takeover is an explicit operator authorization.
 unit="${SHIELD_BACKEND_UNIT:-xibalba-shield-backend.service}"
-port="${SHIELD_BACKEND_PORT:-8421}"
+port="${SHIELD_BACKEND_PORT:-8435}"
 takeover="false"
 if [[ "${1:-}" == "--takeover" ]]; then takeover="true"; fi
 
