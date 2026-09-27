@@ -17,7 +17,11 @@ WORKDIR /app
 COPY xibalba-shield/pyproject.toml xibalba-shield/README.md xibalba-shield/LICENSE ./
 COPY xibalba-shield/shield ./shield
 COPY xibalba-shield/scripts ./scripts
-RUN pip install --no-cache-dir .
+# pip does not consume the PEP 621 `tool.uv.sources` path override. Install the
+# colocated SDK explicitly first so the normal package metadata dependency can be
+# resolved in this image as well as in the local uv environment.
+RUN pip install --no-cache-dir /home/xibalba/Projects/integrity-core/integrity-sdk \
+    && pip install --no-cache-dir .
 
 ENTRYPOINT ["shield", "run"]
 CMD []

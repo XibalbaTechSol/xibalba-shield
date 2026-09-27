@@ -7,8 +7,11 @@ CONFIG_DIR="${CONFIG_DIR:-/etc/xibalba-shield}"
 POLICY_DIR="${POLICY_DIR:-${CONFIG_DIR}/policies}"
 LOG_DIR="${LOG_DIR:-/var/log/xibalba-shield}"
 STATE_DIR="${STATE_DIR:-/var/lib/xibalba-shield}"
+LOGROTATE_DIR="${LOGROTATE_DIR:-/etc/logrotate.d}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 ENABLE_SERVICE="${ENABLE_SERVICE:-1}"
+INSTALL_BACKEND_UNIT="${INSTALL_BACKEND_UNIT:-1}"
+ENABLE_BACKEND_SERVICE="${ENABLE_BACKEND_SERVICE:-0}"
 
 if [ "$(id -u)" -ne 0 ]; then
   printf 'install_linux_agent.sh must run as root so it can write systemd/config paths.\n' >&2
@@ -36,9 +39,15 @@ fi
 install -d -m 0755 "$PREFIX"
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$CONFIG_DIR" "$POLICY_DIR" "$LOG_DIR" "$STATE_DIR"
 "$PYTHON_BIN" -m pip install --upgrade .
+install -m 0755 packaging/systemd/xibalba-shield-run /usr/local/bin/xibalba-shield-run
 install -m 0644 packaging/systemd/xibalba-shield.service "$SERVICE_DIR/xibalba-shield.service"
 install -m 0644 packaging/systemd/xibalba-shield-ebpf-helper.service "$SERVICE_DIR/xibalba-shield-ebpf-helper.service"
 install -m 0644 packaging/systemd/xibalba-shield-cortex-outbox.service "$SERVICE_DIR/xibalba-shield-cortex-outbox.service"
+if [ "$INSTALL_BACKEND_UNIT" = "1" ]; then
+  install -m 0644 packaging/systemd/xibalba-shield-backend.service "$SERVICE_DIR/xibalba-shield-backend.service"
+fi
+install -d -m 0755 "$LOGROTATE_DIR"
+install -m 0644 packaging/logrotate/xibalba-shield "$LOGROTATE_DIR/xibalba-shield"
 install -d -m 0755 /usr/local/libexec
 install -m 0755 scripts/shield_ebpf_helper.py /usr/local/libexec/xibalba-shield-ebpf-helper
 install -m 0755 packaging/systemd/xibalba-shield-ebpf-helper-run /usr/local/libexec/xibalba-shield-ebpf-helper-run
@@ -54,6 +63,12 @@ if command -v systemctl >/dev/null 2>&1; then
   if [ "$ENABLE_SERVICE" = "1" ]; then
     systemctl enable xibalba-shield.service
   fi
+  if [ "$ENABLE_BACKEND_SERVICE" = "1" ] && [ "$INSTALL_BACKEND_UNIT" = "1" ]; then
+    systemctl enable xibalba-shield-backend.service
+  fi
 fi
 
 printf 'Installed xibalba-shield. Edit %s/device.json, %s/shield.env, and %s/current.json before starting xibalba-shield.service.\n' "$CONFIG_DIR" "$CONFIG_DIR" "$POLICY_DIR"
+if [ "$INSTALL_BACKEND_UNIT" = "1" ]; then
+  printf 'Installed xibalba-shield-backend.service; it is not enabled unless ENABLE_BACKEND_SERVICE=1 is set.\n'
+fi

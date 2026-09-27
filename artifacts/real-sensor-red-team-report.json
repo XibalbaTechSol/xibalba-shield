@@ -1,0 +1,161 @@
+{
+  "decision_rows_observed": 21,
+  "decisions": [
+    {
+      "action": "log_only",
+      "event_id": "evt-c9b9619681db",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:08Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-eb3c516b0d48",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:08Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-f78543aa62b7",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:08Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-76a4ef325e04",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:08Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-d0fb3ca0ab05",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:08Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-594f58d5ddc3",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:08Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-76dddafe319d",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:09Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-2a4fb42494a0",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:09Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-0931c355e5ce",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:09Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-2ee33e81ea47",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:09Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-e758c024ebf1",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:09Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-2d76fdf15203",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:09Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-59f190ce7d83",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:10Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-4d593fc1cd84",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:10Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-5900887f4b43",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:10Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-9d3f60443d95",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:10Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-b158a42d5bed",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:10Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-4b841ea8e0de",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:10Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-3267a1f6808c",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:11Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-48efa4b8f28d",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:11Z"
+    },
+    {
+      "action": "log_only",
+      "event_id": "evt-4aec309654db",
+      "reason": "no policy rule matched",
+      "rule_id": "_no_match",
+      "time": "2026-09-24T06:54:11Z"
+    }
+  ],
+  "device_id": "xibalba-HP-Desktop-M01-F0xxx",
+  "note": "Real local sensor activity only; no external network, credentials, persistence, kill, or production firewall action.",
+  "schema": "shield.real_sensor_red_team_report.v1",
+  "scope": [
+    "real_process_exec",
+    "real_file_write",
+    "real_loopback_tcp_connect"
+  ],
+  "synthetic": false
+}

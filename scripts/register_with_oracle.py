@@ -57,6 +57,10 @@ for sdk_path in SDK_HINTS:
         break
 
 AGENT_ID = "xibalba-shield"
+# Oracle-local XNS handle claimed for this agent (integrity-oracle migration 0022).
+# integrity_sdk.register_agent() requires one; "xibalba.shield" is the handle already
+# claimed for this device's Shield agent, so the default re-uses it rather than minting a new one.
+XNS_HANDLE = "xibalba.shield"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -68,6 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         default=os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/integrity-core/deployments.local.json"),
     )
     parser.add_argument("--oracle-url", default=os.getenv("ORACLE_URL", "http://oracle-backend:8080"))
+    parser.add_argument(
+        "--handle",
+        default=os.getenv("SHIELD_XNS_HANDLE", XNS_HANDLE),
+        help="unique Oracle-local XNS handle for this agent (required by integrity-sdk registration)",
+    )
     parser.add_argument(
         "--skip-oracle-registration",
         action="store_true",
@@ -96,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         registration = register_agent(
             agent_id=args.agent_id,
+            handle=args.handle,
             rpc_url=args.rpc_url,
             deployments_file=args.deployments_file,
             oracle_url=args.oracle_url,
@@ -104,6 +114,11 @@ def main(argv: list[str] | None = None) -> int:
     except RegistrationError as exc:
         print(f"registration failed: {exc}", file=sys.stderr)
         return 1
+    except ValueError as exc:
+        # register_agent validates its arguments (handle format, compliance vertical) before
+        # touching the chain; surface that as a clean usage error, not a traceback.
+        print(f"invalid registration arguments: {exc}", file=sys.stderr)
+        return 2
 
     print(json.dumps(registration.to_dict(), indent=2))
     return 0

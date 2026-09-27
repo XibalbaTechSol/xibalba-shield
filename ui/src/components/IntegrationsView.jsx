@@ -235,9 +235,9 @@ export function IntegrationsView({ data, api, refresh }) {
 
       <div className="pipeline-health-rail" aria-label="Pipeline health">
         <div><Radio size={18} /><span><small>Active pipelines</small><strong>{integrations.length}</strong></span></div>
-        <div><Activity size={18} /><span><small>Delivery health</small><strong>{integrations.length ? 'Awaiting test' : 'No data'}</strong></span></div>
-        <div><Layers size={18} /><span><small>Queued events</small><strong>—</strong></span></div>
-        <div><CheckCircle2 size={18} /><span><small>Last delivery</small><strong>{integrations.length ? 'Not reported' : 'Never'}</strong></span></div>
+        <div><Activity size={18} /><span><small>Delivery health</small><strong>{integrations.length ? 'Awaiting test' : 'Not configured'}</strong></span></div>
+        <div><Layers size={18} /><span><small>Queued events</small><strong>{integrations.length ? 'Not reported' : 'Not configured'}</strong></span></div>
+        <div><CheckCircle2 size={18} /><span><small>Last delivery</small><strong>{integrations.length ? 'Not reported' : 'No delivery configured'}</strong></span></div>
       </div>
 
       {/* Active Integrations Section */}

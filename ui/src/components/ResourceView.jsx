@@ -10,9 +10,11 @@ import { EventStreamView } from './EventStreamView'
 import { PoliciesView } from './PoliciesView'
 import { IntegrationsView } from './IntegrationsView'
 import { DeveloperView } from './DeveloperView'
-import { SettingsView } from './SettingsView'
+import { SettingsChangeQueue, SettingsView } from './SettingsView'
 import { TransactionWorkbench } from './TransactionWorkbench'
 import { AgentView } from './AgentView'
+import { NetworkView } from './NetworkView'
+import { HermesAgentView } from './HermesAgentView'
 
 export function RollbackForm({ api }) {
   const [message, setMessage] = useState('')
@@ -126,81 +128,96 @@ function EvidenceControls({ api, rows }) {
       setMessage('Evidence controls saved to the tenant control plane. Endpoint adoption requires configuration distribution.')
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)) }
   }
-  return <form className="settings-card evidence-controls" onSubmit={save}><div className="settings-card-header"><div className="settings-card-title"><Database size={18} /><h3>Export, queue, and verification</h3></div><span className="live-status-pill"><span className="status-dot green" /> Evidence path</span></div><p className="settings-card-desc">Configure where decisions are sent and how the endpoint recovers from transient delivery failures. Queue state is read from authenticated runtime status.</p><div className="settings-fields-grid"><div className="field-group"><label htmlFor="evidence-destination">Evidence destination</label><select id="evidence-destination" value={destination} onChange={(event) => setDestination(event.target.value)}><option value="integrity">Integrity Protocol</option><option value="siem">SIEM webhook</option><option value="both">Integrity + SIEM</option></select></div><div className="field-group"><label htmlFor="evidence-retention">Local retention</label><select id="evidence-retention" value={retention} onChange={(event) => setRetention(event.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="365">365 days</option></select></div></div><label className="toggle-item"><input type="checkbox" checked={autoRetry} onChange={(event) => setAutoRetry(event.target.checked)} /><div><b>Retry transient delivery failures</b><p>Use the bounded worker queue; never bypass authentication or TLS verification.</p></div></label><div className="evidence-runtime-strip"><span><b>Queue depth</b>{live.queue_depth ?? '—'}</span><span><b>Spool pending</b>{live.spool_pending ?? '—'}</span><span><b>Failures</b>{live.export_failures ?? '—'}</span><span><b>Verification</b>{live.backend_evidence?.publish_failures === 0 ? 'Publishing' : 'Unverified'}</span></div><div className="settings-actions-footer"><button type="submit" className="primary-btn"><Save size={14} /> Save evidence controls</button>{message && <span className="form-message" aria-live="polite"><CheckCircle2 size={14} /> {message}</span>}</div></form>
+  const verified = live.backend_evidence?.verified === true
+  return <form className="settings-card evidence-controls" onSubmit={save}><div className="settings-card-header"><div className="settings-card-title"><Database size={18} /><h3>Export, queue, and verification</h3></div><span className="live-status-pill"><span className={`status-dot ${verified ? 'green' : 'yellow'}`} /> {verified ? 'Receipt verified' : 'Verification unverified'}</span></div><p className="settings-card-desc">Configure where decisions are sent and how the endpoint recovers from transient delivery failures. Queue depth, spool state, and receipt verification are separate signals.</p><div className="settings-fields-grid"><div className="field-group"><label htmlFor="evidence-destination">Evidence destination</label><select id="evidence-destination" value={destination} onChange={(event) => setDestination(event.target.value)}><option value="integrity">Integrity Protocol</option><option value="siem">SIEM webhook</option><option value="both">Integrity + SIEM</option></select></div><div className="field-group"><label htmlFor="evidence-retention">Local retention</label><select id="evidence-retention" value={retention} onChange={(event) => setRetention(event.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="365">365 days</option></select></div></div><label className="toggle-item"><input type="checkbox" checked={autoRetry} onChange={(event) => setAutoRetry(event.target.checked)} /><div><b>Retry transient delivery failures</b><p>Use the bounded worker queue; never bypass authentication or TLS verification.</p></div></label><div className="evidence-runtime-strip"><span><b>Queue depth</b>{live.queue_depth ?? '—'}</span><span><b>Spool pending</b>{live.spool_pending ?? '—'}</span><span><b>Failures</b>{live.export_failures ?? '—'}</span><span><b>Verification</b>{verified ? (live.backend_evidence.receipt_id || 'verified') : 'unverified'}</span></div><div className="settings-actions-footer"><button type="submit" className="primary-btn"><Save size={14} /> Save evidence controls</button>{message && <span className="form-message" aria-live="polite"><CheckCircle2 size={14} /> {message}</span>}</div></form>
 }
 
-export function ResourceView({ view, data, api, refresh, connection, logout }) {
-  const [deviceDetail, setDeviceDetail] = useState(null)
+function WorkspaceTabs({ tabs, active, onChange }) {
+  return (
+    <div className="workspace-tabs" role="tablist" aria-label="Workspace sections">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          className={active === tab.id ? 'active' : ''}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+          {tab.count !== undefined && <span>{tab.count}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
 
-  if (view === 'devices') {
-    const openDevice = async (device) => {
-      const deviceId = device.device_id || device.id
-      setDeviceDetail({ loading: true, device_id: deviceId })
-      try {
-        const detail = await api.device(deviceId)
-        setDeviceDetail({ loading: false, ...detail })
-      } catch (error) {
-        setDeviceDetail({ loading: false, device_id: deviceId, error: error instanceof Error ? error.message : String(error) })
-      }
+function WorkspaceHeader({ eyebrow, title, copy }) {
+  return <div className="workspace-header"><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p>{copy}</p></div>
+}
+
+function DeviceInventory({ data, api, refresh }) {
+  const [deviceDetail, setDeviceDetail] = useState(null)
+  const openDevice = async (device) => {
+    const deviceId = device.device_id || device.id
+    setDeviceDetail({ loading: true, device_id: deviceId })
+    try {
+      const detail = await api.device(deviceId)
+      setDeviceDetail({ loading: false, ...detail })
+    } catch (error) {
+      setDeviceDetail({ loading: false, device_id: deviceId, error: error instanceof Error ? error.message : String(error) })
     }
-    return (
-      <>
-        <Resource title="Devices" copy="Tenant-scoped enrolled endpoints">
-          <div className="cards">
-            {data.devices.map((d, i) => (
-              <button type="button" className="resource-card device-card-button" key={d.device_id || d.id || i} onClick={() => openDevice(d)}>
-                <HardDrive aria-hidden="true" />
-                <div>
-                  <h3>{d.device_id || d.name || 'Unnamed device'}</h3>
-                  <p>
-                    {d.device_role || d.os || 'Endpoint'} · {d.policy_version ? `Policy: ${d.policy_version} · ` : ''}{d.last_seen_at || d.enrolled_at || d.last_seen || 'active'}
-                  </p>
-                </div>
-                <span className={`status-pill ${d.status || 'enrolled'}`}>{d.status || 'enrolled'}</span>
-              </button>
-            ))}
-          </div>
-        </Resource>
-        <ActionForm
-          title="Enroll a device"
-          copy="Issue a tenant-scoped device credential and configuration bundle."
-          fields={[
-            ['deviceId', 'Device ID'],
-            ['deviceRole', 'Device role'],
-          ]}
-          buttonText="Enroll device"
-          successText="Device enrolled successfully."
-          submit={async (values) => {
-            await api.enrollDevice(values.deviceId, values.deviceRole || 'workstation')
-            await refresh()
-          }}
-        />
-        {deviceDetail && (
-          <aside className="device-detail-backdrop" role="presentation" onClick={() => setDeviceDetail(null)}>
-            <section className="device-detail-drawer" role="dialog" aria-modal="true" aria-label="Device details" onClick={(event) => event.stopPropagation()}>
-              <header className="device-detail-header">
-                <div>
-                  <p className="eyebrow">DEVICE DETAIL</p>
-                  <h2>{deviceDetail.device_id}</h2>
-                  <span>{deviceDetail.device_role || 'Endpoint'} · {deviceDetail.status || 'enrolled'}</span>
-                </div>
-                <button type="button" className="drawer-close" aria-label="Close device details" onClick={() => setDeviceDetail(null)}><X aria-hidden="true" /></button>
-              </header>
-              {deviceDetail.loading ? <p className="device-detail-loading">Loading authenticated device state…</p> : deviceDetail.error ? <p className="form-message error" role="alert">Unable to load device details: {deviceDetail.error}</p> : (
-                <div className="device-detail-content">
-                  <div className="device-detail-summary"><ShieldCheck size={20} /><span><b>Policy</b><small>{deviceDetail.policy_version || 'No policy deployed'}</small></span></div>
-                  <div className="device-detail-summary"><Activity size={20} /><span><b>Last seen</b><small>{deviceDetail.last_seen_at || 'Not reported'}</small></span></div>
-                  <dl className="device-detail-grid">
-                    {['device_role', 'agent_label', 'ip_address', 'kernel_version', 'ebpf_sensor', 'did'].map((key) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{deviceDetail[key] || '—'}</dd></div>)}
-                  </dl>
-                </div>
-              )}
-            </section>
-          </aside>
-        )}
-      </>
-    )
   }
+  return <>
+    <Resource title="Fleet inventory" copy="Tenant-scoped enrolled endpoints and their current attestation state">
+      {data.devices.length === 0 ? <div className="empty resource-empty-state" role="status"><HardDrive aria-hidden="true" /><h3>No enrolled endpoints returned</h3><p>The control plane did not return a device inventory for this tenant. Aggregate event counts are shown separately and do not prove that an endpoint record is available here.</p><button type="button" className="secondary-btn" onClick={refresh}>Refresh inventory</button></div> : <div className="cards">
+        {data.devices.map((d, i) => (
+          <button type="button" className="resource-card device-card-button" key={d.device_id || d.id || i} onClick={() => openDevice(d)}>
+            <HardDrive aria-hidden="true" />
+            <div><h3>{d.device_id || d.name || 'Unnamed device'}</h3><p>{d.device_role || d.os || 'Endpoint'} · {d.policy_version ? `Policy: ${d.policy_version} · ` : ''}{d.last_seen_at || d.enrolled_at || d.last_seen || 'active'}</p></div>
+            <span className={`status-pill ${d.status || 'enrolled'}`}>{d.status || 'enrolled'}</span>
+          </button>
+        ))}
+      </div>}
+    </Resource>
+    <ActionForm title="Enroll a device" copy="Issue a tenant-scoped device credential and configuration bundle." fields={[['deviceId', 'Device ID'], ['deviceRole', 'Device role']]} buttonText="Enroll device" successText="Device enrolled successfully." submit={async (values) => { await api.enrollDevice(values.deviceId, values.deviceRole || 'workstation'); await refresh() }} />
+    {deviceDetail && <aside className="device-detail-backdrop" role="presentation" onClick={() => setDeviceDetail(null)}><section className="device-detail-drawer" role="dialog" aria-modal="true" aria-label="Device details" onClick={(event) => event.stopPropagation()}>
+      <header className="device-detail-header"><div><p className="eyebrow">DEVICE DETAIL</p><h2>{deviceDetail.device_id}</h2><span>{deviceDetail.device_role || 'Endpoint'} · {deviceDetail.status || 'enrolled'}</span></div><button type="button" className="drawer-close" aria-label="Close device details" onClick={() => setDeviceDetail(null)}><X aria-hidden="true" /></button></header>
+      {deviceDetail.loading ? <p className="device-detail-loading">Loading authenticated device state…</p> : deviceDetail.error ? <p className="form-message error" role="alert">Unable to load device details: {deviceDetail.error}</p> : <div className="device-detail-content"><div className="device-detail-summary"><ShieldCheck size={20} /><span><b>Policy</b><small>{deviceDetail.policy_version || 'No policy deployed'}</small></span></div><div className="device-detail-summary"><Activity size={20} /><span><b>Last seen</b><small>{deviceDetail.last_seen_at || 'Not reported'}</small></span></div><dl className="device-detail-grid">{['device_role', 'agent_label', 'ip_address', 'kernel_version', 'ebpf_sensor', 'did'].map((key) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{deviceDetail[key] || '—'}</dd></div>)}</dl></div>}
+    </section></aside>}
+  </>
+}
+
+function FleetWorkspace({ data, api, refresh }) {
+  const [tab, setTab] = useState('inventory')
+  return <><WorkspaceHeader eyebrow="OPERATIONS / FLEET" title="Fleet & identity" copy="Establish which endpoints are enrolled, attested, and bound to the canonical Shield agent before changing policy." /><WorkspaceTabs active={tab} onChange={setTab} tabs={[{ id: 'inventory', label: 'Fleet inventory', count: data.devices.length }, { id: 'identity', label: 'Shield agent' }]} />{tab === 'inventory' ? <DeviceInventory data={data} api={api} refresh={refresh} /> : <AgentView data={data} refresh={refresh} api={api} />}</>
+}
+
+function ResponseWorkspace({ data, api }) {
+  const [tab, setTab] = useState('observations')
+  return <><WorkspaceHeader eyebrow="OPERATIONS / RESPONSE" title="Detect & respond" copy="Review observed activity first, then apply an explicitly authorized enforcement action with rollback visibility." /><WorkspaceTabs active={tab} onChange={setTab} tabs={[{ id: 'observations', label: 'Event stream' }, { id: 'enforcement', label: 'Enforcement', count: data.outcomes.length }]} />{tab === 'observations' ? <EventStreamView data={data} /> : <ContainmentView outcomes={data.outcomes} api={api} data={data} />}</>
+}
+
+function GovernanceWorkspace({ data, api, refresh }) {
+  const [tab, setTab] = useState('policies')
+  return <><WorkspaceHeader eyebrow="GOVERNANCE / CHANGE CONTROL" title="Policy & approvals" copy="Select, review, deploy, and roll back policy through auditable approval surfaces. High-impact containment and guardrail changes require explicit approval." /><WorkspaceTabs active={tab} onChange={setTab} tabs={[{ id: 'policies', label: 'Policy catalog' }, { id: 'guardrails', label: 'Guardrails & approvals' }, { id: 'transactions', label: 'Approvals & transactions' }, { id: 'network', label: 'Network controls' }, { id: 'opa', label: 'OPA policies' }]} />{tab === 'policies' ? <PoliciesView data={data} api={api} refresh={refresh} /> : tab === 'guardrails' ? <SettingsChangeQueue api={api} /> : tab === 'transactions' ? <TransactionWorkbench api={api} /> : tab === 'network' ? <NetworkView api={api} /> : <OpaPoliciesView api={api} />}</>
+}
+
+function EvidenceWorkspace({ data, api, refresh }) {
+  const [tab, setTab] = useState('evidence')
+  return <><WorkspaceHeader eyebrow="ASSURANCE / AUDIT" title="Evidence & integrations" copy="Confirm what Shield observed, what was exported, and what downstream systems acknowledged. Synthetic fallback data stays hidden." /><WorkspaceTabs active={tab} onChange={setTab} tabs={[{ id: 'evidence', label: 'Evidence & exporter' }, { id: 'quality', label: 'Detection quality' }, { id: 'integrations', label: 'Integrations' }]} />{tab === 'evidence' ? <><Resource title="Evidence & exporter" copy="DID preflight, sensor, queue, and receipt publication status"><JsonRows rows={data.exporter} /></Resource><EvidenceControls api={api} rows={data.exporter || []} /><RemediationForm api={api} /></> : tab === 'quality' ? <DetectionQualityView data={data.quality} summary={data.summary} api={api} /> : <IntegrationsView data={data} api={api} refresh={refresh} />}</>
+}
+
+function HermesWorkspace({ data, api }) {
+  return <><WorkspaceHeader eyebrow="ASSURANCE / HERMES" title="Hermes agent" copy="Configure and verify the authenticated Shield-to-Hermes analysis boundary. Shield remains the local enforcement authority; Hermes receives only redacted events." /><HermesAgentView api={api} data={data} /></>
+}
+
+export function ResourceView({ view, data, api, refresh, connection, logout, theme, onThemeChange }) {
+  if (view === 'fleet') return <FleetWorkspace data={data} api={api} refresh={refresh} />
+  if (view === 'devices') return <DeviceInventory data={data} api={api} refresh={refresh} />
+  if (view === 'response') return <ResponseWorkspace data={data} api={api} />
+  if (view === 'governance') return <GovernanceWorkspace data={data} api={api} refresh={refresh} />
+  if (view === 'hermes') return <HermesWorkspace data={data} api={api} />
 
   if (view === 'agent') {
     return <AgentView data={data} refresh={refresh} api={api} />
@@ -214,20 +231,7 @@ export function ResourceView({ view, data, api, refresh, connection, logout }) {
     return <EventStreamView data={data} />
   }
 
-  if (view === 'evidence') {
-    return (
-      <>
-        <Resource
-          title="Evidence & exporter"
-          copy="DID preflight, sensor, queue, and receipt publication status"
-        >
-          <JsonRows rows={data.exporter} />
-        </Resource>
-        <EvidenceControls api={api} rows={data.exporter || []} />
-        <RemediationForm api={api} />
-      </>
-    )
-  }
+  if (view === 'evidence') return <EvidenceWorkspace data={data} api={api} refresh={refresh} />
 
   if (view === 'transactions') {
     return <TransactionWorkbench api={api} />
@@ -237,8 +241,12 @@ export function ResourceView({ view, data, api, refresh, connection, logout }) {
     return <IntegrationsView data={data} api={api} refresh={refresh} />
   }
 
+  if (view === 'network') {
+    return <NetworkView api={api} />
+  }
+
   if (view === 'settings') {
-    return <SettingsView connection={connection} logout={logout} data={data} />
+    return <SettingsView connection={connection} logout={logout} data={data} theme={theme} onThemeChange={onThemeChange} />
   }
 
   if (view === 'developer') {
@@ -254,7 +262,7 @@ export function ResourceView({ view, data, api, refresh, connection, logout }) {
   }
 
   if (view === 'quality') {
-    return <DetectionQualityView data={data.quality} api={api} />
+    return <DetectionQualityView data={data.quality} summary={data.summary} api={api} />
   }
 
   return (
@@ -264,11 +272,16 @@ export function ResourceView({ view, data, api, refresh, connection, logout }) {
   )
 }
 
-function DetectionQualityView({ data, api }) {
+function DetectionQualityView({ data, summary, api }) {
   const [bccUrl, setBccUrl] = useState('http://127.0.0.1:8080')
   const [oracleUrl, setOracleUrl] = useState('')
   const [report, setReport] = useState(null)
   const [message, setMessage] = useState('')
+  const eventClassTotal = Object.values(summary?.event_class_counts || {}).reduce((total, count) => total + Number(count || 0), 0)
+  const actionTotal = Object.values(summary?.decisions_by_action || {}).reduce((total, count) => total + Number(count || 0), 0)
+  const observedEvents = eventClassTotal || actionTotal
+  const securityDecisions = ['deny', 'contain', 'escalate'].reduce((total, action) => total + Number(summary?.decisions_by_action?.[action] || 0), 0)
+  const agentEvents = Number(summary?.event_class_counts?.agent_event || 0)
   const generate = async (event) => { event.preventDefault(); setMessage('Generating report…'); try { setReport(await api.detectionQualityReport(bccUrl, oracleUrl)); setMessage('Report generated from authenticated detection-quality records.') } catch (error) { setMessage(error instanceof Error ? error.message : String(error)) } }
-  return <><Resource title="Detection quality" copy="Measured adversarial detection and export quality"><JsonRows rows={data} /></Resource><Resource title="Generate quality report" copy="Verify detection-quality records against BCC middleware and optional Oracle audit data."><form className="action-form" onSubmit={generate}><label>BCC middleware URL<input value={bccUrl} onChange={(event) => setBccUrl(event.target.value)} required /></label><label>Oracle URL (optional)<input value={oracleUrl} onChange={(event) => setOracleUrl(event.target.value)} /></label><button type="submit" className="primary">Generate report</button><p className="form-message" aria-live="polite">{message}</p></form>{report && <pre className="report-preview">{JSON.stringify(report, null, 2)}</pre>}</Resource></>
+  return <><Resource title="Detection quality" copy="Measured adversarial detection and export quality">{data.length === 0 ? <div className="empty"><Activity size={28} /><h3>No labeled quality records persisted</h3><p>Runtime decisions are live, but detection quality requires authenticated samples with an operator or benchmark label and verifiable receipts.</p><small>Current evidence state: uncounted, not zero. Runtime activity is shown below without being promoted to a detection metric.</small></div> : <JsonRows rows={data} />}</Resource><Resource title="Observed runtime coverage" copy="Authenticated control-plane observations; not a precision, recall, or adversarial benchmark."><div className="quality-coverage-grid"><div><b>{observedEvents || '—'}</b><span>observed events</span></div><div><b>{securityDecisions || '—'}</b><span>security decisions</span></div><div><b>{agentEvents || '—'}</b><span>authenticated agent events</span></div></div><p className="field-hint">These counts confirm that the control plane is receiving runtime activity. They do not establish malicious ground truth or detection quality.</p></Resource><Resource title="Generate quality report" copy="Verify labeled detection-quality records against BCC middleware and optional Oracle audit data."><form className="action-form" onSubmit={generate}><label>BCC middleware URL<input value={bccUrl} onChange={(event) => setBccUrl(event.target.value)} required /></label><label>Oracle URL (optional)<input value={oracleUrl} onChange={(event) => setOracleUrl(event.target.value)} /></label><button type="submit" className="primary">Generate report</button><p className="form-message" aria-live="polite">{message}</p></form>{report && <pre className="report-preview">{JSON.stringify(report, null, 2)}</pre>}</Resource></>
 }

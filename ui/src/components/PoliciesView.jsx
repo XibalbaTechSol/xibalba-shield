@@ -219,6 +219,8 @@ export function PoliciesView({ data, api, refresh }) {
 
   const selectedPolicy = PRESELECTED_POLICIES.find((p) => p.id === selectedId) || PRESELECTED_POLICIES[0]
   const currentDevice = data.devices?.find((d) => (d.device_id || d.id) === targetDevice) || data.devices?.[0]
+  const runtimePolicy = data.exporter?.find((row) => row.device_id === (currentDevice?.device_id || currentDevice?.id))?.status?.policy || {}
+  const policyAuthorityConflict = Boolean(currentDevice?.policy_version && runtimePolicy.active_policy_version && currentDevice.policy_version !== runtimePolicy.active_policy_version)
 
   const handleDeploy = async () => {
     if (!targetDevice) {
@@ -282,6 +284,7 @@ export function PoliciesView({ data, api, refresh }) {
           <div className="settings-card-header"><div className="settings-card-title"><Sliders size={18} /><h3>Enforcement controls</h3></div><span className="live-status-pill"><LockKeyhole size={13} /> Policy-gated</span></div>
           <p className="settings-card-desc">Define when Shield acts automatically and when a human must approve a proposal. Changes are tenant-scoped and auditable.</p>
           <div className="settings-fields-grid"><div className="field-group"><label htmlFor="approval-threshold">Human approval below confidence</label><select id="approval-threshold" value={approvalThreshold} onChange={(event) => setApprovalThreshold(event.target.value)}><option value="50">50%</option><option value="60">60%</option><option value="75">75% · recommended</option><option value="90">90%</option></select><span className="field-hint">Only a policy decision can authorize containment.</span></div><div className="field-group"><label>Active policy</label><div className="settings-readout">{selectedPolicy.version}</div></div></div>
+          {policyAuthorityConflict && <p className="form-message error" role="alert">Policy authority mismatch: control plane reports <code>{currentDevice.policy_version}</code>, while the endpoint reports <code>{runtimePolicy.active_policy_version}</code>. Deployment is not considered reconciled.</p>}
           <div className="toggle-list"><label className="toggle-item"><input type="checkbox" checked={autoContain} onChange={(event) => setAutoContain(event.target.checked)} /><div><b>Auto-contain policy matches</b><p>Pause eligible workloads when the active policy returns contain.</p></div></label><label className="toggle-item"><input type="checkbox" checked={humanApproval} onChange={(event) => setHumanApproval(event.target.checked)} /><div><b>Require human approval for low confidence</b><p>Keep decisions below the configured threshold in the approval queue.</p></div></label></div>
           <div className="settings-actions-footer"><button type="submit" className="primary-btn"><Sliders size={14} /> Save enforcement controls</button>{enforcementMessage && <span className="form-message" aria-live="polite">{enforcementMessage}</span>}</div>
         </form>
@@ -290,7 +293,8 @@ export function PoliciesView({ data, api, refresh }) {
         <div className="policy-bundles-grid">
           {PRESELECTED_POLICIES.map((bundle) => {
             const isSelected = bundle.id === selectedId
-            const isActiveOnDevice = currentDevice?.policy_version === bundle.version
+            const isControlPlaneActive = currentDevice?.policy_version === bundle.version
+            const isRuntimeActive = runtimePolicy.active_policy_version === bundle.version
             return (
               <div
                 key={bundle.id}
@@ -302,11 +306,12 @@ export function PoliciesView({ data, api, refresh }) {
               >
                 <div className="policy-bundle-header">
                   <span className="policy-category-tag">{bundle.category}</span>
-                  {isActiveOnDevice && (
+                  {isControlPlaneActive && (
                     <span className="policy-active-pill">
-                      <CheckCircle2 size={12} /> Active on Device
+                      <CheckCircle2 size={12} /> Control plane target
                     </span>
                   )}
+                  {isRuntimeActive && <span className="policy-active-pill"><CheckCircle2 size={12} /> Runtime loaded</span>}
                 </div>
 
                 <h3 className="policy-bundle-title">{bundle.name}</h3>

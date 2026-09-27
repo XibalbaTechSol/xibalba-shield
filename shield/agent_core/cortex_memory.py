@@ -18,19 +18,51 @@ _OUTBOX_MAX_BYTES = 16 * 1024 * 1024
 _OUTBOX_MAX_PAYLOAD_BYTES = 64 * 1024
 _OUTBOX_MAX_FLUSH_ROWS = 10
 _OUTBOX_MAX_WORKERS = 1
+_OUTBOX_SENT_RETENTION_SECONDS = 86_400
+_OUTBOX_PRUNE_INTERVAL_SECONDS = 900
+# Which decision actions become Cortex memories. Routine `log_only` decisions (no rule
+# matched) keep their full evidence in decisions.jsonl, the Shield backend and
+# BCC -> Oracle; publishing them all turned every benign process start into agent
+# memory (~108k memories, ~1 GB/day observed 2026-09-27). Override with a
+# comma-separated SHIELD_CORTEX_PUBLISH_ACTIONS (e.g. "contain,deny,escalate,log_only").
+_DEFAULT_PUBLISH_ACTIONS = frozenset({"contain", "deny", "escalate"})
+
+
+def _publish_actions_from_env() -> frozenset[str]:
+    raw = os.environ.get("SHIELD_CORTEX_PUBLISH_ACTIONS", "").strip()
+    if not raw:
+        return _DEFAULT_PUBLISH_ACTIONS
+    return frozenset(action.strip() for action in raw.split(",") if action.strip())
 
 
 class CortexMemoryProvider:
     """Best-effort cloud-memory sink; local Shield policy remains authoritative."""
 
-    def __init__(self, *, base_url: str, token: str, agent_id: str, device_id: str, timeout: float = 3.0, outbox_path: str | Path | None = None, max_attempts: int = 8):
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        token: str,
+        agent_id: str,
+        device_id: str,
+        timeout: float = 3.0,
+        outbox_path: str | Path | None = None,
+        max_attempts: int = 8,
+        max_payload_bytes: int = _OUTBOX_MAX_PAYLOAD_BYTES,
+        max_pending_rows: int = 32,
+        publish_actions: frozenset[str] | None = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.agent_id = agent_id
         self.device_id = device_id
         self.timeout = timeout
         self.max_attempts = max(1, int(max_attempts))
+        self.max_payload_bytes = max(1, int(max_payload_bytes))
+        self.max_pending_rows = max(1, int(max_pending_rows))
         self.outbox_path = Path(outbox_path or os.environ.get("XIBALBA_CORTEX_OUTBOX", "/var/lib/xibalba-shield/cortex/outbox.sqlite3"))
+        self._last_prune_at = 0.0
+        self.publish_actions = publish_actions if publish_actions is not None else _publish_actions_from_env()
         self._init_outbox()
 
     @classmethod
@@ -52,15 +84,22 @@ class CortexMemoryProvider:
         return conn
 
     def _outbox_size_bytes(self) -> int:
-        return sum(
-            path.stat().st_size
-            for path in (
-                self.outbox_path,
-                Path(f"{self.outbox_path}-wal"),
-                Path(f"{self.outbox_path}-shm"),
-            )
-            if path.exists()
-        )
+        """Bytes the queue actually holds: in-use database pages plus the WAL.
+
+        Raw file sizes are not a capacity measure: SQLite keeps pages freed by
+        pruning on its freelist, and the -shm index is fixed-size. Counting them
+        made a 2-row outbox look "full" (12.5 MB file, ~13 MB free pages, 4.6 MB
+        un-checkpointed WAL) and dropped every new event as capacity_dropped
+        (observed 2026-09-27).
+        """
+        wal = Path(f"{self.outbox_path}-wal")
+        wal_bytes = wal.stat().st_size if wal.exists() else 0
+        if not self.outbox_path.exists():
+            return wal_bytes
+        with self._connect_outbox() as conn:
+            page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+            in_use = conn.execute("PRAGMA page_count").fetchone()[0] - conn.execute("PRAGMA freelist_count").fetchone()[0]
+        return in_use * page_size + wal_bytes
 
     def _increment_metric(self, name: str) -> None:
         with self._connect_outbox() as conn:
@@ -74,11 +113,23 @@ class CortexMemoryProvider:
         with self._connect_outbox() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS cortex_outbox (id TEXT PRIMARY KEY, payload_json TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending', last_error TEXT, created_at REAL NOT NULL, sent_at REAL)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cortex_outbox_pending ON cortex_outbox(status, next_attempt_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cortex_outbox_due_order ON cortex_outbox(status, next_attempt_at, created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cortex_outbox_sent ON cortex_outbox(status, sent_at)")
             conn.execute("CREATE TABLE IF NOT EXISTS cortex_outbox_metrics (name TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)")
 
     @staticmethod
     def _allowlisted_event(event: dict[str, Any]) -> dict[str, Any]:
-        allowed = {"class", "event_id", "device_id", "tenant_id", "time", "activity", "process", "agent", "context", "decision"}
+        # Keep the existing privacy allowlist, but retain the frozen local-event
+        # correlation fields when a producer supplies them.  These fields are
+        # still redacted below and are metadata/provenance, not a second wire
+        # contract.
+        allowed = {
+            "class", "event_id", "device_id", "tenant_id", "time", "activity", "process",
+            "agent", "context", "decision", "invocation_id", "reporting_window",
+            "provenance", "privacy",
+            "action", "reason", "severity", "tier", "confidence", "risk_score",
+            "human_required", "evidence", "event_ref", "rule", "policy", "export",
+        }
         process_allowed = {"name", "exe_path", "hash_sha256", "pid", "ppid", "parent_name"}
         result = {key: event[key] for key in allowed if key in event}
         if isinstance(result.get("process"), dict):
@@ -87,13 +138,23 @@ class CortexMemoryProvider:
 
     def _enqueue(self, payload: dict[str, Any], event_id: str) -> None:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        if len(encoded.encode("utf-8")) > _OUTBOX_MAX_PAYLOAD_BYTES:
+        encoded_bytes = len(encoded.encode("utf-8"))
+        if encoded_bytes > self.max_payload_bytes:
             self._increment_metric("oversize_dropped_total")
             return
-        if self._outbox_size_bytes() + len(encoded.encode("utf-8")) > _OUTBOX_MAX_BYTES:
+        if self._outbox_size_bytes() + encoded_bytes > _OUTBOX_MAX_BYTES:
             self._increment_metric("capacity_dropped_total")
             return
         with self._connect_outbox() as conn:
+            pending = conn.execute(
+                "SELECT COUNT(*) FROM cortex_outbox WHERE status='pending'"
+            ).fetchone()[0]
+            if pending >= self.max_pending_rows:
+                conn.execute(
+                    "INSERT INTO cortex_outbox_metrics(name,value) VALUES('pending_depth_dropped_total',1) "
+                    "ON CONFLICT(name) DO UPDATE SET value=value+1"
+                )
+                return
             conn.execute("INSERT OR IGNORE INTO cortex_outbox(id,payload_json,created_at) VALUES(?,?,?)", (event_id, encoded, time.time()))
 
     def _publish(self, row: sqlite3.Row) -> bool:
@@ -104,8 +165,13 @@ class CortexMemoryProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout):
-                pass
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                receipt = json.loads(response.read().decode("utf-8"))
+                expected_hash = json.loads(row["payload_json"]).get("content_hash")
+                if not isinstance(receipt, dict) or not receipt.get("id"):
+                    raise ValueError("Cortex response did not include a memory id acceptance receipt")
+                if not expected_hash or receipt.get("content_hash") != expected_hash:
+                    raise ValueError("Cortex acceptance receipt content_hash did not match the submitted content")
         except Exception as exc:  # noqa: BLE001 -- durable retry boundary
             attempts = int(row["attempts"]) + 1
             status = "dead_letter" if attempts >= self.max_attempts else "pending"
@@ -131,12 +197,16 @@ class CortexMemoryProvider:
     def flush(self, *, limit: int = 20, include_counts: bool = True) -> dict[str, int | None]:
         now = time.time()
         with self._connect_outbox() as conn:
-            rows = conn.execute("SELECT * FROM cortex_outbox WHERE status='pending' AND next_attempt_at <= ? ORDER BY created_at LIMIT ?", (now, max(1, min(int(limit), _OUTBOX_MAX_FLUSH_ROWS)))).fetchall()
+            rows = conn.execute("SELECT * FROM cortex_outbox WHERE status='pending' AND next_attempt_at <= ? ORDER BY next_attempt_at, created_at LIMIT ?", (now, max(1, min(int(limit), _OUTBOX_MAX_FLUSH_ROWS)))).fetchall()
         # The environment variable is intentionally not allowed to raise the
         # concurrency ceiling. One process/device is the durable retry boundary;
         # parallel publishers can duplicate claims and amplify an unavailable
         # Cortex endpoint into a connection storm.
         delivered = sum(1 for row in rows if self._publish(row))
+        if time.monotonic() - self._last_prune_at >= _OUTBOX_PRUNE_INTERVAL_SECONDS:
+            self._prune_sent(limit=1000)
+            self._checkpoint_wal()
+            self._last_prune_at = time.monotonic()
         if not include_counts:
             return {"attempted": len(rows), "delivered": delivered, "pending": None, "dead_letter": None}
         with self._connect_outbox() as conn:
@@ -147,6 +217,27 @@ class CortexMemoryProvider:
     def metrics(self) -> dict[str, int]:
         with self._connect_outbox() as conn:
             return {row["name"]: int(row["value"]) for row in conn.execute("SELECT name,value FROM cortex_outbox_metrics")}
+
+    def _prune_sent(self, *, limit: int = 1000, now: float | None = None) -> int:
+        """Remove only acknowledged queue rows after one day; pending/dead letters remain."""
+        cutoff = (time.time() if now is None else now) - _OUTBOX_SENT_RETENTION_SECONDS
+        with self._connect_outbox() as conn:
+            cursor = conn.execute(
+                "DELETE FROM cortex_outbox WHERE id IN ("
+                "SELECT id FROM cortex_outbox WHERE status='sent' AND sent_at < ? "
+                "ORDER BY sent_at LIMIT ?) RETURNING id",
+                (cutoff, max(1, min(int(limit), 5000))),
+            )
+            return sum(1 for _ in cursor)
+
+    def _checkpoint_wal(self) -> None:
+        """Fold the WAL into the database and truncate it, so the WAL cannot grow
+        without bound between prunes. Best-effort: a busy reader just defers it."""
+        try:
+            with self._connect_outbox() as conn:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
 
     def status(self) -> dict[str, int]:
         """Return durable queue depth plus cumulative delivery/loss counters."""
@@ -163,21 +254,48 @@ class CortexMemoryProvider:
         }
 
     def remember_event(self, event: Any, decision: Any) -> None:
+        decision_payload = decision.to_dict() if hasattr(decision, "to_dict") else (decision if isinstance(decision, dict) else {})
+        # PolicyDecision.to_dict() nests the verdict under "decision"; accept a flat
+        # {"action": ...} payload too.
+        inner = decision_payload.get("decision") if isinstance(decision_payload, dict) else None
+        action = inner.get("action") if isinstance(inner, dict) else (
+            decision_payload.get("action") if isinstance(decision_payload, dict) else None
+        )
+        if action not in self.publish_actions:
+            # Out of scope for agent memory by policy, not a delivery failure: nothing
+            # is written (no outbox row, no metric) so routine traffic costs no I/O.
+            return
         raw_event = event.to_dict() if hasattr(event, "to_dict") else (event if isinstance(event, dict) else {"class": type(event).__name__})
         safe_event = redact_event(self._allowlisted_event(raw_event))
-        decision_payload = decision.to_dict() if hasattr(decision, "to_dict") else (decision if isinstance(decision, dict) else {})
         safe_decision = redact_event(self._allowlisted_event(decision_payload if isinstance(decision_payload, dict) else {}))
         content_payload = {"event": safe_event, "decision": safe_decision}
         content = json.dumps(content_payload, sort_keys=True, separators=(",", ":"))
         redaction_proof = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        content_hash = f"sha256:{redaction_proof}"
         event_id = str(getattr(getattr(decision, "event_ref", None), "event_id", id(event)))
+        invocation_id = (
+            safe_decision.get("invocation_id")
+            or safe_event.get("invocation_id")
+        )
+        reporting_window = safe_event.get("reporting_window") or safe_decision.get("reporting_window")
+        provenance = safe_event.get("provenance") or safe_decision.get("provenance")
         payload = {
             "content": content,
+            "content_hash": content_hash,
             "source": {
                 "kind": "shield_event",
                 "locator": f"shield://{self.device_id}/{getattr(getattr(decision, 'event_ref', None), 'event_id', 'event')}",
                 "agent_id": self.agent_id,
-                "metadata": {"device_id": self.device_id, "agent_name": "xibalba-shield", "redaction_version": "allowlist-v1", "redaction_proof": redaction_proof},
+                "metadata": {
+                    "device_id": self.device_id,
+                    "agent_name": "xibalba-shield",
+                    "redaction_version": "allowlist-v1",
+                    "redaction_proof": redaction_proof,
+                    "event_id": event_id,
+                    **({"invocation_id": invocation_id} if invocation_id else {}),
+                    **({"reporting_window": reporting_window} if reporting_window else {}),
+                    **({"provenance": provenance} if provenance else {}),
+                },
             },
             "status": "candidate",
             "evidence_class": "observed_event",

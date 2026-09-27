@@ -79,6 +79,7 @@ class EventRouter:
         enforcement_outcome_sink: Callable[[EnforcementOutcome], None] | None = None,
         decision_sink: Callable[[PolicyDecision], None] | None = None,
         memory_provider: MemoryProviderLike | None = None,
+        hermes_publisher: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
     ) -> None:
         self.device = device
         self.registry = registry
@@ -96,6 +97,7 @@ class EventRouter:
         self.enforcement_outcome_sink = enforcement_outcome_sink
         self.decision_sink = decision_sink
         self.memory_provider = memory_provider
+        self.hermes_publisher = hermes_publisher
 
     def _context(self) -> EvaluationContext:
         return EvaluationContext(
@@ -330,5 +332,11 @@ class EventRouter:
                 self.memory_provider.remember_event(event, decision)
             except Exception:  # noqa: BLE001 -- cloud memory is downstream of local enforcement
                 logger.exception("failed to publish redacted Cortex memory for %s", decision.event_ref.event_id)
+
+        if self.hermes_publisher is not None:
+            try:
+                self.hermes_publisher(event, decision)
+            except Exception:  # noqa: BLE001 -- Hermes is downstream of local enforcement
+                logger.exception("failed to publish redacted Hermes event for %s", decision.event_ref.event_id)
 
         return decision

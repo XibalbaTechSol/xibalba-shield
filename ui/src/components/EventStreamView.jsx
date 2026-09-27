@@ -12,6 +12,21 @@ import {
   ChevronUp,
 } from 'lucide-react'
 
+const ACTION_ALIASES = {
+  contained: 'contain',
+  blocked: 'deny',
+  denied: 'deny',
+  allowed: 'allow',
+  escalated: 'escalate',
+  observed: 'log_only',
+  logged: 'log_only',
+}
+
+function normalizeAction(action) {
+  const value = String(action || 'allow').toLowerCase()
+  return ACTION_ALIASES[value] || value
+}
+
 export function EventStreamView({ data }) {
   const [search, setSearch] = useState('')
   const [actionFilter, setActionFilter] = useState('all')
@@ -19,23 +34,38 @@ export function EventStreamView({ data }) {
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [expandedRowIndex, setExpandedRowIndex] = useState(null)
 
-  // Merge latest decisions and test events
+  // Render durable decisions alongside the live, loss-bounded observation rollups.
+  // Routine no-match activity is intentionally aggregated by Shield instead of
+  // being written as one database row per process event.
   const rawEvents = useMemo(() => {
-    const list = [...(data.summary?.latest_decisions || []), ...(data.events || [])]
-    return list.map((item, idx) => {
+    const decisions = (data.summary?.latest_decisions || []).map((item) => ({ ...item, source: 'decision' }))
+    const testEvents = (data.events || []).map((item) => ({ ...item, source: 'test' }))
+    const rollups = (data.summary?.decision_observation_rollups || []).map((item) => ({
+      ...item,
+      source: 'observation_rollup',
+      event_id: `rollup-${item.device_id || 'unattributed'}-${item.bucket_start}-${item.action}-${item.event_class}`,
+      reason: `${Number(item.count || item.observation_count || 0).toLocaleString()} observed ${item.event_class || 'system'} activities in this minute.`,
+    }))
+
+    return [...decisions, ...testEvents, ...rollups]
+      .map((item, idx) => {
       const dec = item.decision || {}
       const dInfo = dec.decision || {}
-      const action = (dInfo.action || item.action || dec.class || 'allow').toLowerCase()
-      const severity = (dInfo.severity || item.severity || 'low').toLowerCase()
-      const deviceId = item.device_id || dec.device_id || 'xibalba-desktop'
-      const eventClass = dec.event_ref?.class || item.event_ref?.class || dec.class || 'system_event'
-      const ruleName = dec.rule?.name || item.rule?.name || 'Policy Guardrail'
-      const ruleId = dec.rule?.rule_id || item.rule?.rule_id || 'default_rule'
-      const ruleVersion = dec.rule?.version || item.rule?.version || '1.0.0'
-      const reason = dInfo.reason || item.reason || dec.reason || 'Agent verified benign system execution.'
+      const action = normalizeAction(dInfo.action || item.action || dec.class || 'allow')
+      const sample = item.sample_decision || {}
+      const severity = (dInfo.severity || item.severity || sample.decision?.severity || 'low').toLowerCase()
+      const deviceId = item.device_id || dec.device_id || sample.device_id || 'unattributed device'
+      const eventClass = dec.event_ref?.class || item.event_ref?.class || item.event_class || sample.event_ref?.class || dec.class || 'system_event'
+      const agentId = item.agent_id || dec.agent_id || dec.event_ref?.agent_id || sample.agent_id || sample.event_ref?.agent_id || null
+      const ruleName = dec.rule?.name || item.rule?.name || sample.rule?.name || 'Policy Guardrail'
+      const ruleId = dec.rule?.rule_id || item.rule?.rule_id || item.rule_id || sample.rule?.rule_id || 'default_rule'
+      const ruleVersion = dec.rule?.version || item.rule?.version || sample.rule?.version || '1.0.0'
+      const reason = dInfo.reason || item.reason || dec.reason || (eventClass === 'agent_event' ? 'Agent event observed without a policy decision.' : 'No policy rule matched.')
       const time = item.received_at || item.created_at || dec.time || item.time || new Date().toISOString()
       const eventId = dec.event_ref?.event_id || item.event_id || `evt-${idx + 1}`
-      const target = item.target || dec.target || dec.event_ref?.target || dec.invocation_id || 'Workstation Process'
+      const target = item.source === 'observation_rollup'
+        ? `${deviceId} · ${item.bucket_start || 'minute bucket'}`
+        : item.target || dec.target || dec.event_ref?.target || dec.invocation_id || item.sample_decision?.event_ref?.event_id || 'Workstation activity'
 
       return {
         raw: item,
@@ -44,6 +74,7 @@ export function EventStreamView({ data }) {
         severity,
         deviceId,
         eventClass,
+        agentId,
         ruleName,
         ruleId,
         ruleVersion,
@@ -52,8 +83,11 @@ export function EventStreamView({ data }) {
         target,
         tier: dInfo.tier || 'tier1',
         exported: dec.export?.decision_exported ?? true,
+        source: item.source || 'decision',
+        observationCount: Number(item.count || item.observation_count || 1),
       }
-    })
+      })
+      .sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
   }, [data.summary, data.events])
 
   // Filter events
@@ -77,12 +111,19 @@ export function EventStreamView({ data }) {
   }, [rawEvents, actionFilter, classFilter, search])
 
   const counts = useMemo(() => {
+    const countAction = (action) => rawEvents
+      .filter((event) => event.action === action)
+      .reduce((sum, event) => sum + event.observationCount, 0)
+
     return {
-      total: rawEvents.length,
-      contained: rawEvents.filter((e) => e.action === 'contain' || e.action === 'contained').length,
-      denied: rawEvents.filter((e) => e.action === 'deny' || e.action === 'blocked').length,
-      allowed: rawEvents.filter((e) => e.action === 'allow' || e.action === 'allowed').length,
-      escalated: rawEvents.filter((e) => e.action === 'escalate').length,
+      total: rawEvents.reduce((sum, event) => sum + event.observationCount, 0),
+      contained: countAction('contain'),
+      containFallbacks: rawEvents.filter((event) => event.action === 'contain' && /A2A_UNRESOLVED_ESCALATION/i.test(event.reason)).reduce((sum, event) => sum + event.observationCount, 0),
+      denied: countAction('deny'),
+      escalated: countAction('escalate'),
+      allowed: countAction('allow'),
+      logged: countAction('log_only'),
+      agent: rawEvents.filter((event) => event.eventClass === 'agent_event' && event.agentId).reduce((sum, event) => sum + event.observationCount, 0),
     }
   }, [rawEvents])
 
@@ -93,12 +134,12 @@ export function EventStreamView({ data }) {
         <div className="reasoning-hero-header">
           <div className="reasoning-hero-badge">
             <Brain size={16} />
-            <span>AGENT REASONING ENGINE</span>
+            <span>SHIELD DECISION ENGINE</span>
           </div>
-          <h2>Autonomous Event Reasoner & Decision Stream</h2>
+          <h2>Policy evaluation & decision stream</h2>
           <p>
-            Shield inspects real-time low-level eBPF kernel probes, process execution chains, and agent network traffic.
-            Every observed activity is evaluated against active cryptographic policies with human-auditable reasoning.
+            Shield displays authenticated kernel observations and policy decisions. Agent-level reasoning appears only
+            when an authenticated agent hook attributes an event to a canonical agent identity.
           </p>
         </div>
 
@@ -106,12 +147,12 @@ export function EventStreamView({ data }) {
           <div className="reasoning-stat-card">
             <span className="stat-label">Intercepted Events</span>
             <b className="stat-val">{counts.total}</b>
-            <small>Live event stream</small>
+            <small>{rawEvents.some((event) => event.source === 'observation_rollup') ? 'Live Shield observations; rollups are loss-bounded' : 'Waiting for Shield observations'}</small>
           </div>
           <div className="reasoning-stat-card">
-            <span className="stat-label">Contained Workloads</span>
+            <span className="stat-label">Containments</span>
             <b className="stat-val text-amber">{counts.contained}</b>
-            <small>Shadow workloads quarantined</small>
+            <small>{counts.containFallbacks ? `${counts.contained - counts.containFallbacks} direct · ${counts.containFallbacks} fail-closed fallback` : 'Policy-approved workload freezes'}</small>
           </div>
           <div className="reasoning-stat-card">
             <span className="stat-label">Policy Denials</span>
@@ -122,6 +163,11 @@ export function EventStreamView({ data }) {
             <span className="stat-label">Verified Benign</span>
             <b className="stat-val text-green">{counts.allowed}</b>
             <small>Authenticated execution</small>
+          </div>
+          <div className="reasoning-stat-card">
+            <span className="stat-label">Agent Events</span>
+            <b className="stat-val">{counts.agent}</b>
+            <small>{counts.agent ? 'Authenticated agent hooks' : 'No agent-attributed events'}</small>
           </div>
         </div>
       </div>
@@ -180,6 +226,13 @@ export function EventStreamView({ data }) {
             >
               Allowed ({counts.allowed})
             </button>
+            <button
+              type="button"
+              className={`filter-chip ${actionFilter === 'log_only' ? 'active' : ''}`}
+              onClick={() => setActionFilter(actionFilter === 'log_only' ? 'all' : 'log_only')}
+            >
+              Logged ({counts.logged})
+            </button>
           </div>
 
           <div className="class-filter-wrap">
@@ -228,8 +281,12 @@ export function EventStreamView({ data }) {
                   <div className="event-badges-row">
                     <span className={`event-action-pill ${evt.action}`}>
                       <span className="dot" />
-                      {evt.action.toUpperCase()}
+                      {evt.source === 'observation_rollup' ? 'OBSERVED' : evt.action.toUpperCase()}
                     </span>
+
+                    {evt.source === 'observation_rollup' && (
+                      <span className="event-class-tag">{evt.observationCount.toLocaleString()} observations</span>
+                    )}
 
                     <span className={`severity-tag sev-${evt.severity}`}>
                       {evt.severity.toUpperCase()}
@@ -258,18 +315,20 @@ export function EventStreamView({ data }) {
                 <div className="agent-reasoning-callout">
                   <div className="reasoning-header">
                     <Brain size={14} className="reasoning-icon" />
-                    <b>Agent Security Reasoning</b>
+                    <b>{evt.eventClass === 'agent_event' ? (evt.agentId ? 'Authenticated agent attribution' : 'Agent event · identity unbound') : 'Shield policy evaluation'}</b>
                     <span className="matched-rule-tag">
                       <Shield size={11} /> Rule: <code>{evt.ruleName}</code> ({evt.ruleId} v{evt.ruleVersion})
                     </span>
                   </div>
                   <p className="reasoning-rationale">
-                    {evt.reason}
+                    {evt.reason}{evt.eventClass === 'agent_event' && !evt.agentId ? ' This event is device-scoped until a canonical agent identity is attached.' : ''}
                   </p>
                   <div className="reasoning-footer-meta">
                     <span className="guardrail-tier">Governance Tier: {evt.tier}</span>
                     <span className="export-status">
-                      {evt.exported ? '✓ Receipt Exported & Verified' : '○ Local Execution'}
+                      {evt.source === 'observation_rollup'
+                        ? '○ Local Shield observation · aggregated'
+                        : evt.exported ? '✓ Receipt Exported & Verified' : '○ Local Execution'}
                     </span>
                   </div>
                 </div>

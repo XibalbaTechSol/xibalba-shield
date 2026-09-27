@@ -169,7 +169,7 @@ export function AuditEvents({ api, email }) {
   )
 }
 
-function SettingsChangeQueue({ api }) {
+export function SettingsChangeQueue({ api }) {
   const [requests, setRequests] = useState([])
   const [message, setMessage] = useState('')
   const refresh = useCallback(
@@ -186,12 +186,13 @@ function SettingsChangeQueue({ api }) {
   return <article className="settings-card"><div className="settings-card-header"><div className="settings-card-title"><ShieldAlert size={18} /><h3>Containment & guardrail approvals</h3></div><span className="live-status-pill">Two-step change control</span></div><p className="field-hint">High-impact settings are queued for explicit approval and can be rolled back without editing raw configuration.</p>{requests.length === 0 ? <p className="empty-state">No pending or historical change requests.</p> : <div className="audit-event-list">{requests.slice(0, 8).map((request) => <div className="audit-event" key={request.request_id}><b>{request.category} · {request.status}</b><small>{request.request_id} · {request.created_at}</small><div className="settings-actions-footer">{request.status === 'pending' && <><button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'approve')}>Approve</button><button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'reject')}>Reject</button></>}{request.status === 'approved' && <button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'rollback')}>Rollback</button>}</div></div>)}</div>}{message && <span className="form-message" aria-live="polite">{message}</span>}</article>
 }
 
-export function SettingsView({ connection, logout, data = {} }) {
+export function SettingsView({ connection, logout, data = {}, theme = 'legacy', onThemeChange }) {
   const account = connection.account || {}
   const [activeTab, setActiveTab] = useState('posture')
   const [message, setMessage] = useState('')
   const [sessions, setSessions] = useState([])
   const [copiedKey, setCopiedKey] = useState(null)
+  const [themeMessage, setThemeMessage] = useState('')
 
   // Security Posture Settings
   const [savedPosture, setSavedPosture] = useState(() => { try { return JSON.parse(readSession('shield-posture', '{}')) } catch { return {} } })
@@ -221,6 +222,7 @@ export function SettingsView({ connection, logout, data = {} }) {
   const [smtpHost, setSmtpHost] = useState('smtp.corp.internal')
   const [smtpPort, setSmtpPort] = useState('587')
   const [smtpRecipient, setSmtpRecipient] = useState('secops-alerts@corp.internal')
+  const smtpConfigured = Boolean(smtpHost.trim() && smtpPort.trim() && smtpRecipient.trim())
   const [testingEmail, setTestingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState(null)
 
@@ -293,6 +295,14 @@ export function SettingsView({ connection, logout, data = {} }) {
       setPostureSaved('')
       setMessage(error instanceof Error ? `Could not save settings: ${error.message}` : 'Could not save settings.')
     }
+  }
+
+  const handleThemeChange = (event) => {
+    const nextTheme = event.target.value
+    writeSession('shield-console-theme', nextTheme)
+    onThemeChange?.(nextTheme)
+    setThemeMessage(nextTheme === 'command-center' ? 'Command Center theme applied.' : 'Legacy Shield theme restored.')
+    window.setTimeout(() => setThemeMessage(''), 3000)
   }
 
   const exporterRows = data.exporter || []
@@ -452,7 +462,7 @@ export function SettingsView({ connection, logout, data = {} }) {
               <label className="toggle-item"><input type="checkbox" checked={fileSensor} onChange={(event) => setFileSensor(event.target.checked)} /><div><b>File write activity</b><p>Write-mode open events with sensitive-path filtering.</p></div></label>
               <label className="toggle-item"><input type="checkbox" checked={networkSensor} onChange={(event) => setNetworkSensor(event.target.checked)} /><div><b>TCP network flows</b><p>Enable only on kernels with a verified TCP probe gate.</p></div></label>
             </div>
-            <div className="settings-fields-grid"><div className="field-group"><label htmlFor="sensorCadence">Telemetry cadence</label><select id="sensorCadence" value={sensorCadence} onChange={(event) => setSensorCadence(event.target.value)}><option value="25">25 ms · low latency</option><option value="50">50 ms · balanced</option><option value="100">100 ms · lower overhead</option></select></div><div className="field-group"><label>Current helper state</label><div className="settings-readout">{liveRow?.status?.sensors?.attached === true ? 'Attached · real events' : 'Not reported'}</div></div></div>
+            <div className="settings-fields-grid"><div className="field-group"><label htmlFor="sensorCadence">Telemetry cadence</label><select id="sensorCadence" value={sensorCadence} onChange={(event) => setSensorCadence(event.target.value)}><option value="25">25 ms · low latency</option><option value="50">50 ms · balanced</option><option value="100">100 ms · lower overhead</option></select></div><div className="field-group"><label>Current helper state</label><div className="settings-readout">{liveRow?.status?.sensors?.attached === true ? `Attached · ${liveRow.status.sensors.attach_mode || 'runtime mode'}` : 'Attachment unverified'}</div><span className="field-hint">Enabled is configuration intent; each event family needs its own live attachment and last-event proof.</span></div></div>
           </article>
           <div className="settings-actions-footer"><button type="submit" className="primary-btn"><RotateCw size={14} /> Save sensor settings</button>{sensorSaved && <span className="save-feedback-pill success"><CheckCircle2 size={14} /> Saved</span>}</div>
         </form>
@@ -475,6 +485,26 @@ export function SettingsView({ connection, logout, data = {} }) {
       {activeTab === 'posture' && (
         <div className="settings-tab-pane" role="tabpanel" id="settings-panel-posture" aria-labelledby="settings-tab-posture">
           <form onSubmit={handleSavePosture} className="posture-settings-form">
+            <article className="settings-card appearance-card">
+              <div className="settings-card-header">
+                <div className="settings-card-title"><Sliders size={18} /><h3>Console appearance</h3></div>
+                <span className="live-status-pill">Operator preference</span>
+              </div>
+              <p className="settings-card-desc">Choose how the Shield console is presented. This changes the UI theme only; it does not change endpoint policy, telemetry, or enforcement behavior.</p>
+              <div className="theme-choice-grid" role="radiogroup" aria-label="Console theme">
+                <label className={`theme-choice ${theme === 'legacy' ? 'selected' : ''}`}>
+                  <input type="radio" name="consoleTheme" value="legacy" checked={theme === 'legacy'} onChange={handleThemeChange} />
+                  <span className="theme-swatch theme-swatch-legacy" aria-hidden="true"><i /><i /><i /></span>
+                  <span><b>Legacy Shield</b><small>Original dark operator console</small></span>
+                </label>
+                <label className={`theme-choice ${theme === 'command-center' ? 'selected' : ''}`}>
+                  <input type="radio" name="consoleTheme" value="command-center" checked={theme === 'command-center'} onChange={handleThemeChange} />
+                  <span className="theme-swatch theme-swatch-command" aria-hidden="true"><i /><i /><i /></span>
+                  <span><b>Command Center</b><small>Light evidence workspace</small></span>
+                </label>
+              </div>
+              {themeMessage && <p className="form-message" role="status" aria-live="polite">{themeMessage}</p>}
+            </article>
             <article className="settings-card">
               <div className="settings-card-header">
                 <div className="settings-card-title">
@@ -505,7 +535,7 @@ export function SettingsView({ connection, logout, data = {} }) {
                       <span className="badge green">ACTIVE ENFORCEMENT</span>
                     </div>
                     <p>
-                      Immediately SIGKILLs unverified processes and isolates the container/cgroup in &lt;2ms before unauthorized sockets or writes execute.
+                      Applies autonomous policy-approved containment. The currently verified local responder is process freeze via SIGSTOP; kill, cgroup freeze, and network blocking remain independently gated until their runtime proofs are present.
                     </p>
                   </div>
                 </label>
@@ -776,7 +806,7 @@ export function SettingsView({ connection, logout, data = {} }) {
                   onChange={(e) => setNotifyContain(e.target.checked)}
                 />
                 <div>
-                  <b>Autonomous Workload Containment (SIGKILL)</b>
+                  <b>Autonomous Workload Containment</b>
                   <p>Dispatches whenever Shield quarantines a process or isolates container execution.</p>
                 </div>
               </label>
@@ -817,6 +847,10 @@ export function SettingsView({ connection, logout, data = {} }) {
             <p className="settings-card-desc">
               Direct integration with <code>shield.backend.email_delivery</code> for dispatching cryptographically verifiable alert receipts.
             </p>
+            <div className={`form-feedback-alert ${smtpConfigured ? 'success' : 'error'}`} role="status">
+              {smtpConfigured ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+              <span>{smtpConfigured ? 'SMTP destination configured in this form; delivery still requires a successful test.' : 'SMTP destination is incomplete; test delivery is unavailable until host, port, and recipient are provided.'}</span>
+            </div>
 
             <div className="settings-fields-grid">
               <div className="field-group">
@@ -868,7 +902,7 @@ export function SettingsView({ connection, logout, data = {} }) {
                 type="button"
                 className="secondary-btn"
                 onClick={handleTestEmail}
-                disabled={testingEmail}
+                disabled={testingEmail || !smtpConfigured}
               >
                 {testingEmail ? (
                   <>
@@ -927,7 +961,6 @@ export function SettingsView({ connection, logout, data = {} }) {
             </article>
 
             {account.email && <AuditEvents api={api} email={account.email} />}
-            <SettingsChangeQueue api={api} />
           </div>
         </div>
       )}

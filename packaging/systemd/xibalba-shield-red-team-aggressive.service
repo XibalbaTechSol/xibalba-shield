@@ -1,0 +1,15 @@
+[Unit]
+Description=Xibalba Shield bounded aggressive development red-team burst
+After=xibalba-shield.service
+ConditionPathExists=/home/xibalba/Projects/xibalba-shield/scripts/run_safe_red_team_burst.sh
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/xibalba/Projects/xibalba-shield
+Environment=SHIELD_ENV=development
+Environment=PYTHONUNBUFFERED=1
+Environment=SHIELD_RED_TEAM_ITERATIONS=50
+ExecStart=/usr/bin/flock -n /run/xibalba-shield-red-team-aggressive.lock /bin/bash scripts/run_safe_red_team_burst.sh
+ExecStopPost=/usr/bin/systemctl disable --now xibalba-shield-red-team-aggressive.timer
+RuntimeMaxSec=900

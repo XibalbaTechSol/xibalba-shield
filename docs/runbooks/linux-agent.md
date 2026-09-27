@@ -85,6 +85,17 @@ the tenant or file with `SHIELD_DEV_TENANT` and
    sudo systemctl enable --now xibalba-shield
    ```
 
+   Verify that the installed service is using the resource ceilings and log-volume policy:
+
+   ```bash
+   sudo scripts/verify_resource_controls.sh
+   ```
+
+   The verifier must pass before treating the host as resource-bounded. The process-exec
+   sensor observes every host `execve`; sustained process churn is therefore reflected in
+   both agent CPU and decision-log volume. The packaged controls cap the endpoint at 128 MiB
+   RAM / 25% CPU and rotate `decisions.jsonl` at 100 MiB, retaining seven compressed files.
+
    By default this unit assumes OPA is already running as an externally managed sidecar
    at the policy engine's `--opa-url` (default `http://localhost:8181`) — this package
    does not install or manage an OPA process for you. To have Shield itself own the OPA
@@ -329,6 +340,11 @@ Remove `/etc/xibalba-shield`, `/var/log/xibalba-shield`, and `/var/lib/xibalba-s
 flag alone is insufficient: the agent also requires a fresh proof artifact
 bound to its device ID. On the deployment host, run the disposable probe as
 root and provide a non-empty evidence reference for each base proof:
+
+The packaged systemd unit is prepared for these gated paths with a delegated
+cgroup subtree and the narrowly-scoped `CAP_KILL`/`CAP_NET_ADMIN` capability
+set. These are technical prerequisites, not authorization: the readiness
+artifact and explicit action flags still control effective capabilities.
 
 ```bash
 sudo uv run python scripts/verify_responder_gates.py \

@@ -1,0 +1,10 @@
+/var/log/xibalba-shield/decisions.jsonl {
+    size 100M
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su xibalba-shield xibalba-shield
+}

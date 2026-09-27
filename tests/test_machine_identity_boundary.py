@@ -52,8 +52,9 @@ def test_agent_label_derivation_has_no_device_id_input_path():
     from integrity_sdk.did import load_or_create_did
 
     params = list(inspect.signature(load_or_create_did).parameters)
-    assert params == ["agent_id"], (
+    assert params == ["agent_id", "did_home_root"], (
         f"load_or_create_did's parameters changed to {params} -- if device_id or any "
         "machine-derived value was added, verify it cannot influence the derived DID "
         "(SPEC-v2.0.0-proposed.md §4.4)"
     )
+    assert list(inspect.signature(load_or_create_did).parameters.values())[1].kind is inspect.Parameter.KEYWORD_ONLY

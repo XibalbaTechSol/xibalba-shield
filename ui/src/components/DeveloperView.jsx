@@ -57,7 +57,7 @@ const API_ENDPOINTS = [
   {
     id: 'policy-history',
     method: 'GET',
-    path: '/api/shield/policy-history?device_id=xibalba-desktop',
+    path: '/api/shield/policy-history?device_id=<selected-device-id>',
     category: 'Governance',
     description: 'Query cryptographic policy history and version lineage for a given device.',
     defaultBody: null,
@@ -116,7 +116,7 @@ const API_ENDPOINTS = [
     description: 'Dispatch an auditable exporter retry, reconnect, or spool flush task.',
     defaultBody: {
       tenant_id: 'tenant-a',
-      device_id: 'xibalba-desktop',
+      device_id: '<selected-device-id>',
       action: 'retry',
       reason: 'Manual diagnostic verification from Developer Console',
     },
@@ -544,7 +544,7 @@ func main() {
             </div>
             <h4>Kernel-Level eBPF Telemetry</h4>
             <p>
-              Ring-buffer monitored kernel probes attached to <code>sys_enter_execve</code>, process clones, and raw socket creation. Autonomous containment executes via SIGKILL before unauthorized socket binds occur.
+              Ring-buffer monitored kernel probes and policy evaluation feed the decision stream. Verified local containment currently uses SIGSTOP for eligible process decisions; destructive kill and network actions require separate runtime proofs.
             </p>
             <code>Probe: tracepoint/syscalls/sys_enter_execve</code>
           </article>
@@ -555,7 +555,7 @@ func main() {
             </div>
             <h4>W3C DID Audit Receipts</h4>
             <p>
-              Decentralized Identifier (DID:key) cryptographic attestations generated for each intercepted event. Receipts are written to append-only tamper-evident logs and forwarded to enterprise SIEMs.
+              Decentralized Identifier (DID:key) receipt metadata is generated for eligible intercepted events. Local persistence, cryptographic verification, and SIEM forwarding are separate states and remain unverified until a receipt and downstream acknowledgement are observed.
             </p>
             <code>DID Proof: did:key:z6Mkq5...</code>
           </article>

@@ -80,6 +80,26 @@ def _request_capture_cookie(url, *, method="GET", body=None, token=ADMIN):
     return status, payload, morsel.value if morsel else ""
 
 
+def test_hermes_status_payload_is_read_only_and_operator_safe(tmp_path, monkeypatch):
+    from shield.hermes_transport import HermesSpool
+
+    spool_root = tmp_path / "hermes"
+    key_path = tmp_path / "hermes.key"
+    key_path.write_bytes(b"k" * 32)
+    HermesSpool(spool_root, key=b"k" * 32)
+    monkeypatch.setenv("SHIELD_HERMES_SPOOL", str(spool_root))
+    monkeypatch.setenv("SHIELD_HERMES_KEY", str(key_path))
+    monkeypatch.setenv("XIBALBA_SHIELD_HERMES_AGENT_ID", "did:integrity:test-hermes")
+    hermes = backend_api._read_hermes_status({"hermesEnabled": True, "hermesAnalysisOnly": True})
+    assert hermes["agent_id"] == "did:integrity:test-hermes"
+    assert hermes["transport"] == "local-spool"
+    assert hermes["health"] == "healthy"
+    assert hermes["spool_depth"] == 0
+    assert hermes["acknowledgements"] == 0
+    assert hermes["dead_letters"] == 0
+    assert hermes["profile"]["hermesEnabled"] is True
+
+
 def test_backend_enrolls_device_and_serves_policy_to_existing_client_shape(tmp_path):
     server, store, base = _start_backend(tmp_path)
     try:
@@ -426,6 +446,61 @@ def test_backend_ingests_authenticated_decisions_and_metrics_for_dashboard(tmp_p
         assert summary["decisions_by_action"] == {"deny": 1}
         assert summary["latest_decisions"][0]["decision"]["synthetic"] is True
         assert summary["latest_metrics"]["events_per_sec"] == 42
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_backend_rolls_up_no_match_observations_and_skips_cortex_memory(tmp_path, monkeypatch):
+    from shield.agent_core.cortex_memory import CortexMemoryProvider
+
+    class FakeMemoryProvider:
+        def __init__(self):
+            self.events = []
+            self.agent_id = "did:integrity:test-agent"
+
+        def _enqueue(self, event, event_id):
+            self.events.append((event, event_id))
+
+    provider = FakeMemoryProvider()
+    monkeypatch.setattr(
+        CortexMemoryProvider,
+        "from_environment",
+        classmethod(lambda cls, *, device_id: provider),
+    )
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _status, enrolled = _request(
+            f"{base}/api/shield/enroll",
+            method="POST",
+            body={"tenant_id": "tenant-a", "device_id": "dev-1"},
+        )
+        token = enrolled["device_token"]
+        routine = {
+            "event_ref": {"class": "process_activity", "event_id": "routine-1"},
+            "rule": {"rule_id": "_no_match"},
+            "decision": {"action": "log_only", "severity": "low"},
+        }
+        enforced = {
+            "event_ref": {"class": "agent_event", "event_id": "deny-1"},
+            "rule": {"rule_id": "explicit-deny"},
+            "decision": {"action": "deny", "severity": "high"},
+        }
+        for decision in (routine, enforced):
+            status, _ = _request(
+                f"{base}/api/shield/decisions",
+                method="POST",
+                token=token,
+                body={"tenant_id": "tenant-a", "device_id": "dev-1", "decision": decision},
+            )
+            assert status == 201
+
+        assert store._conn.execute("SELECT COUNT(*) FROM decisions").fetchone()[0] == 1
+        assert store._conn.execute("SELECT SUM(observation_count) FROM decision_observation_rollups").fetchone()[0] == 1
+        assert [event_id for _, event_id in provider.events] == ["deny-1"]
+        summary = store.dashboard_summary(tenant_id="tenant-a")
+        assert summary["event_class_counts"] == {"agent_event": 1, "process_activity": 1}
+        assert summary["decision_observation_rollups"][0]["device_id"] == "dev-1"
     finally:
         server.shutdown()
         store.close()

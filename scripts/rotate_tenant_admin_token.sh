@@ -11,7 +11,7 @@ if [[ -z "$global_token" ]]; then
   exit 1
 fi
 
-response="$(curl -fsS -X POST 'http://127.0.0.1:8421/api/shield/admin-tokens' \
+response="$(curl -fsS -X POST 'http://127.0.0.1:8435/api/shield/admin-tokens' \
   -H "Authorization: Bearer $global_token" \
   -H 'Content-Type: application/json' \
   --data "{\"tenant_id\":\"$tenant_id\"}")"

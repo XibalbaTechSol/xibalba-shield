@@ -5,7 +5,7 @@ import rego.v1
 # The default bundle is selected by the OPA process that loads this file. Each
 # file is intentionally checked independently; loading multiple verticals into
 # one package would create conflicting default rules.
-default allow := false
+default allow := true
 
 default action := "log_only"
 

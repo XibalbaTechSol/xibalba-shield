@@ -13,6 +13,15 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
 
   await page.route('**/api/shield/**', async (route) => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/shield/settings' && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { settings?: { hermesMaxBatch?: number } }
+      if ((body.settings?.hermesMaxBatch || 0) > 10) {
+        await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'hermesMaxBatch must be between 1 and 10' }) })
+        return
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settings: body.settings || {} }) })
+      return
+    }
     const responses: Record<string, unknown> = {
       '/api/shield/dashboard-summary': {
         decisions_by_action: {},
@@ -27,6 +36,34 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
             device_id: 'live-device',
             decision: { action: 'deny', severity: 'medium', reason: 'Live process decision' },
             event_ref: { class: 'process_activity', event_id: 'evt-live-1' },
+          },
+        }, {
+          received_at: '2026-09-08T19:44:15Z',
+          decision: {
+            device_id: 'live-device',
+            decision: { action: 'contained', severity: 'medium', reason: 'Contained shadow workload' },
+            event_ref: { class: 'process_activity', event_id: 'evt-live-2' },
+          },
+        }, {
+          received_at: '2026-09-08T19:44:14Z',
+          decision: {
+            device_id: 'live-device',
+            decision: { action: 'escalate', severity: 'high', reason: 'Sensitive write requires review' },
+            event_ref: { class: 'process_activity', event_id: 'evt-live-3' },
+          },
+        }, {
+          received_at: '2026-09-08T19:44:13Z',
+          decision: {
+            device_id: 'live-device',
+            decision: { action: 'allowed', severity: 'low', reason: 'Authenticated execution' },
+            event_ref: { class: 'process_activity', event_id: 'evt-live-4' },
+          },
+        }, {
+          received_at: '2026-09-08T19:44:12Z',
+          decision: {
+            device_id: 'live-device',
+            decision: { action: 'log_only', severity: 'low', reason: 'Routine observation' },
+            event_ref: { class: 'process_activity', event_id: 'evt-live-5' },
           },
         }],
         exporter_status: [],
@@ -57,6 +94,9 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
       '/api/shield/integrations': { integrations: [] },
       '/api/shield/detection-quality': { detection_quality: [] },
       '/api/shield/test-events': { test_events: [] },
+      '/api/shield/cortex-outbox': { outbox: { pending: 0, dead_letter: 0 } },
+      '/api/shield/hermes-status': { hermes: { health: 'healthy', healthy: true, transport: 'local-spool', pending: 2, acknowledged_total: 11, dead_letters: 0, agent_id: 'did:integrity:test' } },
+      '/api/shield/settings': { settings: { hermesEnabled: true, hermesAnalysisOnly: true, hermesRedactionMode: 'strict', hermesEventScope: 'all', hermesMaxBatch: 10, hermesSpoolMaxBytes: 16777216 } },
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(responses[path] || {}) })
   })
@@ -70,6 +110,11 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
   await expect(page.getByText('Intercepted Events')).toBeVisible()
   await expect(page.getByText('live-device', { exact: true })).toBeVisible()
   await expect(page.getByText('Live process decision', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Contained (1)' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Denied (1)' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Escalated (1)' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Allowed (1)' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Logged (1)' })).toBeVisible()
   await page.getByRole('button', { name: 'Shield agent' }).click()
   await expect(page.getByRole('heading', { name: 'Responder interface' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Freeze process' })).toBeVisible()
@@ -78,6 +123,16 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
 
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Settings & Security Posture' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Hermes Agent' }).click()
+  await expect(page.getByRole('heading', { name: 'Hermes Shield agent' })).toBeVisible()
+  await expect(page.getByText('11 acknowledged', { exact: false })).toBeVisible()
+  await expect(page.getByText('Analysis only · enforced', { exact: true })).toBeVisible()
+  await page.getByLabel('Maximum batch').fill('11')
+  await page.getByRole('button', { name: 'Save Hermes profile' }).click()
+  await expect(page.getByRole('alert')).toContainText('hermesMaxBatch must be between 1 and 10')
+  await page.getByLabel('Maximum batch').fill('10')
+  await page.getByRole('button', { name: 'Save Hermes profile' }).click()
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible()
   await page.getByRole('tab', { name: 'Sensors' }).click()
   await expect(page.getByRole('heading', { name: 'Kernel telemetry sources' })).toBeVisible()
   await page.getByRole('tab', { name: 'Control Plane' }).click()
@@ -89,4 +144,8 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Containment', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Evidence' }).click()
   await expect(page.getByRole('heading', { name: 'Export, queue, and verification' })).toBeVisible()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('tab', { name: 'Hermes Agent' }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('heading', { name: 'Hermes Shield agent' })).toBeVisible()
 })

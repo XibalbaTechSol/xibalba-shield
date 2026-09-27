@@ -56,7 +56,13 @@ def main() -> int:
                     # Return to accept() without unloading the kernel sensor.
                     pass
                 finally:
-                    stream.close()
+                    # close() flushes any buffered events; with the client gone that
+                    # flush raises BrokenPipeError again, outside the except above, and
+                    # took the whole helper down on every client restart.
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
     finally:
         server.close()
         path.unlink(missing_ok=True)

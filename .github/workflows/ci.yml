@@ -9,6 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # integrity-sdk is not published; pyproject resolves it from the sibling
+      # integrity-core checkout (tool.uv.sources), which plain pip ignores. Check it out
+      # inside the workspace (actions/checkout rejects ../ paths) at a pinned ref and
+      # install it before Shield. Bump the ref deliberately when SDK changes are needed.
+      - name: Checkout integrity-core (integrity-sdk dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: XibalbaTechSol/integrity-core
+          # integrity-core main after #99 merged (2026-09-27).
+          ref: 01723868c69610675cabf744d4a180b8bc48b179
+          path: integrity-core
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -19,9 +31,12 @@ jobs:
           chmod +x opa
           sudo mv opa /usr/local/bin/opa
       - name: Install package
-        run: python -m pip install -e ".[dev]"
+        run: |
+          python -m pip install -e ./integrity-core/integrity-sdk
+          python -m pip install -e ".[dev]"
       - name: Run root-free tests
-        run: pytest -q
+        # Explicit path: the integrity-core checkout above must not be collected.
+        run: pytest -q tests
       - name: Verify packaged local OPA profiles
         run: |
           python -m pip wheel --no-deps . --wheel-dir dist

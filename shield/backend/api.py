@@ -15,7 +15,7 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 import urllib.error
 import urllib.request
@@ -27,6 +27,7 @@ import platform
 import socket
 import uuid
 import sqlite3
+from datetime import datetime, timezone
 
 try:
     import jwt
@@ -97,6 +98,106 @@ def _read_cortex_outbox_status(path: str | Path) -> dict[str, int]:
         return {"pending": counts.get("pending", 0), "sent": counts.get("sent", 0), "dead_letter": counts.get("dead_letter", 0), **metrics}
     except sqlite3.Error:
         return {"pending": 0, "sent": 0, "dead_letter": 0, "outbox_unreadable": 1}
+
+
+def _read_hermes_status(profile: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Return safe, read-only local Hermes transport state for operators."""
+    spool_path = str(os.environ.get("SHIELD_HERMES_SPOOL") or "").strip()
+    key_path = str(os.environ.get("SHIELD_HERMES_KEY") or "").strip()
+    agent_id = str(os.environ.get("XIBALBA_SHIELD_HERMES_AGENT_ID") or "").strip() or None
+    result: dict[str, Any] = {
+        "transport": "local-spool",
+        "analysis_only": True,
+        "redaction": "strict",
+        "agent_id": agent_id,
+        "key_configured": bool(key_path),
+        "healthy": False,
+        "health": "not_configured",
+        "spool_depth": 0,
+        "acknowledgements": 0,
+        "dead_letters": 0,
+        "profile": {key: value for key, value in (profile or {}).items() if str(key).startswith("hermes")},
+    }
+    if not spool_path and not key_path:
+        return result
+    if not spool_path or not key_path:
+        result["health"] = "degraded"
+        result["error"] = "SHIELD_HERMES_SPOOL and SHIELD_HERMES_KEY must be configured together"
+        return result
+    try:
+        from ..hermes_transport import HermesSpool
+
+        result.update(HermesSpool.inspect_status(spool_path))
+        result["healthy"] = bool(result.get("configured")) and Path(key_path).is_file()
+        result["health"] = "healthy" if result["healthy"] else "degraded"
+    except (OSError, ValueError, TypeError) as exc:
+        result["health"] = "degraded"
+        result["error"] = str(exc)
+    return result
+
+
+def _read_hermes_deliveries(limit: int = 50) -> list[dict[str, Any]]:
+    """Return delivery metadata only; never expose Hermes payloads or key material."""
+    spool_path = str(os.environ.get("SHIELD_HERMES_SPOOL") or "").strip()
+    if not spool_path:
+        return []
+
+
+_RESOURCE_SAMPLES: dict[int, tuple[float, int]] = {}
+
+
+def _read_runtime_resources() -> dict[str, Any]:
+    """Read bounded local process telemetry for the Shield/Cortex runtime."""
+    now = time.monotonic()
+    hz = float(os.sysconf(os.sysconf_names["SC_CLK_TCK"]))
+    cpu_count = max(1, os.cpu_count() or 1)
+    page_size = os.sysconf("SC_PAGE_SIZE")
+    processes: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            command = (entry / "cmdline").read_bytes().replace(b"\\x00", b" ").decode(errors="replace").strip()
+            if not command or not any(token in command.lower() for token in ("xibalba-shield", "xibalba_cortex", "shield run", "cortex")):
+                continue
+            stat = (entry / "stat").read_text(encoding="utf-8")
+            after_comm = stat.rsplit(")", 1)[1].split()
+            ticks = int(after_comm[11]) + int(after_comm[12])
+            rss = int((entry / "statm").read_text(encoding="utf-8").split()[1]) * page_size
+            previous = _RESOURCE_SAMPLES.get(pid)
+            cpu_percent = None
+            if previous:
+                elapsed = max(0.001, now - previous[0])
+                cpu_percent = round(min(100.0, max(0.0, ((ticks - previous[1]) / hz) / elapsed * 100 / cpu_count)), 2)
+            _RESOURCE_SAMPLES[pid] = (now, ticks)
+            seen.add(pid)
+            role = "cortex" if "cortex" in command.lower() else "shield"
+            processes.append({"pid": pid, "role": role, "cpu_percent": cpu_percent, "rss_bytes": rss, "command": command[:240]})
+        except (OSError, ValueError, IndexError):
+            continue
+    for pid in set(_RESOURCE_SAMPLES) - seen:
+        _RESOURCE_SAMPLES.pop(pid, None)
+    return {
+        "sampled_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "processes": processes,
+        "cpu_percent": round(sum(item["cpu_percent"] or 0 for item in processes), 2),
+        "rss_bytes": sum(item["rss_bytes"] for item in processes),
+    }
+    state_path = Path(spool_path) / "state.sqlite3"
+    if not state_path.exists():
+        return []
+    try:
+        with sqlite3.connect(f"file:{state_path}?mode=ro", uri=True) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT delivery_id, status, updated_at FROM deliveries ORDER BY updated_at DESC LIMIT ?",
+                (max(1, min(int(limit), 100)),),
+            ).fetchall()
+        return [dict(row) for row in rows]
+    except (sqlite3.Error, OSError, ValueError):
+        return []
 
 
 def _read_cortex_agent_memories(*, agent_id: str, device_id: str | None = None, limit: int = 50) -> dict[str, Any]:
@@ -424,6 +525,25 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     return
                 self._send_json({"outbox": _read_cortex_outbox_status(os.environ.get("XIBALBA_CORTEX_OUTBOX", "/var/lib/xibalba-shield/cortex/outbox.sqlite3"))})
                 return
+            if parsed.path == "/api/shield/hermes-status":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                record = store.get_tenant_settings_record(tenant_id=tenant_id)
+                self._send_json({"hermes": _read_hermes_status(record.get("settings", {}))})
+                return
+            if parsed.path == "/api/shield/hermes-deliveries":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"deliveries": _read_hermes_deliveries()})
+                return
+            if parsed.path == "/api/shield/runtime-resources":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"resources": _read_runtime_resources()})
+                return
             if parsed.path == "/api/shield/cortex-memories":
                 tenant_id = self._tenant_from_query_or_error(query)
                 device_id = str(query.get("device_id", [""])[0] or "").strip()
@@ -584,6 +704,18 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json(store.get_tenant_settings_record(tenant_id=tenant_id))
+                return
+            if parsed.path == "/api/shield/network/config":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json(store.get_network_config_record(tenant_id=tenant_id))
+                return
+            if parsed.path == "/api/shield/network/config/change-requests":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json({"requests": store.list_network_config_change_requests(tenant_id=tenant_id)})
                 return
             if parsed.path == "/api/shield/settings/audit":
                 tenant_id = self._tenant_from_query_or_error(query)
@@ -1096,6 +1228,61 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 })
                 return
 
+            if parsed.path == "/api/shield/network/config":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                config = body.get("config")
+                if not isinstance(config, dict):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "config must be an object")
+                    return
+                try:
+                    request = store.create_network_config_change_request(tenant_id=tenant_id, proposed_config=config, requested_by=str(body.get("requested_by") or body.get("actor_id") or "tenant-admin"))
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json({"ok": True, "request": request}, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path == "/api/shield/network/config/change-requests":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                config = body.get("config")
+                if not isinstance(config, dict):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "config must be an object")
+                    return
+                try:
+                    request = store.create_network_config_change_request(tenant_id=tenant_id, proposed_config=config, requested_by=str(body.get("requested_by") or "tenant-admin"))
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(request, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path.startswith("/api/shield/network/config/change-requests/"):
+                request_id = parsed.path.rsplit("/", 1)[-1]
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                action = str(body.get("action") or "")
+                try:
+                    if action in {"approve", "reject"}:
+                        result = store.decide_network_config_change_request(tenant_id=tenant_id, request_id=request_id, approver_id=str(body.get("approver_id") or "tenant-admin"), approve=action == "approve")
+                    elif action == "rollback":
+                        result = store.rollback_network_config_change_request(tenant_id=tenant_id, request_id=request_id, actor_id=str(body.get("actor_id") or "tenant-admin"))
+                    else:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "action must be approve, reject, or rollback")
+                        return
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.CONFLICT, str(exc))
+                    return
+                self._send_json(result)
+                return
+
             if parsed.path == "/api/shield/settings/change-requests":
                 tenant_id = str(body.get("tenant_id") or "")
                 if not self._require_admin(tenant_id=tenant_id):
@@ -1368,9 +1555,12 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                         decision = body.get("decision", body)
                         row_id = store.record_decision(tenant_id=tenant_id, device_id=device_id, decision=decision)
                         # Mirror authenticated, non-synthetic decisions into the durable
-                        # Cortex outbox.  Local persistence remains authoritative; a
-                        # publication failure is retried by the independent worker.
-                        if not bool(decision.get("synthetic")):
+                        # Cortex outbox only when they carry a policy signal. Routine
+                        # unmatched observations are counted locally and are not memories.
+                        action = str((decision.get("decision") or {}).get("action") or "")
+                        rule = decision.get("rule") if isinstance(decision.get("rule"), dict) else {}
+                        routine_observation = action in {"allow", "log_only"} and str(rule.get("rule_id") or "") == "_no_match"
+                        if not bool(decision.get("synthetic")) and not routine_observation:
                             try:
                                 from ..agent_core.cortex_memory import CortexMemoryProvider
                                 provider = CortexMemoryProvider.from_environment(device_id=device_id)
@@ -1961,15 +2151,29 @@ def main(argv: list[str] | None = None) -> int:
     tls_server = getattr(server, "tls_server", None)
     tls_thread = None
     if tls_server is not None:
-        import threading
         tls_thread = threading.Thread(target=tls_server.serve_forever, name="shield-backend-tls", daemon=True)
         tls_thread.start()
         print(f"shield-backend TLS listener on https://{args.host}:{tls_server.server_port}{' with mTLS' if getattr(tls_server, 'mtls_enabled', False) else ''}")
+    retention_stop = threading.Event()
+    retention_days = max(1, int(os.environ.get("SHIELD_TELEMETRY_RETENTION_DAYS", "1")))
+    server.store.prune_telemetry(max_age_days=retention_days, limit=1000)  # type: ignore[attr-defined]
+
+    def retain_telemetry() -> None:
+        while not retention_stop.wait(3600):
+            try:
+                server.store.prune_telemetry(max_age_days=retention_days, limit=1000)  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001 - retention must not take down policy service
+                print(f"shield telemetry retention pass failed: {exc}", file=sys.stderr)
+
+    retention_thread = threading.Thread(target=retain_telemetry, name="shield-telemetry-retention", daemon=True)
+    retention_thread.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nshield-backend stopping")
     finally:
+        retention_stop.set()
+        retention_thread.join(timeout=2)
         if tls_server is not None:
             tls_server.shutdown()
             tls_server.server_close()

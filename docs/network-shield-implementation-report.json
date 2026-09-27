@@ -1,0 +1,42 @@
+{
+  "status": "partial",
+  "topology": {
+    "networks": ["host-local Wi-Fi 192.168.68.0/24", "local Docker bridges 172.17.0.0/16, 172.18.0.0/16, 172.19.0.0/16"],
+    "segments": [],
+    "observation_points": ["endpoint TCP-connect sensor", "system resolver stub"],
+    "unverified_assumptions": ["TP-LINK gateway model/firmware and authorized management API", "DHCP/NAC/switch/Wi-Fi inventory", "NetFlow/IPFIX/sFlow source", "authoritative firewall state"]
+  },
+  "implementation": {
+    "event_schema": {"path": "shield/schemas/xibalba.shield.hermes.network_event.schema.json", "version": "1.0.0", "validated": true},
+    "ingestion": {"path": "shield/network_ingestion.py", "sequence_replay_clock_skew": true, "durable_state": "sqlite", "bounded_spool": true},
+    "control_plane": {"path": "shield/network_control_plane.py", "local_decision_before_delivery": true, "local_enforcement_ack_path": true, "production_adapter_configured": false},
+    "approval_workflow": {"path": "shield/network_approval.py", "backend_path": "/api/shield/network/config/change-requests", "durable": true, "intent_bound": true, "one_time_consumption": true, "ui_integrated": true, "rollback": true},
+    "configuration_validation": {"path": "shield/network_config.py", "secret_free": true, "protected_recovery_required": true, "typed_topology_and_sensors": true, "ui_integrated": true},
+    "redaction": {"implemented": true, "egress_scan_passed": true},
+    "sensors": ["existing endpoint-local TCP-connect surface only"],
+    "policy_engine": {"implemented": true, "path": "shield/network_policy_engine.py", "local_enforcement_verified": "disposable-lab-only"},
+    "enforcement_adapters": ["transport-injected AuthenticatedTransportAdapter with authorization reference, least-privilege scope, timeout, expiry, rollback, and acknowledgement validation; no vendor endpoint configured", "disposable-memory lab adapter for block_domain, block_flow, isolate_device, move_segment, revoke_access, rate_limit, and restore_access; no network side effects"],
+    "hermes_consumer": {"implemented": true, "path": "shield/hermes_network_consumer.py", "authenticated": true, "transport": "HMAC-authenticated local spool", "analysis_only": true, "external_profile_wired": false, "tenant_settings_runtime_sync": true, "status_endpoint": "/api/shield/hermes-status", "host_paths_operator_managed": true},
+    "ui_configuration": {"implemented": "backend-and-frontend-config-surface", "path": "/api/shield/network/config", "approval_workflow": true, "frontend_wired": true, "authenticated_network_view_rendered": true, "render_evidence": "authenticated loopback browser journey against checkout backend; screenshot /tmp/shield-network-authenticated.png"},
+    "documentation": ["docs/network-shield-topology-research.md", "docs/network-shield-implementation-report.json", "docs/runbooks/network-deployment.md", "docs/runbooks/network-privacy.md", "docs/runbooks/network-incident-response.md", "docs/runbooks/network-recovery.md"],
+    "local_gate": {"path": "shield/network_policy.py", "dry_run_default": true, "adapter_execution": "disposable-lab-only; production adapter execution remains disabled"}
+  },
+  "verification": {
+    "passed": ["407 full Shield tests", "61 current backend/config/adapter focused tests", "23 network control-plane/adapter/config/disposable-lab lifecycle tests", "local control plane executes a registered adapter and durably records its acknowledgement without Hermes/Cortex", "topology and sensor declarations are typed, bounded, secret-scanned, and UI-editable", "unknown adapter actions are rejected by secret-free network configuration", "transport adapter enforces authorization reference, least-privilege scope, timeout, expiry, rollback, and acknowledgement correlation", "checkout backend main() starts successfully on an isolated loopback port", "authenticated Network Shield browser journey rendered against checkout backend", "authenticated Network Shield journey had zero console errors and zero HTTP failures", "adapter acknowledgements are correlated to adapter and idempotency references", "revoke_access requires explicit approval", "no live network mutation performed", "raw network identifiers are hashed before contract output", "unknown network control fields are rejected", "payload limit is enforced", "duplicate action requests are idempotent in the executor", "destructive or wide adapter actions consume one-time approval before dispatch", "network events use a separate schema validation path in the bounded spool", "installed endpoint and helper services verified active with resource caps", "Hermes consumer rejects command-like advisory output", "UI production build passed", "Playwright fallback verified landing-to-sign-in interaction with no console errors"],
+    "failed": [],
+    "blocked": ["root-only firewall readback", "authorized gateway/DNS/NAC/controller integration", "systemd backend handoff: port 8421 is occupied by an unmanaged process while xibalba-shield-backend.service is inactive"],
+    "evidence_cutoff": "2026-09-19"
+  },
+  "security_boundaries": [
+    "Hermes/Cortex remain downstream and cannot execute network commands",
+    "redaction occurs before the network event contract leaves the observation point",
+    "inferred or stale identity cannot authorize a destructive action",
+    "no network-wide destructive action is active",
+    "metadata visibility is not plaintext or TLS-content visibility"
+  ],
+  "remaining_actions": [
+    "identify and authorize the real gateway, DNS, firewall, NAC, switch, or Wi-Fi API",
+    "implement and validate least-privilege production adapters against an authorized lab segment",
+    "resolve the systemd backend handoff and verify the installed service independently from the dirty checkout"
+  ]
+}

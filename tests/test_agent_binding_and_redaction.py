@@ -6,6 +6,8 @@ from shield.codex_agent import redact_event
 from shield.agent_core.cortex_memory import CortexMemoryProvider
 from types import SimpleNamespace
 import json
+import hashlib
+import time
 
 
 def test_device_agent_binding_history_is_atomic_and_auditable(tmp_path):
@@ -62,6 +64,7 @@ def test_cortex_outbox_allowlist_and_dead_letter_metric(tmp_path):
     provider = CortexMemoryProvider(
         base_url="http://127.0.0.1:1", token="token", agent_id="did:integrity:agent-a",
         device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3", max_attempts=1,
+        publish_actions=frozenset({"allow", "log_only"}),
     )
     event = SimpleNamespace(to_dict=lambda: {
         "class": "agent_event", "event_id": "evt-1", "device_id": "device-a",
@@ -78,8 +81,38 @@ def test_cortex_outbox_allowlist_and_dead_letter_metric(tmp_path):
     assert "decision_secret" not in payload["content"]
     assert "redacted" not in payload["source"]["metadata"]
     assert payload["source"]["metadata"]["redaction_proof"]
+    assert payload["content_hash"] == "sha256:" + hashlib.sha256(payload["content"].encode("utf-8")).hexdigest()
     assert provider.status()["dead_letter"] == 1
     assert provider.metrics()["dead_letter_total"] == 1
+
+
+def test_cortex_outbox_preserves_frozen_correlation_fields(tmp_path):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="did:integrity:agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3", max_attempts=1,
+        publish_actions=frozenset({"allow", "log_only"}),
+    )
+    event = SimpleNamespace(to_dict=lambda: {
+        "class": "agent_event", "event_id": "evt-correlation", "device_id": "device-a",
+        "invocation_id": "018f3f62-9ca4-7db5-8a7a-6c26c9f9d820",
+        "reporting_window": "2026-09-24T00:00:00Z/2026-09-24T23:59:59Z",
+        "provenance": {"source_kind": "shield_event", "locator": "shield://device-a/evt-correlation"},
+        "privacy": {"redacted": True, "proof": "sha256:fixture"},
+        "message": "not allowlisted",
+    })
+    decision = SimpleNamespace(
+        to_dict=lambda: {"invocation_id": "018f3f62-9ca4-7db5-8a7a-6c26c9f9d820", "action": "log_only"},
+        event_ref=SimpleNamespace(event_id="evt-correlation"),
+    )
+    provider.remember_event(event, decision)
+    with provider._connect_outbox() as conn:
+        payload = json.loads(conn.execute("SELECT payload_json FROM cortex_outbox").fetchone()[0])
+    metadata = payload["source"]["metadata"]
+    assert metadata["event_id"] == "evt-correlation"
+    assert metadata["invocation_id"] == "018f3f62-9ca4-7db5-8a7a-6c26c9f9d820"
+    assert metadata["reporting_window"] == "2026-09-24T00:00:00Z/2026-09-24T23:59:59Z"
+    assert metadata["provenance"]["locator"].endswith("evt-correlation")
+    assert "message" not in payload["content"]
 
 
 def test_cortex_outbox_ignores_unsafe_parallelism_and_batch_size(tmp_path, monkeypatch):
@@ -109,6 +142,26 @@ def test_cortex_outbox_worker_flush_can_skip_unbounded_counts(tmp_path):
     assert result == {"attempted": 1, "delivered": 1, "pending": None, "dead_letter": None}
 
 
+def test_cortex_outbox_uses_orderable_due_index_and_prunes_only_old_sent_rows(tmp_path):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    with provider._connect_outbox() as conn:
+        plan = conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM cortex_outbox "
+            "WHERE status='pending' AND next_attempt_at<=? "
+            "ORDER BY next_attempt_at, created_at LIMIT ?", (time.time(), 10),
+        ).fetchall()
+        assert all("TEMP B-TREE" not in str(row[3]).upper() for row in plan)
+        conn.execute("INSERT INTO cortex_outbox(id,payload_json,status,created_at,sent_at) VALUES('old','{}','sent',0,0)")
+        conn.execute("INSERT INTO cortex_outbox(id,payload_json,status,created_at) VALUES('pending','{}','pending',0)")
+    assert provider._prune_sent(now=time.time() + 2 * 86400) == 1
+    with provider._connect_outbox() as conn:
+        assert conn.execute("SELECT status FROM cortex_outbox WHERE id='pending'").fetchone()[0] == "pending"
+        assert conn.execute("SELECT COUNT(*) FROM cortex_outbox WHERE id='old'").fetchone()[0] == 0
+
+
 def test_cortex_outbox_rejects_oversize_payloads(tmp_path):
     provider = CortexMemoryProvider(
         base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
@@ -117,6 +170,21 @@ def test_cortex_outbox_rejects_oversize_payloads(tmp_path):
     provider._enqueue({"content": "x" * 70000}, "oversize")
     assert provider.status()["pending"] == 0
     assert provider.metrics()["oversize_dropped_total"] == 1
+
+
+def test_cortex_outbox_honors_demo_payload_and_pending_limits(tmp_path):
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
+        device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
+        max_payload_bytes=128, max_pending_rows=2,
+    )
+    provider._enqueue({"content": "x" * 129}, "oversize")
+    provider._enqueue({"content": "one"}, "one")
+    provider._enqueue({"content": "two"}, "two")
+    provider._enqueue({"content": "three"}, "three")
+    assert provider.status()["pending"] == 2
+    assert provider.metrics()["oversize_dropped_total"] == 1
+    assert provider.metrics()["pending_depth_dropped_total"] == 1
 
 
 def test_cortex_outbox_rejects_when_storage_ceiling_is_reached(tmp_path, monkeypatch):
@@ -130,3 +198,65 @@ def test_cortex_outbox_rejects_when_storage_ceiling_is_reached(tmp_path, monkeyp
     provider._enqueue({"content": "bounded"}, "capacity")
     assert provider.status()["pending"] == 0
     assert provider.metrics()["capacity_dropped_total"] == 1
+
+
+def test_outbox_size_counts_live_pages_not_freed_space(tmp_path, monkeypatch):
+    """Pruned rows leave free pages in the file; capacity must track live data only
+    (regression: a 2-row outbox with ~13 MB of free pages dropped every event)."""
+    import sqlite3
+    from shield.agent_core import cortex_memory
+
+    monkeypatch.setenv("XIBALBA_CORTEX_OUTBOX", str(tmp_path / "outbox.sqlite3"))
+    provider = cortex_memory.CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="t", agent_id="did:integrity:test",
+        device_id="dev", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    with provider._connect_outbox() as conn:
+        for i in range(400):
+            conn.execute("INSERT INTO cortex_outbox(id,payload_json,created_at,status,sent_at) VALUES(?,?,0,'sent',0)", (f"r{i}", "x" * 4000))
+    full = provider._outbox_size_bytes()
+    with provider._connect_outbox() as conn:
+        conn.execute("DELETE FROM cortex_outbox")
+    provider._checkpoint_wal()
+
+    file_bytes = (tmp_path / "outbox.sqlite3").stat().st_size
+    live = provider._outbox_size_bytes()
+    assert file_bytes > 1_000_000          # freed pages still occupy the file...
+    assert live < full / 10                # ...but are not counted as capacity
+    wal = tmp_path / "outbox.sqlite3-wal"
+    assert not wal.exists() or wal.stat().st_size == 0   # checkpoint truncated the WAL
+
+
+def test_cortex_publishes_only_material_decisions_by_default(tmp_path, monkeypatch):
+    """Routine log_only decisions stay out of agent memory (and cost no outbox write);
+    contain/deny/escalate are published. Nested PolicyDecision shape, as the router sends."""
+    import sqlite3
+    from types import SimpleNamespace
+    from shield.agent_core.cortex_memory import CortexMemoryProvider
+
+    monkeypatch.delenv("SHIELD_CORTEX_PUBLISH_ACTIONS", raising=False)
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="t", agent_id="did:integrity:a",
+        device_id="d", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    event = SimpleNamespace(to_dict=lambda: {"class": "process_activity", "event_id": "evt-1"})
+    for i, action in enumerate(["log_only", "contain", "log_only", "deny", "escalate"]):
+        # event_ref as an attribute, like the real PolicyDecision: the outbox row id
+        # is derived from it, so each decision gets its own row.
+        decision = SimpleNamespace(
+            event_ref=SimpleNamespace(event_id=f"evt-{i}"),
+            to_dict=lambda a=action, i=i: {"event_ref": {"event_id": f"evt-{i}"}, "decision": {"action": a}})
+        provider.remember_event(SimpleNamespace(to_dict=lambda i=i: {"class": "process_activity", "event_id": f"evt-{i}"}), decision)
+    with sqlite3.connect(tmp_path / "outbox.sqlite3") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM cortex_outbox").fetchone()[0] == 3
+
+
+def test_cortex_publish_actions_env_override(tmp_path, monkeypatch):
+    from shield.agent_core.cortex_memory import CortexMemoryProvider
+
+    monkeypatch.setenv("SHIELD_CORTEX_PUBLISH_ACTIONS", "contain, log_only")
+    provider = CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="t", agent_id="did:integrity:a",
+        device_id="d", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    assert provider.publish_actions == frozenset({"contain", "log_only"})

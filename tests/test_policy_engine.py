@@ -165,3 +165,16 @@ def test_professional_services_combined_agent_context_precedence_with_real_opa(
     assert decision.decision.severity == "medium"
     assert decision.rule.rule_id == expected_rule_id
     assert decision.rule.version == "1.0.0"
+
+
+@pytest.mark.parametrize("profile", ["smb", "professional-services", "regulated"])
+def test_real_opa_unmatched_process_is_log_only(profile):
+    event = ProcessActivity(
+        device_id="dev-1",
+        process=ProcessInfo(pid=1, name="bash", exe_path="/usr/bin/bash"),
+        activity=Activity(type="launch"),
+    )
+    with supervised_opa(profile) as opa_url:
+        decision = PolicyEngine(opa_url=opa_url).evaluate(event, _ctx())
+    assert decision.decision.action == "log_only"
+    assert decision.rule.rule_id == "_no_match"
