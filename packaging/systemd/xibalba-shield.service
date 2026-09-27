@@ -9,6 +9,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/xibalba-shield/shield.env
+# Cortex publication settings (XIBALBA_CORTEX_URL/TOKEN, XIBALBA_AGENT_ID). The sensor
+# only enqueues events for Cortex when all are set; the outbox worker reads the same
+# file, so both share one source of truth instead of a copied token.
+EnvironmentFile=-/etc/xibalba-shield/cortex.env
 ExecStart=/usr/local/bin/xibalba-shield-run
 Restart=on-failure
 RestartSec=5s
