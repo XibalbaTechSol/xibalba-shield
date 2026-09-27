@@ -196,3 +196,30 @@ def test_cortex_outbox_rejects_when_storage_ceiling_is_reached(tmp_path, monkeyp
     provider._enqueue({"content": "bounded"}, "capacity")
     assert provider.status()["pending"] == 0
     assert provider.metrics()["capacity_dropped_total"] == 1
+
+
+def test_outbox_size_counts_live_pages_not_freed_space(tmp_path, monkeypatch):
+    """Pruned rows leave free pages in the file; capacity must track live data only
+    (regression: a 2-row outbox with ~13 MB of free pages dropped every event)."""
+    import sqlite3
+    from shield.agent_core import cortex_memory
+
+    monkeypatch.setenv("XIBALBA_CORTEX_OUTBOX", str(tmp_path / "outbox.sqlite3"))
+    provider = cortex_memory.CortexMemoryProvider(
+        base_url="http://127.0.0.1:1", token="t", agent_id="did:integrity:test",
+        device_id="dev", outbox_path=tmp_path / "outbox.sqlite3",
+    )
+    with provider._connect_outbox() as conn:
+        for i in range(400):
+            conn.execute("INSERT INTO cortex_outbox(id,payload_json,created_at,status,sent_at) VALUES(?,?,0,'sent',0)", (f"r{i}", "x" * 4000))
+    full = provider._outbox_size_bytes()
+    with provider._connect_outbox() as conn:
+        conn.execute("DELETE FROM cortex_outbox")
+    provider._checkpoint_wal()
+
+    file_bytes = (tmp_path / "outbox.sqlite3").stat().st_size
+    live = provider._outbox_size_bytes()
+    assert file_bytes > 1_000_000          # freed pages still occupy the file...
+    assert live < full / 10                # ...but are not counted as capacity
+    wal = tmp_path / "outbox.sqlite3-wal"
+    assert not wal.exists() or wal.stat().st_size == 0   # checkpoint truncated the WAL

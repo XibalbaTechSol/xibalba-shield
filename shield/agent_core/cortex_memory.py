@@ -69,15 +69,22 @@ class CortexMemoryProvider:
         return conn
 
     def _outbox_size_bytes(self) -> int:
-        return sum(
-            path.stat().st_size
-            for path in (
-                self.outbox_path,
-                Path(f"{self.outbox_path}-wal"),
-                Path(f"{self.outbox_path}-shm"),
-            )
-            if path.exists()
-        )
+        """Bytes the queue actually holds: in-use database pages plus the WAL.
+
+        Raw file sizes are not a capacity measure: SQLite keeps pages freed by
+        pruning on its freelist, and the -shm index is fixed-size. Counting them
+        made a 2-row outbox look "full" (12.5 MB file, ~13 MB free pages, 4.6 MB
+        un-checkpointed WAL) and dropped every new event as capacity_dropped
+        (observed 2026-09-27).
+        """
+        wal = Path(f"{self.outbox_path}-wal")
+        wal_bytes = wal.stat().st_size if wal.exists() else 0
+        if not self.outbox_path.exists():
+            return wal_bytes
+        with self._connect_outbox() as conn:
+            page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+            in_use = conn.execute("PRAGMA page_count").fetchone()[0] - conn.execute("PRAGMA freelist_count").fetchone()[0]
+        return in_use * page_size + wal_bytes
 
     def _increment_metric(self, name: str) -> None:
         with self._connect_outbox() as conn:
@@ -183,6 +190,7 @@ class CortexMemoryProvider:
         delivered = sum(1 for row in rows if self._publish(row))
         if time.monotonic() - self._last_prune_at >= _OUTBOX_PRUNE_INTERVAL_SECONDS:
             self._prune_sent(limit=1000)
+            self._checkpoint_wal()
             self._last_prune_at = time.monotonic()
         if not include_counts:
             return {"attempted": len(rows), "delivered": delivered, "pending": None, "dead_letter": None}
@@ -206,6 +214,15 @@ class CortexMemoryProvider:
                 (cutoff, max(1, min(int(limit), 5000))),
             )
             return sum(1 for _ in cursor)
+
+    def _checkpoint_wal(self) -> None:
+        """Fold the WAL into the database and truncate it, so the WAL cannot grow
+        without bound between prunes. Best-effort: a busy reader just defers it."""
+        try:
+            with self._connect_outbox() as conn:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
 
     def status(self) -> dict[str, int]:
         """Return durable queue depth plus cumulative delivery/loss counters."""
