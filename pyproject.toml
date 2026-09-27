@@ -23,7 +23,6 @@ dependencies = [
     # Local-first authority: uv resolves this to the sibling Integrity-core checkout below.
     # Shield and Cortex must consume the same newest SDK tree as the Core workspace.
     "integrity-sdk",
-    "mlflow>=3.15.1",
     "jsonschema>=4.23.0",
     "pyjwt[crypto]>=2.13.0",
     "requests>=2.34.2",
