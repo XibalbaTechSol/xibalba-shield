@@ -9658,6 +9658,46 @@ h1, h2, h3, h4, b {
     bottom left, bottom left, bottom right, bottom right !important;
 }
 
+/* Additional named windows that are not descendants of the shared card
+   primitives still use the identical mock frame language. */
+.console.theme-command-center :is(
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+),
+.console.theme-light :is(
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+) {
+  border-radius: 0 !important;
+  border-color: var(--frame-line, var(--line)) !important;
+  background-repeat: no-repeat !important;
+  background-image:
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)) !important;
+  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px,
+    8px 1px, 1px 8px, 8px 1px, 1px 8px !important;
+  background-position: top left, top left, top right, top right,
+    bottom left, bottom left, bottom right, bottom right !important;
+}
+
 /* Every real window/card gets a complete frame. The mock uses corner ticks as
    an accent, but the full one-pixel rule is the reliable structural boundary
    on every page and at every nesting level. */

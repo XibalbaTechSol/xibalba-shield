@@ -304,13 +304,13 @@ function EvidenceWorkspace({ data, api }) {
 
 function ConfigurationWorkspace({ connection, logout, theme, onThemeChange, data, api, refresh }) {
   return <>
-    <WorkspaceHeader eyebrow="SYSTEM / CONFIGURATION" title="Configuration" copy="Manage tenant policy sources, integrations, enforcement contracts, and developer access from one configuration surface." />
+    <WorkspaceHeader eyebrow="CONFIGURATION" title="What is the fleet configured to do?" copy="Signed policy bundles, response boundaries, guardrails, and destinations. Containment and guardrail changes go through two-step approval and can be rolled back." />
     <div className="configuration-unified">
       <section className="configuration-section" aria-labelledby="configuration-policies-title">
         <div className="configuration-section-heading">
-          <p className="eyebrow">POLICY AUTHORITY</p>
-          <h3 id="configuration-policies-title">Policy bundles</h3>
-          <p>Review, select, and deploy the tenant-scoped enforcement profiles.</p>
+          <p className="eyebrow">PRESELECTED POLICY BUNDLES</p>
+          <h3 id="configuration-policies-title">Policy bundle</h3>
+          <p>Select from three pre-engineered zero-trust policy profiles, deploy to enrolled devices, or inspect rollback history.</p>
         </div>
         <PoliciesView data={data} api={api} refresh={refresh} />
       </section>
