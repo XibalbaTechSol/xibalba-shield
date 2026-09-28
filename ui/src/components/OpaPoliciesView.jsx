@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 
+// A pack is "loaded" only if OPA's /v1/policies lists it; "differs" means OPA's copy is not
+// byte-identical to the file Shield ships (hash compare done by the backend).
+function loadedLabel(policy, daemon) {
+  if (daemon && !daemon.reachable) return 'Unknown (OPA unreachable)'
+  if (!policy.loaded) return 'Not loaded'
+  return policy.in_sync ? 'Loaded' : 'Loaded — differs from file'
+}
+
 export function OpaPoliciesView({ api }) {
   const [policies, setPolicies] = useState([])
+  const [daemon, setDaemon] = useState(null)
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -13,6 +22,7 @@ export function OpaPoliciesView({ api }) {
         const data = await api.opaPolicies()
         if (!cancelled) {
           setPolicies(data.policies || [])
+          setDaemon(data)
           setLoading(false)
         }
       } catch (e) {
@@ -33,18 +43,26 @@ export function OpaPoliciesView({ api }) {
     <section className="resource">
       <header className="panel-title">
         <h2>OPA Policies</h2>
-        <p>Tenant policy bundles currently loaded by the Open Policy Agent evaluator.</p>
+        <p>Shield's Rego policy packs, and whether the running Open Policy Agent has each one loaded. Read-only.</p>
       </header>
+      {daemon && (
+        <p className={daemon.reachable ? 'field-hint' : 'form-message error'} role="status">
+          {/* Every value here is read from the OPA daemon itself (health, version, /v1/policies). */}
+          OPA {daemon.opa_version || 'version unknown'} · {daemon.daemon_status} · {daemon.opa_url}
+          {daemon.reachable ? ` · ${daemon.loaded_policy_count} policies loaded in total` : ''}
+        </p>
+      )}
       {policies.length === 0 && <p className="empty-state">No OPA policy bundles are available.</p>}
       <table className="policy-table">
         <thead>
-          <tr><th>Name</th><th>Version</th><th>Actions</th></tr>
+          <tr><th>Name</th><th>Version</th><th>In running OPA</th><th>Actions</th></tr>
         </thead>
         <tbody>
           {policies.map((p, i) => (
             <tr key={i}>
               <td>{p.name}</td>
               <td>{p.version || '—'}</td>
+              <td title={p.loaded_id || ''}>{loadedLabel(p, daemon)}</td>
               <td>
                 <button type="button" onClick={() => setSelected(p)}>View source</button>
               </td>

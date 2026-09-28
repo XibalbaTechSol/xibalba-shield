@@ -464,7 +464,8 @@ def _run(args: argparse.Namespace) -> int:
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
-                         enforcement_mode=args.enforcement_mode,
+                         # local-run builds its own Namespace without this flag; default = enforce.
+                         enforcement_mode=getattr(args, "enforcement_mode", "enforce"),
                          decision_sink=evidence_publisher.publish_decision,
                          enforcement_outcome_sink=evidence_publisher.publish_outcome,
                          memory_provider=memory_provider, hermes_publisher=hermes_publisher)
