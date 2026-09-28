@@ -25,6 +25,17 @@ echo "Installing checkout code into $python_bin (dependencies and identity mater
   --link-mode=copy \
   "$repo_root"
 
+# --no-deps keeps dependency versions stable, so verify here that every dependency the
+# checkout declares is actually present, and that runtime data files shipped in the
+# package, before restarting the sensor. Missing jsonschema and unpackaged schema JSON both
+# reached production this way (2026-09-27, C5 install).
+if "$uv_bin" pip check --python "$python_bin" 2>&1 | grep "package \`xibalba-shield\`"; then
+  echo "Deployed xibalba-shield is missing declared dependencies (see above); install them first." >&2
+  exit 1
+fi
+"$python_bin" -c "import shield.hermes_contract, shield.network_contract, shield.hermes_transport, shield.hermes_analyst" \
+  || { echo "Deployed package failed its import smoke test; not restarting the sensor." >&2; exit 1; }
+
 # The systemd unit invokes this launcher directly; updating the Python package
 # alone does not update its argument/env wiring.
 install -m 0755 "$repo_root/packaging/systemd/xibalba-shield-run" /usr/local/bin/xibalba-shield-run

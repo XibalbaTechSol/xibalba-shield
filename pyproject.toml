@@ -43,4 +43,4 @@ include = ["shield*"]
 integrity-sdk = { path = "../integrity-core/integrity-sdk", editable = true }
 
 [tool.setuptools.package-data]
-shield = ["policies/rego/*.rego", "sensors/ebpf/*.bpf.c"]
+shield = ["policies/rego/*.rego", "sensors/ebpf/*.bpf.c", "schemas/*.json"]
