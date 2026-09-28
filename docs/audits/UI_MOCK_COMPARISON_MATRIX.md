@@ -19,6 +19,7 @@ Status values: `PASS` = matches the current mock target, `PARTIAL` = implemented
 |---|---|---|---|---|
 | App background | `#14171a` graphite | `#14171a` | PASS | — |
 | Primary window fill | Same continuous graphite field for nested surfaces | Nested windows use `var(--bg)` | PASS | Confirm against every mock state |
+| Neutral background removal | No ornamental fills behind icons, tags, readouts, or ordinary nested panes | Neutral structural backgrounds are transparent; state backgrounds are explicit | PASS | — |
 | Elevated semantic fill | `#262b30` only where the mock shows an elevated state | Ordinary nested surfaces flattened; semantic states retained | PASS | — |
 | Frame line | `rgba(255,255,255,.14)` / computed `#ffffff24` | `var(--line)` | PASS | — |
 | Complete card/window borders | One-pixel rectangular rules | Explicit `1px solid var(--line)` on surface classes | PASS | Check drawers/modals in opened states |
