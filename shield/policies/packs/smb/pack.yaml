@@ -1,0 +1,21 @@
+# docs/EXECUTION_PLAN.md A3: this manifest plus policy.rego is the signed pack Shield
+# actually enforces -- the pack hash covers both, closing the gap named in
+# integrity_sdk.core.packs's own docstring ("Shield previously signed a JSON bundle while
+# enforcing Rego the signature never covered").
+#
+# kernel_range has no on-chain meaning for Shield (no IntegrityKernel account involved) --
+# it names the C3 decision-contract/pack-schema compatibility range this pack was written
+# against, the same field integrity-sdk's own reference pack (tests/unit/test_core_opa.py)
+# uses for the same purpose in a chain-account context.
+pack_format: integrity.pack/1
+name: smb
+version: 1.0.0
+kernel_range: ">=1.0.0 <2.0.0"
+decision_contract: integrity.decision/1
+entrypoint: data.shield.policy
+event_classes:
+  process_activity: {no_match: log_only}
+  file_activity: {no_match: log_only}
+  network_flow: {no_match: log_only}
+  agent_event: {no_match: log_only}
+description: "Small/medium business profile -- log_only on every event class by default; real Rego rules escalate specific patterns (shadow AI, unapproved model routing)."

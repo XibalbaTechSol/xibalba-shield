@@ -13,18 +13,18 @@ a local sidecar OPA server, not a cloud service.
 
 from __future__ import annotations
 
-import asyncio
+import threading
 import uuid
 import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
-from typing import Mapping
+from typing import Mapping, Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from integrity_sdk.core.decision import DENY, ENFORCE, LOG_ONLY, PERMIT, resolve as resolve_decision
-
-from ..opa_client import evaluate as opa_evaluate, OPAUnavailableError
+from integrity_sdk.core.decision import ENFORCE, LOG_ONLY, PERMIT, resolve as resolve_decision
+from integrity_sdk.core.opa import OpaClient, OpaError
+from integrity_sdk.core.packs import LoadedPack
 
 from ..schemas.events import (
     Decision,
@@ -37,40 +37,6 @@ from ..schemas.events import (
 from .risk import assess_event
 
 logger = logging.getLogger("shield.policy_engine")
-
-# docs/EXECUTION_PLAN.md A3 "permit means permitted": this pack's own per-event-class
-# no-match default, passed to `integrity_sdk.core.decision.resolve()`. Device sensor
-# classes stay `log_only` (today's existing behavior, unchanged); `agent_event` also
-# stays `log_only` here -- REGULATED_EVENT_DEFAULTS below is the one profile the plan
-# names explicitly ("hipaa agent tool calls deny").
-DEFAULT_EVENT_DEFAULTS: Mapping[str, str] = {
-    "process_activity": LOG_ONLY,
-    "file_activity": LOG_ONLY,
-    "network_flow": LOG_ONLY,
-    "agent_event": LOG_ONLY,
-}
-
-REGULATED_EVENT_DEFAULTS: Mapping[str, str] = {
-    **DEFAULT_EVENT_DEFAULTS,
-    "agent_event": DENY,
-}
-
-# Keyed the same as shield/opa_local.py's PROFILES -- the one place a compliance vertical's
-# name already exists in this repo -- so DeviceConfig.policy_profile (config/loader.py) has
-# a single source of truth for which event_defaults a `shield run` deployment gets, instead
-# of a second hardcoded profile-name list drifting from the first.
-EVENT_DEFAULTS_BY_PROFILE: Mapping[str, Mapping[str, str]] = {
-    "smb": DEFAULT_EVENT_DEFAULTS,
-    "professional-services": DEFAULT_EVENT_DEFAULTS,
-    "regulated": REGULATED_EVENT_DEFAULTS,
-}
-
-
-def event_defaults_for_profile(profile: str) -> Mapping[str, str]:
-    """`profile` is `DeviceConfig.policy_profile` -- "" (not set) or an unrecognized value
-    both fall back to `DEFAULT_EVENT_DEFAULTS`, today's existing behavior, rather than
-    raising: an operator who never set this new field must see no behavior change."""
-    return EVENT_DEFAULTS_BY_PROFILE.get(profile, DEFAULT_EVENT_DEFAULTS)
 
 # Reason-code substrings that distinguish Shield's finer-grained enforcement actions from
 # a plain `deny` under the coarser 3-way decision contract (permit/deny/log_only) -- see
@@ -119,20 +85,41 @@ class EvaluationContext:
 
 
 class PolicyEngine:
-    """Uses the SDK OPA client to evaluate rules."""
+    """docs/EXECUTION_PLAN.md A3: evaluates rules against exactly the signed pack's
+    verified Rego, via `integrity_sdk.core.opa.OpaClient` -- the enforced pack hash is
+    the signed pack hash (`self._pack.pack_hash`), not a separately-tracked version
+    string that could drift from what OPA actually holds (the gap `core.packs`'s own
+    docstring names: "Shield previously signed a JSON bundle while enforcing Rego the
+    signature never covered")."""
 
-    def __init__(
-        self, opa_url: str = "http://localhost:8181", opa_package_path: str = "/v1/data/shield/policy", *,
-        policy_version: str = "", policy_hash: str = "", event_defaults: Mapping[str, str] = DEFAULT_EVENT_DEFAULTS,
-    ):
+    def __init__(self, opa_url: str = "http://localhost:8181", *, pack: Optional[LoadedPack] = None):
         self.opa_url = opa_url
-        self.opa_package_path = opa_package_path
-        self.policy_version = policy_version
-        self.policy_hash = policy_hash
-        self.event_defaults = event_defaults
+        self._opa_client = OpaClient(opa_url)
+        self._pack: Optional[LoadedPack] = None
+        # Serializes install_pack() against evaluate() -- an evaluation must never observe
+        # the moment between removing the old pack's policies and installing the new one's
+        # (same guarantee `OpaClient.decide()` gives via its own private lock; this engine
+        # calls the lower-level `query()` instead, to keep the rule_id/name/version/message
+        # display metadata `resolve()`'s `Decision` doesn't carry, so it owns the lock itself).
+        self._install_lock = threading.Lock()
         self._opa_healthy: bool | None = None
         self._last_opa_check_at: str | None = None
         self._last_opa_error: str | None = None
+        if pack is not None:
+            self.install_pack(pack)
+
+    def install_pack(self, pack: LoadedPack) -> None:
+        """Make this engine enforce exactly `pack`'s verified Rego, or raise `OpaError`.
+
+        On failure this engine holds no pack (fails closed on every subsequent
+        `evaluate()` until a later `install_pack` succeeds) -- `OpaClient.install`
+        itself already cleared OPA's installed-pack state the same way, so a partial
+        install can never be mistaken for "the previous pack is still enforcing".
+        """
+        with self._install_lock:
+            self._pack = None
+            self._opa_client.install(pack)
+            self._pack = pack
 
     def health_status(self) -> dict[str, str | bool | None]:
         """Return advisory runtime health from the most recent policy evaluation.
@@ -181,34 +168,59 @@ class PolicyEngine:
             "ctx": ctx_dict
         }
 
-        try:
-            opa_decision = asyncio.run(opa_evaluate(
-                opa_url=self.opa_url,
-                opa_package_path=self.opa_package_path,
-                opa_timeout_seconds=2.0,
-                opa_input=opa_input
-            ))
-            self._opa_healthy = True
-            self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            self._last_opa_error = None
-            raw = opa_decision.raw_result
+        with self._install_lock:
+            pack = self._pack
+            policy_version = pack.manifest["version"] if pack is not None else ""
+            policy_hash = pack.pack_hash if pack is not None else ""
 
-            # `decision`/`reason_code` are present only when a rule actually matched (see
-            # shield/policies/rego/*.rego -- deliberately no `default` for either), which is
-            # what lets `resolve()` distinguish "a rule matched" from "nothing matched, apply
-            # this pack's per-event-class default" (docs/EXECUTION_PLAN.md A3 "permit means
-            # permitted"). `mode=ENFORCE` here is Shield's own OPA-evaluation step; the
-            # separate observe/enforce posture `router.py` applies afterward is unrelated.
-            raw_decision = (
-                {"decision": raw.get("decision"), "reason_code": raw.get("reason_code"), "controls": raw.get("controls", [])}
-                if "decision" in raw and "reason_code" in raw else None
-            )
-            resolved = resolve_decision(event.klass, raw_decision, event_defaults=self.event_defaults, mode=ENFORCE)
+            if pack is None:
+                # No verified pack installed at all -- `resolve()`'s own NO_PACK branch
+                # (event_defaults=None) denies unconditionally; nothing to query.
+                resolved = resolve_decision(event.klass, None, event_defaults=None, mode=ENFORCE)
+                raw: Mapping[str, object] = {}
+                raw_decision = None
+            else:
+                try:
+                    raw_result = self._opa_client.query(pack, opa_input)
+                    self._opa_healthy = True
+                    self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    self._last_opa_error = None
+                    raw = raw_result if isinstance(raw_result, Mapping) else {}
+                    # `decision`/`reason_code` are present only when a rule actually matched
+                    # (see shield/policies/packs/*/policy.rego -- deliberately no `default`
+                    # for either), which is what lets `resolve()` distinguish "a rule
+                    # matched" from "nothing matched, apply this pack's per-event-class
+                    # default" (docs/EXECUTION_PLAN.md A3 "permit means permitted").
+                    # `mode=ENFORCE` here is Shield's own OPA-evaluation step; the separate
+                    # observe/enforce posture `router.py` applies afterward is unrelated.
+                    raw_decision = (
+                        {
+                            "decision": raw.get("decision"), "reason_code": raw.get("reason_code"),
+                            "controls": raw.get("controls", []),
+                        }
+                        if "decision" in raw and "reason_code" in raw else None
+                    )
+                    resolved = resolve_decision(
+                        event.klass, raw_decision, event_defaults=pack.event_defaults, mode=ENFORCE,
+                        pack_hash=pack.pack_hash,
+                    )
+                except (OpaError, URLError, OSError, ValueError) as exc:
+                    self._opa_healthy = False
+                    self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    self._last_opa_error = str(exc)
+                    logger.error("OPA unavailable: %s", exc)
+                    raw = {}
+                    raw_decision = None
+                    resolved = resolve_decision(
+                        event.klass, None, event_defaults=pack.event_defaults, mode=ENFORCE,
+                        pack_hash=pack.pack_hash, evaluator_error=exc,
+                    )
+
             action = _translate_decision(resolved.decision, resolved.reason_code)
 
-            # rule_id/name/version/message stay sourced from the legacy Rego vars (unchanged,
-            # still accurate) -- they're Shield-local display/audit metadata, not part of the
-            # C3 contract's strict {"decision","reason_code","controls"} result shape.
+            # rule_id/name/version/message stay sourced from the raw Rego vars -- they're
+            # Shield-local display/audit metadata, not part of the C3 contract's strict
+            # {"decision","reason_code","controls"} result shape.
             rule_id = raw.get("rule_id", "_no_match")
             name = raw.get("name", "No rule matched")
             version = raw.get("version", "0")
@@ -216,6 +228,9 @@ class PolicyEngine:
                 raw.get("message", "matched with no action defined") if raw_decision is not None
                 else f"no policy rule matched; pack default for {event.klass}: {resolved.decision} ({resolved.reason_code})"
             )
+            if pack is None:
+                reason = f"no policy pack installed; failing closed for {event.klass}"
+                rule_id, name, version = "_no_pack", "No policy pack installed", "0"
 
             assessment = assess_event(event)
             # OPA remains authoritative for explicit deny/contain decisions.  The
@@ -256,7 +271,7 @@ class PolicyEngine:
                 invocation_id=getattr(event, "invocation_id", None) or str(uuid.uuid4()),
                 event_ref=EventRef(klass=event.klass, event_id=event_id),
                 rule=RuleRef(rule_id=rule_id, name=name, version=version),
-                policy=PolicyRef(version=self.policy_version, hash=self.policy_hash),
+                policy=PolicyRef(version=policy_version, hash=policy_hash),
                 decision=Decision(
                     action=action,
                     reason=reason,
@@ -265,23 +280,5 @@ class PolicyEngine:
                     risk_score=assessment.score,
                     human_required=decision_human_required,
                     evidence=decision_evidence,
-                ),
-            )
-        except OPAUnavailableError as exc:
-            self._opa_healthy = False
-            self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            self._last_opa_error = str(exc)
-            logger.error("OPA unavailable: %s", exc)
-            # Fail closed as per spec
-            return PolicyDecision(
-                device_id=ctx.device_id,
-                invocation_id=getattr(event, "invocation_id", None) or str(uuid.uuid4()),
-                event_ref=EventRef(klass=event.klass, event_id=event_id),
-                rule=RuleRef(rule_id="_opa_unavailable", name="OPA Unavailable", version="0"),
-                policy=PolicyRef(version=self.policy_version, hash=self.policy_hash),
-                decision=Decision(
-                    action="deny",
-                    reason=f"OPA unavailable: {exc}",
-                    severity="high",
                 ),
             )

@@ -1,23 +1,22 @@
-"""Supervise one explicitly selected Open Policy Agent (OPA) bundle for local smoke runs."""
+"""Supervise one explicitly selected Integrity pack (`policies/packs/<profile>/`) for
+local smoke runs, via `integrity_sdk.core.opa.OpaClient` -- the same client `PolicyEngine`
+itself uses, so a `local-run` smoke pass proves the same install/query path production
+enforcement takes, not a parallel one."""
 from __future__ import annotations
 
-import json
+import shutil
 import socket
 import subprocess
 import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-import hashlib
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
-PACKAGE_ROOT = Path(__file__).resolve().parent
-PROFILES = {
-    "smb": PACKAGE_ROOT / "policies/rego/smb.rego",
-    "professional-services": PACKAGE_ROOT / "policies/rego/professional-services.rego",
-    "regulated": PACKAGE_ROOT / "policies/rego/regulated.rego",
-}
+from integrity_sdk.core.opa import OpaClient, OpaError
+from integrity_sdk.core.packs import LoadedPack, load_pack, sign_pack
+from integrity_sdk.did import Keypair, public_key_multibase
+
+from .pack_profiles import PACK_DIRS_BY_PROFILE
 
 PROFILE_PROBES = {
     "smb": ({"event": {"process": {"exe_path": "/opt/ai/tool"}}}, "smb-contain-shadow-ai-processes"),
@@ -26,11 +25,22 @@ PROFILE_PROBES = {
 }
 
 
-def selected_profile_metadata(profile: str) -> tuple[str, str]:
-    bundle = PROFILES.get(profile)
-    if bundle is None:
-        raise ValueError(f"unsupported OPA profile: {profile!r}")
-    return "1.0.0", f"sha256:{hashlib.sha256(bundle.read_bytes()).hexdigest()}"
+def load_signed_profile_pack(profile: str, *, _tmp_dir: Path | None = None) -> LoadedPack:
+    """Sign the built-in `profile` pack with a fresh ephemeral key and load+verify it back.
+
+    Local-only trust: this key exists only for the returned `LoadedPack`, never persisted
+    or reused across calls, and is never a real deployment's trusted signer -- see
+    `shield/pack_signing.py` for the operator-held key `shield run`'s real enforcement path
+    (and `shield sign-pack`) actually use.
+    """
+    pack_dir = PACK_DIRS_BY_PROFILE.get(profile)
+    if pack_dir is None:
+        raise ValueError(f"unsupported policy profile: {profile!r}")
+    work_dir = Path(_tmp_dir or tempfile.mkdtemp(prefix="shield-local-run-")) / profile
+    shutil.copytree(pack_dir, work_dir)
+    signer = Keypair.generate()
+    sign_pack(work_dir, signer)
+    return load_pack(work_dir, trusted_signers=[public_key_multibase(signer.public_bytes())])
 
 
 def _unused_port() -> int:
@@ -39,40 +49,27 @@ def _unused_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _query(url: str, input_payload: dict) -> dict:
-    request = Request(
-        f"{url}/v1/data/shield/policy",
-        data=json.dumps({"input": input_payload}).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urlopen(request, timeout=0.5) as response:
-        payload = json.loads(response.read())
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        raise RuntimeError("OPA policy probe returned no object result")
-    required = {"allow", "action", "message", "rule_id", "name", "version"}
-    if not required.issubset(result):
-        raise RuntimeError("OPA policy probe returned an incompatible result shape")
-    return result
-
-
 @contextmanager
 def supervised_opa(profile: str, *, opa_binary: str = "opa", port: int | None = None, timeout: float = 5.0):
-    """Start exactly one allowlisted bundle and yield its verified URL."""
-    bundle = PROFILES.get(profile)
-    if bundle is None:
+    """Start OPA empty, install exactly one signed pack via the real install path, verify
+    it answers as expected, and yield `(url, pack)`. Never preloads a bundle file at
+    process startup -- `OpaClient.install` (PUT over the REST API) is the only way policy
+    ever reaches this server, matching what `shield run`'s real enforcement path does.
+    Callers construct their own `PolicyEngine(opa_url=url, pack=pack)` from the yielded
+    pair -- this context manager's own `OpaClient` only proves the server/pack combination
+    is healthy before handing control to the caller."""
+    if profile not in PACK_DIRS_BY_PROFILE:
         raise ValueError(f"unsupported OPA profile: {profile!r}")
-    if not bundle.is_file():
-        raise FileNotFoundError(bundle)
+    pack = load_signed_profile_pack(profile)
     selected_port = port or _unused_port()
     url = f"http://127.0.0.1:{selected_port}"
+    client = OpaClient(url)
     # Never leave an unread PIPE attached to a long-lived OPA process: enough output would fill
     # the pipe and deadlock the policy engine. A temporary file preserves bounded startup
     # diagnostics without requiring a reader thread.
     with tempfile.TemporaryFile(mode="w+") as diagnostics:
         process = subprocess.Popen(
-            [opa_binary, "run", "--server", "--addr", f"127.0.0.1:{selected_port}", str(bundle)],
+            [opa_binary, "run", "--server", "--addr", f"127.0.0.1:{selected_port}"],
             stdout=diagnostics,
             stderr=subprocess.STDOUT,
             text=True,
@@ -81,19 +78,24 @@ def supervised_opa(profile: str, *, opa_binary: str = "opa", port: int | None = 
         try:
             probe_input, expected_rule = PROFILE_PROBES[profile]
             last_error: Exception | None = None
+            installed = False
             while time.monotonic() < deadline:
                 if process.poll() is not None:
                     diagnostics.seek(0)
                     output = diagnostics.read().strip()
                     raise RuntimeError(f"OPA exited before readiness ({process.returncode}): {output}")
                 try:
-                    result = _query(url, probe_input)
-                    if result["rule_id"] != expected_rule or result["version"] != "1.0.0":
+                    if not installed:
+                        client.install(pack)
+                        installed = True
+                    result = client.query(pack, probe_input)
+                    if not isinstance(result, dict) or result.get("rule_id") != expected_rule or result.get("version") != "1.0.0":
                         raise RuntimeError("OPA readiness probe returned an unexpected selected-profile rule")
-                    yield url
+                    yield url, pack
                     return
-                except (OSError, URLError, ValueError, RuntimeError) as exc:
+                except (OpaError, OSError, ValueError, RuntimeError) as exc:
                     last_error = exc
+                    installed = False  # OPA may not have been up yet for `install` to have taken
                     time.sleep(0.05)
             raise TimeoutError(f"OPA profile {profile!r} did not become ready: {last_error}")
         finally:
