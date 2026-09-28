@@ -48,7 +48,11 @@ def _router():
     )
 
 def set_mock_deny(mock_eval):
-    mock_eval.return_value = OPADecision(allow=False, raw_result={"action": "deny"})
+    # decision/reason_code required: without them resolve() treats this as NO_MATCH and
+    # applies the pack default (log_only), not the mocked "deny" -- docs/EXECUTION_PLAN.md A3.
+    mock_eval.return_value = OPADecision(
+        allow=False, raw_result={"action": "deny", "decision": "deny", "reason_code": "TEST_DENY"}
+    )
 
 
 # ---- ingress ----
@@ -148,7 +152,10 @@ def test_verify_post_action_matching_hashes_is_low_risk_and_returns_decision(moc
         router, agent_id="a1", agent_name="Agent", tool_name="write_file",
         expected_state_hash="0xabc", actual_state_hash="0xabc",
     )
-    assert decision.decision.action == "allow"
+    # "allow" was never a real value here: the default `mock_opa` fixture mocks a no-match
+    # result, and real OPA's no-match default is "log_only" (docs/EXECUTION_PLAN.md A3) --
+    # not "allow", which no real Rego rule in this repo ever produces.
+    assert decision.decision.action == "log_only"
 
 
 def test_verify_post_action_mismatched_hashes_raises_when_a_rule_flags_it(mock_opa):

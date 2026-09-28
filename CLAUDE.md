@@ -101,7 +101,7 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest --basetemp=.pytest-tmp   # 451 passed, 12 skipped (2026-09-28)
+.venv/bin/python -m pytest --basetemp=.pytest-tmp   # 454 passed, 12 skipped (2026-09-28)
 # --basetemp keeps pytest's temp dirs out of /tmp: the live Shield sensor on this box
 # SIGSTOPs executables run from /tmp (e.g. test-built venvs), which looks like a hang.
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
