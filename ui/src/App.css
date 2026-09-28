@@ -2678,6 +2678,12 @@ h1, h2, h3, h4, b {
   border-bottom: 1px solid var(--line);
 }
 
+.sparkline-grid {
+  stroke: var(--line);
+  stroke-width: .8;
+  vector-effect: non-scaling-stroke;
+}
+
 .sparkline-wrap small,
 .sparkline-empty,
 .telemetry-footnote {
@@ -3160,6 +3166,25 @@ h1, h2, h3, h4, b {
 .landing .cta { background: var(--mock-panel); border-block: 1px solid var(--mock-line); }
 .landing .cta-btn { border-radius: 0; background: var(--mock-accent); color: #14171a; box-shadow: none; }
 .landing .site-footer { background: var(--mock-bg); border-top-color: var(--mock-line); }
+
+/* Mermaid diagrams are framed as the same technical windows used by the
+   console, so the landing page does not switch to a rounded neon surface. */
+.landing .mermaid-frame {
+  min-height: 330px;
+  padding: 24px;
+  border: 1px solid var(--mock-line);
+  border-radius: 0;
+  background: var(--mock-panel);
+  box-shadow: none;
+}
+
+.landing .mermaid-svg {
+  min-width: 0;
+}
+
+.landing .mermaid-svg svg {
+  max-width: 1060px;
+}
 
 .auth { background: var(--mock-bg); grid-template-columns: minmax(0, 1fr) minmax(420px, 520px); }
 .auth-back { color: var(--mock-muted); }
@@ -9976,6 +10001,378 @@ h1, h2, h3, h4, b {
   max-width: none;
 }
 
+/* Use one crisp, geometric checkmark everywhere instead of the platform
+   glyph. This keeps the selected state aligned in toggles and packet options
+   in both themes. */
+.console input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+  margin-top: 1px;
+  border: 1px solid var(--line-hover);
+  border-radius: 0 !important;
+  background: transparent;
+}
+
+.console input[type='checkbox']::before {
+  content: '';
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transform-origin: center;
+}
+
+.console input[type='checkbox']:checked {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.console input[type='checkbox']:checked::before {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+/* Overlay surfaces follow the same square-window system as the main workspaces. */
+.console .modal-card,
+.console .device-detail-drawer,
+.console .agent-detail-drawer,
+.console .event-drawer,
+.console .opa-source-modal {
+  border: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  color: var(--text);
+  background: var(--panel-solid);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+}
+
+.console .modal-header,
+.console .device-detail-header,
+.console .event-drawer header,
+.console .opa-source-header,
+.console .opa-source-footer,
+.console .modal-actions {
+  border-color: var(--line) !important;
+  border-radius: 0 !important;
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+
+.console .close-modal-btn,
+.console .drawer-close,
+.console .event-drawer .drawer-close {
+  border: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent;
+  color: var(--muted);
+}
+
+.console .close-modal-btn:hover,
+.console .drawer-close:hover,
+.console .event-drawer .drawer-close:hover {
+  background: var(--green-soft);
+  color: var(--text);
+}
+
+.console .device-detail-backdrop,
+.console .agent-detail-backdrop,
+.console .event-drawer-backdrop,
+.console .modal-backdrop,
+.console .opa-source-backdrop {
+  background: rgba(5, 8, 9, .72);
+}
+
+.console.theme-light .device-detail-backdrop,
+.console.theme-light .agent-detail-backdrop,
+.console.theme-light .event-drawer-backdrop,
+.console.theme-light .modal-backdrop,
+.console.theme-light .opa-source-backdrop {
+  background: rgba(20, 35, 61, .28);
+}
+
+.console.theme-light .modal-card,
+.console.theme-light .device-detail-drawer,
+.console.theme-light .agent-detail-drawer,
+.console.theme-light .event-drawer,
+.console.theme-light .opa-source-modal {
+  background: var(--panel);
+  box-shadow: 0 18px 48px rgba(43, 43, 45, .22);
+}
+
+/* Outcome details use the same full-height right drawer as device and agent
+   details, with no floating rounded card or mismatched code well. */
+.console .event-drawer {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 100vw);
+  padding: 24px;
+  border-width: 0 0 0 1px !important;
+  border-radius: 0 !important;
+}
+
+.console .event-drawer pre {
+  border-radius: 0 !important;
+  border-color: var(--line);
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+
+.console.theme-light .event-drawer pre {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+/* Configuration is one continuous workspace: legacy feature wrappers must
+   inherit the same flat windows and graphite surfaces as the policy area. */
+.console .configuration-unified .integrations-view,
+.console .configuration-unified .developer-view,
+.console .configuration-unified .resource,
+.console .configuration-unified .opa-card,
+.console .configuration-unified .dev-auth-card,
+.console .configuration-unified .api-explorer-layout,
+.console .configuration-unified .api-endpoints-nav,
+.console .configuration-unified .api-console-main,
+.console .configuration-unified .response-pane,
+.console .configuration-unified .contract-card,
+.console .configuration-unified .pipeline-table,
+.console .configuration-unified .pipeline-health-rail,
+.console .configuration-unified .signal-routing-map,
+.console .configuration-unified .catalog-card {
+  border-radius: 0 !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+
+.console .configuration-unified .integrations-view,
+.console .configuration-unified .developer-view {
+  background: transparent !important;
+}
+
+.console.theme-light .configuration-unified .integrations-view,
+.console.theme-light .configuration-unified .developer-view,
+.console.theme-light .configuration-unified .resource,
+.console.theme-light .configuration-unified .opa-card,
+.console.theme-light .configuration-unified .dev-auth-card,
+.console.theme-light .configuration-unified .api-explorer-layout,
+.console.theme-light .configuration-unified .api-endpoints-nav,
+.console.theme-light .configuration-unified .api-console-main,
+.console.theme-light .configuration-unified .response-pane,
+.console.theme-light .configuration-unified .contract-card,
+.console.theme-light .configuration-unified .pipeline-table,
+.console.theme-light .configuration-unified .pipeline-health-rail,
+.console.theme-light .configuration-unified .signal-routing-map,
+.console.theme-light .configuration-unified .catalog-card,
+.console.theme-light .configuration-unified .auth-prop code,
+.console.theme-light .configuration-unified .api-endpoints-nav button,
+.console.theme-light .configuration-unified .endpoint-nav-item,
+.console.theme-light .configuration-unified .code-snippets-section,
+.console.theme-light .configuration-unified .snippet-body,
+.console.theme-light .configuration-unified .response-json-box,
+.console.theme-light .configuration-unified .response-json-box pre,
+.console.theme-light .configuration-unified .api-console-main pre {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+.console.theme-light .configuration-unified .pipeline-table-head,
+.console.theme-light .configuration-unified .pipeline-row,
+.console.theme-light .configuration-unified .connector-card,
+.console.theme-light .configuration-unified .catalog-card,
+.console.theme-light .configuration-unified .contract-card,
+.console.theme-light .configuration-unified .endpoint-item {
+  background: transparent !important;
+  border-color: var(--line) !important;
+}
+
+.console.theme-light .configuration-unified .developer-view > .view-header,
+.console.theme-light .configuration-unified [aria-labelledby='configuration-opa-title'] > .resource > header {
+  display: none;
+}
+
+.console .configuration-unified .integration-card,
+.console .configuration-unified .catalog-card,
+.console .configuration-unified .connector-card,
+.console .configuration-unified .endpoint-item,
+.console .configuration-unified .auth-prop code,
+.console .configuration-unified .icon-chip-btn,
+.console .configuration-unified .catalog-icon-box {
+  border-radius: 0 !important;
+}
+
+.console .configuration-unified .catalog-icon-box,
+.console .configuration-unified .catalog-icon-box.splunk,
+.console .configuration-unified .catalog-icon-box.elastic,
+.console .configuration-unified .catalog-icon-box.webhook,
+.console .configuration-unified .catalog-icon-box.slack,
+.console .configuration-unified .catalog-icon-box.syslog {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.console.theme-light .configuration-unified .pipeline-table.empty,
+.console.theme-light .configuration-unified .catalog-grid,
+.console.theme-light .configuration-unified .catalog-icon-box {
+  background: transparent !important;
+}
+
+/* Bring the older connector, OPA, and API fragments onto the workspace type
+   scale instead of letting their local 10–12px defaults shrink the page. */
+.console .configuration-unified .integrations-view,
+.console .configuration-unified .developer-view,
+.console .configuration-unified .resource,
+.console .configuration-unified .pipeline-table,
+.console .configuration-unified .catalog-grid,
+.console .configuration-unified .api-explorer-layout {
+  font-size: 13px;
+}
+
+.console .configuration-unified .integrations-command-header h2 {
+  font-size: 24px;
+}
+
+.console .configuration-unified .integrations-command-header p,
+.console .configuration-unified .section-desc,
+.console .configuration-unified .dev-auth-title,
+.console .configuration-unified .api-endpoint-header,
+.console .configuration-unified .api-endpoint-description {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.console .configuration-unified .section-title-bar h3,
+.console .configuration-unified .resource > header h2,
+.console .configuration-unified .opa-card h2 {
+  font-size: 18px;
+}
+
+.console .configuration-unified .pipeline-table-head,
+.console .configuration-unified .pipeline-row,
+.console .configuration-unified .policy-table th,
+.console .configuration-unified .policy-table td,
+.console .configuration-unified .endpoint-nav-item,
+.console .configuration-unified .nav-group-title {
+  font-size: 12px;
+}
+
+.console .configuration-unified .catalog-card,
+.console .configuration-unified .contract-card,
+.console .configuration-unified .dev-auth-card,
+.console .configuration-unified .api-console-main,
+.console .configuration-unified .resource {
+  line-height: 1.45;
+}
+
+.console .configuration-unified .catalog-card h4,
+.console .configuration-unified .contract-card h4,
+.console .configuration-unified .api-endpoint-header h3 {
+  font-size: 14px;
+}
+
+.console .configuration-unified .catalog-card p,
+.console .configuration-unified .catalog-card small,
+.console .configuration-unified .contract-card p,
+.console .configuration-unified .auth-prop code,
+.console .configuration-unified .api-console-main code,
+.console .configuration-unified .api-console-main pre {
+  font-size: 12px;
+}
+
+.console .configuration-unified .catalog-card button,
+.console .configuration-unified .pipeline-table button,
+.console .configuration-unified .api-console-main button,
+.console .configuration-unified .icon-chip-btn {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.console .configuration-unified input:not([type='checkbox']):not([type='radio']),
+.console .configuration-unified select,
+.console .configuration-unified textarea,
+.console .configuration-unified .auth-prop code {
+  min-height: 38px;
+}
+
+/* One semantic button palette across every workspace and legacy fragment. */
+.console.theme-command-center .primary,
+.console.theme-command-center .primary-btn,
+.console.theme-command-center .primary-action-btn,
+.console.theme-command-center .deploy-button,
+.console.theme-command-center .detail-primary-action,
+.console.theme-command-center .save-btn,
+.console.theme-command-center .connect-btn,
+.console.theme-command-center .execute-btn,
+.console.theme-command-center .mint-token-btn {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+  color: #102027 !important;
+}
+
+.console.theme-command-center .primary:hover:not(:disabled),
+.console.theme-command-center .primary-btn:hover:not(:disabled),
+.console.theme-command-center .primary-action-btn:hover:not(:disabled),
+.console.theme-command-center .deploy-button:hover:not(:disabled),
+.console.theme-command-center .detail-primary-action:hover:not(:disabled),
+.console.theme-command-center .save-btn:hover:not(:disabled),
+.console.theme-command-center .connect-btn:hover:not(:disabled),
+.console.theme-command-center .execute-btn:hover:not(:disabled),
+.console.theme-command-center .mint-token-btn:hover:not(:disabled) {
+  background: var(--green-hover) !important;
+  border-color: var(--green-hover) !important;
+}
+
+.console.theme-light .primary,
+.console.theme-light .primary-btn,
+.console.theme-light .primary-action-btn,
+.console.theme-light .deploy-button,
+.console.theme-light .detail-primary-action,
+.console.theme-light .save-btn,
+.console.theme-light .connect-btn,
+.console.theme-light .execute-btn,
+.console.theme-light .mint-token-btn {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+  color: #fff !important;
+}
+
+.console.theme-light .primary:hover:not(:disabled),
+.console.theme-light .primary-btn:hover:not(:disabled),
+.console.theme-light .primary-action-btn:hover:not(:disabled),
+.console.theme-light .deploy-button:hover:not(:disabled),
+.console.theme-light .detail-primary-action:hover:not(:disabled),
+.console.theme-light .save-btn:hover:not(:disabled),
+.console.theme-light .connect-btn:hover:not(:disabled),
+.console.theme-light .execute-btn:hover:not(:disabled),
+.console.theme-light .mint-token-btn:hover:not(:disabled) {
+  background: var(--green-hover) !important;
+  border-color: var(--green-hover) !important;
+}
+
+.console.theme-command-center .secondary,
+.console.theme-command-center .secondary-btn,
+.console.theme-command-center .secondary-action,
+.console.theme-command-center .detail-secondary-action,
+.console.theme-command-center .open-drawer-btn,
+.console.theme-command-center .toggle-raw-btn,
+.console.theme-command-center .inspect-btn,
+.console.theme-command-center .preview-schema-btn,
+.console.theme-command-center .close-modal-btn,
+.console.theme-command-center .drawer-close,
+.console.theme-light .secondary,
+.console.theme-light .secondary-btn,
+.console.theme-light .secondary-action,
+.console.theme-light .detail-secondary-action,
+.console.theme-light .open-drawer-btn,
+.console.theme-light .toggle-raw-btn,
+.console.theme-light .inspect-btn,
+.console.theme-light .preview-schema-btn,
+.console.theme-light .close-modal-btn,
+.console.theme-light .drawer-close {
+  background: transparent !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+
 /* Keep only stateful surfaces filled. */
 .console.theme-command-center .routing-node.active,
 .console.theme-command-center .endpoint-item.active,
@@ -10004,4 +10401,132 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .detail-state,
 .console.theme-light .detail-state {
   background-color: var(--red-soft) !important;
+}
+
+/* Event Stream decision summary shares the page field; only its border and
+   metric frames define the section. Avoid a second opaque panel behind the
+   heading and summary text. */
+.console.theme-command-center .reasoning-hero,
+.console.theme-light .reasoning-hero {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+}
+
+.console.theme-command-center .reasoning-stat-card,
+.console.theme-light .reasoning-stat-card {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+}
+
+/* Shared mock button geometry for public surfaces. Text links and tabs remain
+   text controls; every action button uses the same square, flat treatment. */
+.landing .quiet,
+.landing .primary,
+.landing .link-button,
+.landing .cta-btn,
+.auth .local-connect,
+.auth .chip-btn,
+.auth .primary.submit {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+
+.landing .quiet,
+.landing .link-button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mock-muted);
+}
+
+.landing .quiet:hover,
+.landing .link-button:hover {
+  border-color: var(--mock-line);
+  background: var(--mock-panel);
+  color: var(--mock-text);
+}
+
+.landing .primary,
+.landing .cta-btn,
+.auth .primary.submit {
+  min-height: 36px;
+  border: 1px solid var(--mock-accent);
+  background: var(--mock-accent);
+  color: #14171a;
+}
+
+.landing .primary:hover:not(:disabled),
+.landing .cta-btn:hover,
+.auth .primary.submit:hover:not(:disabled) {
+  background: #cfe4f3;
+  border-color: #cfe4f3;
+}
+
+.auth .local-connect,
+.auth .chip-btn {
+  border: 1px solid var(--mock-line);
+  background: transparent;
+  color: var(--mock-accent);
+}
+
+.auth .local-connect:hover,
+.auth .chip-btn:hover {
+  border-color: var(--mock-accent);
+  background: var(--mock-elevated);
+}
+
+/* Console action buttons share the mock's flat rectangular frame in both
+   themes. Stateful fills (primary, danger, success) stay semantic. */
+.console .clear-search-btn,
+.console .reset-filters-btn,
+.console .inspect-btn,
+.console .ping-btn,
+.console .copy-token-btn,
+.console .responder-action,
+.console .drawer-close-btn,
+.console .remove-avatar-btn,
+.console .audit-packet-button,
+.console .nav-collapse-btn,
+.console .profile-btn {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+
+.console.theme-command-center .clear-search-btn,
+.console.theme-command-center .reset-filters-btn,
+.console.theme-command-center .inspect-btn,
+.console.theme-command-center .copy-token-btn,
+.console.theme-command-center .responder-action,
+.console.theme-light .clear-search-btn,
+.console.theme-light .reset-filters-btn,
+.console.theme-light .inspect-btn,
+.console.theme-light .copy-token-btn,
+.console.theme-light .responder-action {
+  background: transparent !important;
+  border: 1px solid var(--line) !important;
+  color: var(--text) !important;
+}
+
+.console.theme-command-center .clear-search-btn:hover,
+.console.theme-command-center .reset-filters-btn:hover,
+.console.theme-command-center .inspect-btn:hover,
+.console.theme-command-center .copy-token-btn:hover,
+.console.theme-command-center .responder-action:hover:not(:disabled),
+.console.theme-light .clear-search-btn:hover,
+.console.theme-light .reset-filters-btn:hover,
+.console.theme-light .inspect-btn:hover,
+.console.theme-light .copy-token-btn:hover,
+.console.theme-light .responder-action:hover:not(:disabled) {
+  background: var(--green-soft) !important;
+  border-color: var(--line-hover) !important;
+  color: var(--text) !important;
 }

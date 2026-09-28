@@ -5,12 +5,17 @@ import { OutcomeTable } from './OutcomeTable'
 
 function Sparkline({ values, color, label, unit = '' }) {
   const points = values.filter((value) => Number.isFinite(value))
-  if (points.length < 2) return <div className="sparkline-empty">Collecting live samples…</div>
+  if (points.length === 0) return <div className="sparkline-empty">Collecting live samples…</div>
   const min = Math.min(...points)
   const max = Math.max(...points)
   const range = max - min || 1
-  const path = points.map((value, index) => `${(index / (points.length - 1)) * 100},${100 - ((value - min) / range) * 82 - 9}`).join(' ')
-  return <div className="sparkline-wrap"><svg className="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${label} live graph`}><polyline points={path} fill="none" stroke={color} strokeWidth="3" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" /></svg><small>{points.at(-1).toFixed(1)}{unit} now · range {min.toFixed(1)}–{max.toFixed(1)}{unit}</small></div>
+  const coordinates = points.map((value, index) => {
+    const x = points.length === 1 ? 50 : (index / (points.length - 1)) * 100
+    const y = max === min ? 50 : 91 - ((value - min) / range) * 82
+    return { x, y }
+  })
+  const path = coordinates.map(({ x, y }) => `${x},${y}`).join(' ')
+  return <div className="sparkline-wrap"><svg className="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${label} live graph`}><line x1="0" y1="25" x2="100" y2="25" className="sparkline-grid" /><line x1="0" y1="50" x2="100" y2="50" className="sparkline-grid" /><line x1="0" y1="75" x2="100" y2="75" className="sparkline-grid" /><polyline points={path} fill="none" stroke={color} strokeWidth="3" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />{coordinates.map(({ x, y }, index) => <circle key={`${x}-${index}`} cx={x} cy={y} r="2.8" fill={color} vectorEffect="non-scaling-stroke" />)}</svg><small>{points.at(-1).toFixed(1)}{unit} now · range {min.toFixed(1)}–{max.toFixed(1)}{unit}</small></div>
 }
 
 export function Overview({ data, protectedCount, openView, preview: _preview = false }) {
@@ -177,39 +182,6 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
       </section>
 
       {policyConflict && <section className="api-alert" role="alert"><TriangleAlert aria-hidden="true" /><span><b>Policy state differs across authorities.</b> The control plane reports {policyVersions.join(', ')}, while runtime status reports {runtimePolicyVersions.join(', ')}. Reconcile before deploying or evaluating enforcement.</span><button type="button" onClick={() => openView('decisions')}>Review policy</button></section>}
-
-      <section className="panels">
-        <article className="panel sensors">
-          <PanelTitle
-            title="Runtime health"
-            copy="Latest watchdog publication"
-            status={sensors.attached === true ? 'Operational' : 'Unverified'}
-          />
-          <div className="sensor-list">
-            {[
-              ['Policy', latestStatus.policy?.healthy, latestStatus.policy?.active_policy_hash],
-              ['OPA', latestStatus.opa?.healthy, 'policy evaluator'],
-              ['Probe', sensors.attached, probeMode],
-              ['Bridge', sensors.attached, bridgeDetail],
-              ['Lost events', sensors.lost_events === 0, `${sensors.lost_events ?? 0} lost events`],
-              ['Evidence exporter', exporter.export_failures === 0, `${exporter.spool_pending ?? 0} spooled`]
-            ].map(([name, healthy, detail]) => (
-              <div className="sensor" key={name}>
-                <span>
-                  <Activity aria-hidden="true" />
-                </span>
-                <p>
-                  <b>{name}</b>
-                  <small>{detail || 'not reported'}</small>
-                </p>
-                <strong className={`status-badge ${healthy === true ? 'healthy' : healthy === false ? 'attention' : 'unknown'}`}>
-                  {healthy === true ? 'healthy' : healthy === false ? 'attention' : 'unknown'}
-                </strong>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
 
       <section className="command-grid" aria-label="Control plane readiness">
         <article className="panel readiness-panel">
