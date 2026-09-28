@@ -12,3 +12,6 @@ ui/test-results/
 .xibalba-shield/
 models/
 slm_training/
+
+# repo-local pytest temp dir (see CLAUDE.md: keeps test executables out of /tmp)
+.pytest-tmp/
