@@ -9708,3 +9708,83 @@ h1, h2, h3, h4, b {
 .console .routing-node.configured .routing-node-icon {
   background: transparent !important;
 }
+
+/* Final mock convergence pass: remove legacy elevated wells from ordinary
+   content, standardize section rhythm, and keep active states explicit. */
+.console.theme-command-center .agent-card,
+.console.theme-command-center .responder-card,
+.console.theme-command-center .policy-history-row,
+.console.theme-command-center .event-stream-toolbar,
+.console.theme-command-center .evidence-runtime-strip,
+.console.theme-command-center .pipeline-row,
+.console.theme-command-center .avatar-preference-section,
+.console.theme-command-center .avatar-preview-box,
+.console.theme-command-center .agent-remediation-panel,
+.console.theme-command-center .agent-detail-facts,
+.console.theme-command-center .agent-detail-section,
+.console.theme-command-center .agent-detail-action,
+.console.theme-command-center .routing-section,
+.console.theme-command-center .api-endpoints-nav,
+.console.theme-command-center .api-console-main,
+.console.theme-command-center .dev-auth-card,
+.console.theme-command-center .response-status-bar,
+.console.theme-command-center .snippet-tabs,
+.console.theme-command-center .pipeline-table-head,
+.console.theme-command-center .event-row,
+.console.theme-command-center .hybrid-detail-panel,
+.console.theme-command-center .hermes-boundary-grid > div,
+.console.theme-command-center .resource-card,
+.console.theme-command-center .catalog-card,
+.console.theme-command-center .json-rows pre,
+.console.theme-command-center .signal-routing-map,
+.console.theme-command-center .session-props-grid > div,
+.console.theme-command-center .token-reveal-row,
+.console.theme-command-center .active-token-row,
+.console.theme-command-center .form-feedback-alert,
+.console.theme-command-center .minted-token-alert {
+  background-color: var(--bg) !important;
+}
+
+.console.theme-command-center .workspace-header,
+.console.theme-light .workspace-header {
+  margin-bottom: 20px;
+}
+
+.console.theme-command-center .agent-unified-workspace,
+.console.theme-light .agent-unified-workspace,
+.console.theme-command-center .evidence-unified-workspace,
+.console.theme-light .evidence-unified-workspace,
+.console.theme-command-center .decisions-policy-workspace,
+.console.theme-light .decisions-policy-workspace,
+.console.theme-command-center .decisions-approvals-workspace,
+.console.theme-light .decisions-approvals-workspace,
+.console.theme-command-center .configuration-unified,
+.console.theme-light .configuration-unified {
+  gap: var(--window-gap);
+}
+
+.console.theme-command-center .side nav button.active,
+.console.theme-light .side nav button.active {
+  border-left: 2px solid var(--green);
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+
+.console.theme-command-center .side nav button.active svg,
+.console.theme-light .side nav button.active svg {
+  color: var(--green);
+}
+
+.console.theme-command-center .agent-card:hover,
+.console.theme-command-center .policy-history-row:hover,
+.console.theme-command-center .policy-history-row.selected,
+.console.theme-command-center .event-stream-card:hover,
+.console.theme-command-center .pipeline-row:hover,
+.console.theme-light .agent-card:hover,
+.console.theme-light .policy-history-row:hover,
+.console.theme-light .policy-history-row.selected,
+.console.theme-light .event-stream-card:hover,
+.console.theme-light .pipeline-row:hover {
+  background-color: var(--bg) !important;
+  border-color: var(--line-hover);
+}

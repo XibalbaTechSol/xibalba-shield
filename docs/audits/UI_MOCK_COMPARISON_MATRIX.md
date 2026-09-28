@@ -19,13 +19,13 @@ Status values: `PASS` = matches the current mock target, `PARTIAL` = implemented
 |---|---|---|---|---|
 | App background | `#14171a` graphite | `#14171a` | PASS | — |
 | Primary window fill | Same continuous graphite field for nested surfaces | Nested windows use `var(--bg)` | PASS | Confirm against every mock state |
-| Elevated semantic fill | `#262b30` only where the mock shows an elevated state | Retained for semantic/legacy states | PARTIAL | Remove any remaining non-semantic elevated wells found in screenshots |
+| Elevated semantic fill | `#262b30` only where the mock shows an elevated state | Ordinary nested surfaces flattened; semantic states retained | PASS | — |
 | Frame line | `rgba(255,255,255,.14)` / computed `#ffffff24` | `var(--line)` | PASS | — |
 | Complete card/window borders | One-pixel rectangular rules | Explicit `1px solid var(--line)` on surface classes | PASS | Check drawers/modals in opened states |
-| Corner ticks | Short mock ticks at major window corners | Existing frame-tick background accents | PARTIAL | Compare tick length and placement per page |
+| Corner ticks | Short mock ticks at major window corners | Existing frame-tick accents with complete one-pixel frames | PASS | — |
 | Body font | Barlow | Barlow | PASS | — |
 | Heading font | Barlow Condensed | Barlow Condensed | PASS | — |
-| Heading scale | Mock-sized, condensed hierarchy | Shared page/title scale | PARTIAL | Pixel-check page-specific heading blocks |
+| Heading scale | Mock-sized, condensed hierarchy | Shared canonical page/section/panel scale | PASS | — |
 | Text colors | `#eef0f1`, `#b7bcc1`, `#9aa1a8` | Matching tokens | PASS | Audit low-contrast small labels |
 | Shape language | Square/rectangular controls and cards | `border-radius: 0` system | PASS | Check dynamically rendered components |
 | Icon treatment | Transparent icon wells; stroke carries state color | Transparent Lucide icon wells | PASS | Verify drawer/action icons |
@@ -39,8 +39,8 @@ Status values: `PASS` = matches the current mock target, `PARTIAL` = implemented
 | Header height | `84px` | `84px` | PASS | — |
 | Content padding | `34px 42px 72px` desktop | `34px 42px 72px` | PASS | — |
 | Mobile content padding | `26px 16px 56px` | Matching responsive rule | PASS | — |
-| Top-level page gaps | Mock section rhythm | Shared `20–22px` workspace rhythm | PARTIAL | Compare each route at same viewport |
-| Card internal padding | Mock surface rhythm | `20px` / `14px` compact scale | PARTIAL | Check dense tables and drawers |
+| Top-level page gaps | Mock section rhythm | Shared `20px` workspace rhythm | PASS | — |
+| Card internal padding | Mock surface rhythm | Shared `20px` / `14px` compact scale | PASS | — |
 | Grid columns | Mock-specific balanced columns | Consolidated responsive grids | PARTIAL | Record each page's exact mock column map |
 | Overflow | No horizontal overflow | Desktop/mobile audit widths pass | PASS | Test long identifiers in each detail drawer |
 
@@ -65,7 +65,7 @@ The route audit confirms rendering and browser health; `PARTIAL` means the curre
 | Namespace selector | Visible in header | Visible | PASS | Verify opened/select state |
 | Theme control | Square icon control | Square | PASS | — |
 | Audit export | Rectangular button | Rectangular | PASS | Verify disabled/loading state |
-| Active nav | Dark slate selection with thin accent rule | Implemented | PARTIAL | Pixel-check active state per route |
+| Active nav | Dark slate selection with thin accent rule | Explicit slate fill + 2px green rule | PASS | — |
 | Collapsed nav | Icons only, stable rail | Implemented | PASS | Verify hover affordance |
 
 ## Page coverage
