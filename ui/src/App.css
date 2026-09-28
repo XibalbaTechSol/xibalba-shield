@@ -9334,3 +9334,51 @@ h1, h2, h3, h4, b {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Keep nested windows and feature surfaces on the same graphite field as the
+   mock. Semantic state fills remain on active controls and status badges. */
+.console.theme-command-center .settings-readout,
+.console.theme-command-center .audit-event,
+.console.theme-command-center .evidence-runtime-strip span,
+.console.theme-command-center .policy-rules-summary,
+.console.theme-command-center .agent-reasoning-callout,
+.console.theme-command-center .response-pane,
+.console.theme-command-center .response-json-box,
+.console.theme-command-center .code-snippets-section,
+.console.theme-command-center .pipeline-table,
+.console.theme-command-center .pipeline-row,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .opa-source-code,
+.console.theme-command-center .report-preview,
+.console.theme-command-center .body-editor,
+.console.theme-command-center input,
+.console.theme-command-center select,
+.console.theme-command-center textarea,
+.console.theme-command-center .readiness-row,
+.console.theme-command-center .sensor,
+.console.theme-command-center .agent-fact,
+.console.theme-command-center .routing-node,
+.console.theme-command-center .routing-node-icon,
+.console.theme-command-center .memory-result,
+.console.theme-command-center .device-detail-summary,
+.console.theme-command-center .transaction-result,
+.console.theme-command-center .approval-panel,
+.console.theme-command-center .theme-choice,
+.console.theme-command-center .snippet-body,
+.console.theme-command-center .contract-card,
+.console.theme-command-center .endpoint-item,
+.console.theme-command-center .response-status-bar {
+  background-color: var(--bg);
+}
+
+.console.theme-command-center .response-pane,
+.console.theme-command-center .response-json-box,
+.console.theme-command-center .code-snippets-section,
+.console.theme-command-center .pipeline-table,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .opa-source-code,
+.console.theme-command-center .report-preview,
+.console.theme-command-center .body-editor,
+.console.theme-command-center .snippet-body {
+  background-image: none;
+}
