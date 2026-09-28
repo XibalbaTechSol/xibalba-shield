@@ -84,8 +84,18 @@ class HermesSpool:
     @staticmethod
     def _chmod_if_owner(path: Path, mode: int) -> None:
         # Only the owning account may chmod; the other side verifies access instead.
-        if path.stat().st_uid == os.geteuid():
+        # Skip when the mode is already right: the sensor unit's RestrictSUIDSGID=true makes
+        # any chmod that sets the setgid bit fail with EPERM, even a no-op one. The installer
+        # creates the directory 2770 as root, so the sensor never needs to set it itself.
+        info = path.stat()
+        if info.st_uid != os.geteuid() or (info.st_mode & 0o7777) == mode:
+            return
+        try:
             os.chmod(path, mode)
+        except PermissionError:
+            # Sandbox refused (e.g. setgid under RestrictSUIDSGID). _ensure_dirs still
+            # verifies no world access and group rwx before the spool is used.
+            pass
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.state_path, timeout=1.0)

@@ -80,8 +80,15 @@ fi
 chown root:xibalba-shield "$KEY"; chmod 0640 "$KEY"
 stat -c '%U:%G %a %n' "$SPOOL" "$KEY"
 
-echo "== 3/7 preflight as xibalba-shield under UMask=0077"
-runuser -u xibalba-shield -- bash -c "umask 077; $PY -c 'from shield.hermes_transport import HermesSpool; s=HermesSpool.from_key_path(\"$SPOOL\", \"$KEY\", group_shared=True); print(\"spool ok\", s.status())'"
+echo "== 3/7 preflight as xibalba-shield inside the sensor unit's sandbox"
+# runuser alone missed a sandbox-only failure (RestrictSUIDSGID made a setgid chmod EPERM,
+# 2026-09-27), so this runs a transient unit with the sensor's own hardening properties.
+systemd-run --wait --pipe --quiet \
+  -p User=xibalba-shield -p Group=xibalba-shield -p UMask=0077 \
+  -p NoNewPrivileges=yes -p RestrictSUIDSGID=yes -p PrivateTmp=yes -p ProtectSystem=strict -p ProtectHome=read-only \
+  -p "ReadWritePaths=/var/log/xibalba-shield /var/lib/xibalba-shield /etc/xibalba-shield" \
+  -p LockPersonality=yes -p RestrictNamespaces=yes -p RestrictRealtime=yes -p SystemCallArchitectures=native \
+  "$PY" -c "from shield.hermes_transport import HermesSpool; s=HermesSpool.from_key_path('$SPOOL', '$KEY', group_shared=True); print('spool ok', s.status())"
 stat -c '%U:%G %a %n' "$SPOOL" "$SPOOL"/*
 
 echo "== 4/7 sensor drop-in + restart (auto-rollback)"
