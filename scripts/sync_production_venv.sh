@@ -7,8 +7,14 @@
 #   1. Checks the checkout is clean and uv.lock is current.
 #   2. Snapshots the whole venv (instant rollback).
 #   3. Installs the locked runtime dependencies (pinned; adds/changes, never removes),
-#      then integrity-sdk from the sibling integrity-core checkout and xibalba-shield from
-#      this checkout, both --no-deps (their dependencies are the locked set).
+#      then integrity-sdk AT THE REF SHIELD'S CI PINS and xibalba-shield from this checkout,
+#      both --no-deps (their dependencies are the locked set).
+#
+# SDK source of truth = the integrity-core `ref:` in .github/workflows/ci.yml, i.e. exactly
+# what CI tests. The sibling integrity-core checkout moves independently (its 2026-09-28
+# restructure removed integrity_sdk.policy.opa_client, which Shield still imports), so the
+# SDK is exported from that ref with `git archive` into a staging dir, and uv.lock is checked
+# and exported against the staged SDK. Bumping the CI pin is how production moves forward.
 #   4. Requires `uv pip check` to be fully clean, a zero-change dry run against the lock,
 #      and an import smoke test.
 #   5. Restarts the sensor, the Cortex outbox worker and the Hermes analyst; each must be
@@ -17,7 +23,10 @@
 set -euo pipefail
 [[ "$(id -u)" -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
 REPO=/home/xibalba/Projects/xibalba-shield
-SDK=/home/xibalba/Projects/integrity-core/integrity-sdk
+CORE=/home/xibalba/Projects/integrity-core
+SDK_REF=$(awk '/repository: XibalbaTechSol\/integrity-core/{f=1} f&&/ref:/{print $2; exit}' "$REPO/.github/workflows/ci.yml")
+STAGE=/home/xibalba/.local/state/shield-deploy-stage-$(date +%Y%m%dT%H%M%S)
+SDK=$STAGE/integrity-core/integrity-sdk
 VENV=/opt/xibalba-shield/venv
 PY=$VENV/bin/python
 UV=/home/xibalba/.local/bin/uv
@@ -27,7 +36,7 @@ REQ=$(mktemp /root/shield-lock-req.XXXXXX)
 SERVICES=(xibalba-shield.service xibalba-shield-cortex-outbox.service shield-hermes-analyst.service)
 LOG=/home/xibalba/Documents/integrity-audit-handoffs/C6-F2-venv-sync-$STAMP.log
 exec > >(tee "$LOG") 2>&1
-trap 'rm -f "$REQ"' EXIT
+trap 'rm -f "$REQ"; rm -rf "$STAGE"' EXIT
 
 stable() {  # stable <unit> <seconds>
   local u=$1 s=$2 r0 r1
@@ -66,9 +75,18 @@ canary() {  # echo the final state of a /tmp sleep copy run as xibalba (T* = con
 
 echo "== 1/5 preconditions"
 [[ -z "$(git -C "$REPO" status --porcelain)" ]] || { echo "shield checkout dirty; stop" >&2; exit 1; }
-[[ -z "$(git -C "$SDK" status --porcelain -- .)" ]] || { echo "integrity-sdk checkout dirty; stop" >&2; exit 1; }
-(cd "$REPO" && runuser -u xibalba -- "$UV" lock --check) || { echo "uv.lock is not current; stop" >&2; exit 1; }
-(cd "$REPO" && runuser -u xibalba -- "$UV" export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package integrity-sdk) \
+[[ "$SDK_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "could not read the integrity-core ref pinned in ci.yml; stop" >&2; exit 1; }
+runuser -u xibalba -- git -C "$CORE" cat-file -e "$SDK_REF^{commit}" 2>/dev/null \
+  || runuser -u xibalba -- git -C "$CORE" fetch -q origin "$SDK_REF" \
+  || { echo "integrity-core does not have the pinned ref $SDK_REF; stop" >&2; exit 1; }
+# Stage the pinned SDK next to a copy of this project's metadata, so the relative
+# tool.uv.sources path (../integrity-core/integrity-sdk) resolves to the pinned SDK.
+runuser -u xibalba -- mkdir -p "$STAGE/integrity-core" "$STAGE/xibalba-shield"
+runuser -u xibalba -- bash -c "git -C '$CORE' archive '$SDK_REF' integrity-sdk | tar -x -C '$STAGE/integrity-core'"
+runuser -u xibalba -- cp "$REPO/pyproject.toml" "$REPO/uv.lock" "$REPO/README.md" "$STAGE/xibalba-shield/"
+echo "integrity-sdk pinned by CI: $SDK_REF (staged)"
+(cd "$STAGE/xibalba-shield" && runuser -u xibalba -- "$UV" lock --check) || { echo "uv.lock is not current for the pinned SDK; stop" >&2; exit 1; }
+(cd "$STAGE/xibalba-shield" && runuser -u xibalba -- "$UV" export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package integrity-sdk) \
   | grep -vE '^#|^ ' > "$REQ"
 echo "locked runtime requirements: $(wc -l < "$REQ") packages"
 echo "planned changes:"
@@ -88,7 +106,7 @@ echo "== 4/5 verify"
 if "$UV" pip install --dry-run --python "$PY" -r "$REQ" 2>&1 | grep -qE '^ [+-]'; then
   echo "venv still differs from the lock after sync" >&2; rollback
 fi
-"$PY" -c "import integrity_sdk, web3, shield.cli, shield.hermes_contract, shield.hermes_transport, shield.hermes_analyst, shield.agent_core.cortex_memory; print('imports ok; web3', web3.__version__)" || rollback
+"$PY" -c "import integrity_sdk, web3, shield.cli, shield.policy_engine.engine, shield.integrity_exporter, shield.hermes_contract, shield.hermes_transport, shield.hermes_analyst, shield.agent_core.cortex_memory; print('imports ok; web3', web3.__version__)" || rollback
 
 echo "== 5/5 restart and prove"
 systemctl restart "${SERVICES[@]}"
