@@ -13,7 +13,7 @@ import json
 import os
 from unittest.mock import patch, AsyncMock
 
-from integrity_sdk.policy.opa_client import OPADecision
+from shield.opa_client import OPADecision
 
 from shield.config import PolicyHotReloader
 from shield.policy_engine import PolicyEngine

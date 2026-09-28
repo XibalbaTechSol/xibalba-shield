@@ -17,7 +17,7 @@ from shield.schemas.policy_rule import PolicyRule
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from integrity_sdk.policy.opa_client import OPADecision
+from shield.opa_client import OPADecision
 
 @pytest.fixture(autouse=True)
 def mock_opa():

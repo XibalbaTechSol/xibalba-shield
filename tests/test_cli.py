@@ -56,7 +56,7 @@ def test_local_run_reaches_enforcement_loop(tmp_path, monkeypatch, capsys):
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from integrity_sdk.policy.opa_client import OPADecision
+from shield.opa_client import OPADecision
 from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
 
 @pytest.fixture(autouse=True)

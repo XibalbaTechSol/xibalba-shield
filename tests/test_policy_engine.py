@@ -4,7 +4,7 @@ from unittest.mock import patch, AsyncMock
 
 import pytest
 
-from integrity_sdk.policy.opa_client import OPADecision, OPAUnavailableError
+from shield.opa_client import OPADecision, OPAUnavailableError
 from shield.policy_engine.engine import EvaluationContext, PolicyEngine
 from shield.opa_local import selected_profile_metadata, supervised_opa
 from shield.schemas.events import (

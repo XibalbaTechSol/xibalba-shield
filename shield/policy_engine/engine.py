@@ -21,7 +21,7 @@ from dataclasses import dataclass, asdict
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from integrity_sdk.policy.opa_client import evaluate as opa_evaluate, OPAUnavailableError
+from ..opa_client import evaluate as opa_evaluate, OPAUnavailableError
 
 from ..schemas.events import (
     Decision,

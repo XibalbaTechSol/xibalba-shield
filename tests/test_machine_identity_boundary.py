@@ -45,16 +45,27 @@ def test_different_agent_labels_yield_different_dids_even_with_identical_device_
 
 def test_agent_label_derivation_has_no_device_id_input_path():
     """Structural check, not just behavioral: load_or_create_did's signature accepts only an
-    agent_id/label. If a future change threaded device_id into identity derivation, this is the
-    test that should catch it by construction, not just by observed DID equality."""
+    agent_id/label plus where to look for/store key material. If a future change threaded
+    device_id into identity derivation, this is the test that should catch it by construction,
+    not just by observed DID equality.
+
+    `legacy_home` (integrity-core's key-store relocation work, docs/EXECUTION_PLAN.md
+    pre-execution commit `ad56d97`) is a migration-source *path* for finding an already-existing
+    identity to copy in from -- like `did_home_root`, it names where to look for key material,
+    not an input to what gets derived, so its addition does not weaken this test's guarantee.
+    """
     import inspect
 
     from integrity_sdk.did import load_or_create_did
 
-    params = list(inspect.signature(load_or_create_did).parameters)
-    assert params == ["agent_id", "did_home_root"], (
-        f"load_or_create_did's parameters changed to {params} -- if device_id or any "
+    params = inspect.signature(load_or_create_did).parameters
+    assert set(params) == {"agent_id", "did_home_root", "legacy_home"}, (
+        f"load_or_create_did's parameters changed to {list(params)} -- if device_id or any "
         "machine-derived value was added, verify it cannot influence the derived DID "
         "(SPEC-v2.0.0-proposed.md §4.4)"
     )
-    assert list(inspect.signature(load_or_create_did).parameters.values())[1].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["agent_id"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    # did_home_root/legacy_home are both keyword-only path hints, never positional inputs
+    # that could be confused with a second identity-bearing argument.
+    assert params["did_home_root"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["legacy_home"].kind is inspect.Parameter.KEYWORD_ONLY
