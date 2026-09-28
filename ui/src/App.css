@@ -9605,6 +9605,38 @@ h1, h2, h3, h4, b {
   color: var(--muted);
 }
 
+/* Final navigation typography lock: the mock uses the same condensed label
+   metrics in both themes, including the visible label spans and operator row. */
+.console.theme-command-center .side nav button,
+.console.theme-light .side nav button,
+.console.theme-command-center .side nav button span,
+.console.theme-light .side nav button span,
+.console.theme-command-center .account-nav button,
+.console.theme-light .account-nav button,
+.console.theme-command-center .account-nav button span,
+.console.theme-light .account-nav button span,
+.console.theme-command-center .profile-btn,
+.console.theme-light .profile-btn,
+.console.theme-command-center .profile-btn .profile-name,
+.console.theme-light .profile-btn .profile-name {
+  font-family: 'Barlow Condensed', sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  letter-spacing: .015em !important;
+}
+
+.console.theme-command-center .side .nav-group > small,
+.console.theme-light .side .nav-group > small,
+.console.theme-command-center .side nav > small,
+.console.theme-light .side nav > small {
+  font-family: 'Barlow Condensed', sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  letter-spacing: .14em !important;
+}
+
 /* Mock registration crosses: every visible window/card gets the same four
    corner markers without introducing extra DOM or changing layout. */
 .console.theme-command-center :is(
