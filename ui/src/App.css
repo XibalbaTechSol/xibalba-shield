@@ -9382,3 +9382,198 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .snippet-body {
   background-image: none;
 }
+
+/* Nested mock windows keep their own frame even when their interior uses the
+   same graphite field as the surrounding page. */
+.console.theme-command-center .settings-readout,
+.console.theme-command-center .audit-event,
+.console.theme-command-center .policy-rules-summary,
+.console.theme-command-center .agent-reasoning-callout,
+.console.theme-command-center .response-pane,
+.console.theme-command-center .response-json-box,
+.console.theme-command-center .code-snippets-section,
+.console.theme-command-center .pipeline-table,
+.console.theme-command-center .pipeline-row,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .opa-source-code,
+.console.theme-command-center .report-preview,
+.console.theme-command-center .body-editor,
+.console.theme-command-center .readiness-row,
+.console.theme-command-center .sensor,
+.console.theme-command-center .agent-fact,
+.console.theme-command-center .routing-node,
+.console.theme-command-center .memory-result,
+.console.theme-command-center .device-detail-summary,
+.console.theme-command-center .transaction-result,
+.console.theme-command-center .approval-panel,
+.console.theme-command-center .theme-choice,
+.console.theme-command-center .snippet-body,
+.console.theme-command-center .contract-card,
+.console.theme-command-center .endpoint-item {
+  border: 1px solid var(--line);
+}
+
+.console.theme-command-center input,
+.console.theme-command-center select,
+.console.theme-command-center textarea {
+  border-color: var(--line);
+}
+
+/* One level deeper: detail wells and inner data regions also sit on the
+   continuous mock graphite field. */
+.console.theme-command-center .toggle-item,
+.console.theme-command-center .avatar-preference-section,
+.console.theme-command-center .avatar-preview-box,
+.console.theme-command-center .agent-remediation-panel,
+.console.theme-command-center .policy-history-row,
+.console.theme-command-center .event-stream-toolbar,
+.console.theme-command-center .evidence-runtime-strip,
+.console.theme-command-center .agent-detail-facts,
+.console.theme-command-center .agent-detail-section,
+.console.theme-command-center .agent-detail-action,
+.console.theme-command-center .routing-section,
+.console.theme-command-center .routing-connector span,
+.console.theme-command-center .api-endpoints-nav,
+.console.theme-command-center .api-console-main,
+.console.theme-command-center .dev-auth-card,
+.console.theme-command-center .response-status-bar,
+.console.theme-command-center .snippet-tabs,
+.console.theme-command-center .pipeline-table-head,
+.console.theme-command-center .event-row,
+.console.theme-command-center .hybrid-detail-panel,
+.console.theme-command-center .hermes-boundary-grid > div,
+.console.theme-command-center .resource-card,
+.console.theme-command-center .catalog-card,
+.console.theme-command-center .json-rows pre,
+.console.theme-command-center .signal-routing-map,
+.console.theme-command-center .session-props-grid > div,
+.console.theme-command-center .token-reveal-row,
+.console.theme-command-center .active-token-row,
+.console.theme-command-center .form-feedback-alert,
+.console.theme-command-center .minted-token-alert {
+  background-color: var(--bg);
+}
+
+.console.theme-command-center .routing-node.active,
+.console.theme-command-center .routing-node.configured .routing-node-icon,
+.console.theme-command-center .policy-history-row.selected,
+.console.theme-command-center .event-stream-card:hover,
+.console.theme-command-center .pipeline-row:hover,
+.console.theme-command-center .endpoint-item.active {
+  background-color: var(--green-soft);
+}
+
+.console.theme-command-center .status-pill.attention,
+.console.theme-command-center .agent-detail-action.attention {
+  background-color: var(--amber-soft);
+}
+
+.console.theme-command-center .detail-state {
+  background-color: var(--red-soft);
+}
+
+/* Event Stream uses one neutral surface system. Action/severity labels remain
+   legible through typography and borders instead of competing fills. */
+.console.theme-command-center .event-stream-toolbar,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .event-stream-card.event-ledger-row,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .event-detail-grid,
+.console.theme-command-center .event-detail-grid > div,
+.console.theme-command-center .event-action-pill,
+.console.theme-command-center .severity-tag,
+.console.theme-command-center .event-class-tag,
+.console.theme-command-center .filter-chip,
+.console.theme-command-center .status-code-pill,
+.console.theme-command-center .action-badge {
+  background: var(--bg) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+.console.theme-command-center .event-stream-card:hover,
+.console.theme-command-center .event-stream-card.event-ledger-row:hover {
+  background: var(--bg) !important;
+  border-color: var(--line-hover) !important;
+}
+
+.console.theme-command-center .event-stream-card.action-contain,
+.console.theme-command-center .event-stream-card.action-deny,
+.console.theme-command-center .event-stream-card.action-blocked,
+.console.theme-command-center .event-stream-card.action-escalate,
+.console.theme-command-center .event-stream-card.action-allow,
+.console.theme-command-center .event-stream-card.action-allowed,
+.console.theme-command-center .event-stream-card.event-ledger-row::before,
+.console.theme-command-center .event-stream-card.event-ledger-row.action-contain::before,
+.console.theme-command-center .event-stream-card.event-ledger-row.action-deny::before,
+.console.theme-command-center .event-stream-card.event-ledger-row.action-blocked::before,
+.console.theme-command-center .event-stream-card.event-ledger-row.action-escalate::before,
+.console.theme-command-center .event-stream-card.event-ledger-row.action-allow::before,
+.console.theme-command-center .event-stream-card.event-ledger-row.action-allowed::before {
+  border-left-color: var(--line) !important;
+  background: var(--line) !important;
+}
+
+.console.theme-command-center .event-action-pill .dot,
+.console.theme-command-center .severity-tag::before {
+  background: var(--dim) !important;
+}
+
+.console.theme-command-center .event-inline-json pre,
+.console.theme-command-center .event-observation-summary,
+.console.theme-command-center .event-row {
+  background: var(--bg) !important;
+  color: var(--muted);
+}
+
+.console.theme-light .event-stream-toolbar,
+.console.theme-light .event-stream-card,
+.console.theme-light .event-stream-card.event-ledger-row,
+.console.theme-light .event-inline-json,
+.console.theme-light .event-detail-grid,
+.console.theme-light .event-detail-grid > div,
+.console.theme-light .event-action-pill,
+.console.theme-light .severity-tag,
+.console.theme-light .event-class-tag,
+.console.theme-light .filter-chip,
+.console.theme-light .status-code-pill,
+.console.theme-light .action-badge {
+  background: var(--bg) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+.console.theme-light .event-stream-card:hover,
+.console.theme-light .event-stream-card.event-ledger-row:hover {
+  background: var(--bg) !important;
+  border-color: var(--line-hover) !important;
+}
+
+.console.theme-light .event-stream-card.action-contain,
+.console.theme-light .event-stream-card.action-deny,
+.console.theme-light .event-stream-card.action-blocked,
+.console.theme-light .event-stream-card.action-escalate,
+.console.theme-light .event-stream-card.action-allow,
+.console.theme-light .event-stream-card.action-allowed,
+.console.theme-light .event-stream-card.event-ledger-row::before,
+.console.theme-light .event-stream-card.event-ledger-row.action-contain::before,
+.console.theme-light .event-stream-card.event-ledger-row.action-deny::before,
+.console.theme-light .event-stream-card.event-ledger-row.action-blocked::before,
+.console.theme-light .event-stream-card.event-ledger-row.action-escalate::before,
+.console.theme-light .event-stream-card.event-ledger-row.action-allow::before,
+.console.theme-light .event-stream-card.event-ledger-row.action-allowed::before {
+  border-left-color: var(--line) !important;
+  background: var(--line) !important;
+}
+
+.console.theme-light .event-action-pill .dot,
+.console.theme-light .severity-tag::before {
+  background: var(--dim) !important;
+}
+
+.console.theme-light .event-inline-json pre,
+.console.theme-light .event-observation-summary,
+.console.theme-light .event-row {
+  background: var(--bg) !important;
+  color: var(--muted);
+}
