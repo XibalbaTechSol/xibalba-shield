@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from .canonical import canonical_bytes
 from .schemas.events import AgentEvent, FileActivity, NetworkFlow, NormalizedEvent, ProcessActivity, PolicyDecision
 
 SCHEMA_NAME = "xibalba.shield.hermes.event"
@@ -121,7 +122,8 @@ def build_event(event: NormalizedEvent | Mapping[str, Any], decision: PolicyDeci
     decision_body = raw_decision.get("decision") if isinstance(raw_decision.get("decision"), Mapping) else raw_decision
     rule = raw_decision.get("rule") if isinstance(raw_decision.get("rule"), Mapping) else {}
     policy = raw_decision.get("policy") if isinstance(raw_decision.get("policy"), Mapping) else {}
-    event_id = str((raw_decision.get("event_ref") or {}).get("event_id") or raw_decision.get("event_id") or _hash(json.dumps(event_view, sort_keys=True)))
+    derived_event_id = "sha256:" + hashlib.sha256(canonical_bytes(event_view)).hexdigest()
+    event_id = str((raw_decision.get("event_ref") or {}).get("event_id") or raw_decision.get("event_id") or derived_event_id)
     payload: dict[str, Any] = {
         "schema": SCHEMA_NAME, "schema_version": SCHEMA_VERSION, "event_id": event_id,
         "emitted_at": _iso_now(), "observed_at": str((event.to_dict() if hasattr(event, "to_dict") else event).get("time") or _iso_now()),
@@ -132,7 +134,7 @@ def build_event(event: NormalizedEvent | Mapping[str, Any], decision: PolicyDeci
         "privacy": {"redaction_version": "pii-redaction-1", "redacted": True, "redaction_proof": "", "omitted_fields": ["cmdline", "raw_path", "environment", "prompts", "model_output", "raw_network_payload"]},
         "delivery": {"local_logged": True, "queued": True, "delivery_id": delivery_id or event_id, "acknowledged": bool(acknowledged), "attempt": max(0, int(attempt))},
     }
-    proof_input = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    proof_input = canonical_bytes(payload)
     payload["privacy"]["redaction_proof"] = "sha256:" + hashlib.sha256(proof_input).hexdigest()
     validate_event(payload)
     assert_safe_payload(payload)

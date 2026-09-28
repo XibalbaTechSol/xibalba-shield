@@ -24,13 +24,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from integrity_sdk.did import Keypair, verify_signature
+from ..canonical import canonical_bytes
+
+RELEASE_ATTESTATION_SCHEMA = "xibalba.shield.release-attestation.v2"
 
 
 def sha256_of(path: Path) -> str:
@@ -42,18 +44,19 @@ def sha256_of(path: Path) -> str:
 
 
 def _canonical_attestation_json(fields: dict[str, Any]) -> bytes:
-    """The exact bytes a signature is computed over and verified against -- same
-    sorted-keys, no-whitespace convention as `config.signing.canonical_policy_json`, so a
-    verifier never has to guess which serialization the signer used."""
-    return json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    """Return the SDK JCS bytes signed for a release attestation."""
+    return canonical_bytes(fields)
 
 
 def sign_artifact(path: Path, keypair: Keypair) -> dict[str, Any]:
-    """Build a signed attestation for the real file at `path` -- {"artifact", "sha256",
-    "signed_at", "signature", "signer_public_key"}. The signature covers artifact/sha256/
-    signed_at only, never the signature/signer_public_key fields themselves (can't sign
-    your own signature, same rule `config/signing.py` follows)."""
+    """Build a signed attestation for the real file at `path`.
+
+    The signature covers the version and canonicalization metadata plus artifact,
+    digest, and timestamp; it excludes only the signature and signer key fields.
+    """
     fields = {
+        "schema": RELEASE_ATTESTATION_SCHEMA,
+        "canonicalization": "xibalba.canonical-json.v2",
         "artifact": path.name,
         "sha256": sha256_of(path),
         "signed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -96,7 +99,12 @@ def verify_artifact(
 
     signature_b64 = attestation.get("signature")
     signer_key_b64 = attestation.get("signer_public_key")
-    if not signature_b64 or not signer_key_b64:
+    if (
+        not signature_b64
+        or not signer_key_b64
+        or attestation.get("schema") != RELEASE_ATTESTATION_SCHEMA
+        or attestation.get("canonicalization") != "xibalba.canonical-json.v2"
+    ):
         return VerificationResult(False, None, "malformed attestation: missing signature/signer_public_key")
 
     signed_fields = {k: v for k, v in attestation.items() if k not in ("signature", "signer_public_key")}

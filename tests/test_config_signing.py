@@ -102,3 +102,12 @@ def test_verify_rejects_malformed_wrapper_shape():
 
     assert result.verified is False
     assert "malformed" in result.reason
+
+
+def test_verify_rejects_legacy_canonicalization_metadata():
+    keypair = Keypair.generate()
+    doc = sign_policy_bundle(_policy(), keypair)
+    doc["canonicalization"] = "xibalba.canonical-json.v1"
+    result = verify_policy_signature(doc, trusted_keys=[])
+    assert result.verified is False
+    assert "canonicalization" in result.reason

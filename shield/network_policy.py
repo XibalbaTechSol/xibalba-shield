@@ -7,10 +7,10 @@ controller adapter. Hermes may request an action, but the local gate remains aut
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import dataclass, field
 from typing import Literal
+from .canonical import canonical_bytes
 
 Action = Literal["block_flow", "block_domain", "isolate_device", "move_segment", "revoke_access", "rate_limit", "restore_access"]
 Scope = Literal["device", "segment", "network"]
@@ -41,7 +41,7 @@ class NetworkActionRequest:
 
     def intent_hash(self) -> str:
         body = {"action": self.action, "target_ref": self.target_ref, "scope": self.scope, "duration_seconds": self.duration_seconds, "idempotency_ref": self.idempotency_ref}
-        return "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return "sha256:" + hashlib.sha256(canonical_bytes(body)).hexdigest()
 
 
 @dataclass(frozen=True)

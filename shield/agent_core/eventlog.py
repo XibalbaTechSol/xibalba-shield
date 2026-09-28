@@ -16,6 +16,7 @@ import hmac
 from pathlib import Path
 
 from ..schemas.events import PolicyDecision
+from ..canonical import canonical_bytes
 
 
 class EventLog:
@@ -72,7 +73,7 @@ class EventLog:
                 return {"ok": False, "checked": checked, "line": line_no, "reason": "missing _integrity"}
             if integrity.get("previous_hash") != previous_hash:
                 return {"ok": False, "checked": checked, "line": line_no, "reason": "previous hash mismatch"}
-            canonical = json.dumps(row, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            canonical = canonical_bytes(row)
             expected_hash = hashlib.sha256(previous_hash.encode("utf-8") + canonical).hexdigest()
             if integrity.get("entry_hash") != expected_hash:
                 return {"ok": False, "checked": checked, "line": line_no, "reason": "entry hash mismatch"}
@@ -85,7 +86,7 @@ class EventLog:
 
     def _integrity_for(self, row: dict) -> dict:
         previous_hash = self._last_entry_hash()
-        canonical = json.dumps(row, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        canonical = canonical_bytes(row)
         entry_hash = hashlib.sha256(previous_hash.encode("utf-8") + canonical).hexdigest()
         return {
             "algorithm": "sha256-chain+hmac-sha256",
