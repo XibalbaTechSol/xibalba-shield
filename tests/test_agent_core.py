@@ -35,6 +35,7 @@ def _router(**kwargs):
         action_broker=kwargs.get("action_broker"),
         guardrail_hooks=kwargs.get("guardrail_hooks", ()),
         event_log=kwargs.get("event_log"),
+        enforcement_mode=kwargs.get("enforcement_mode", "enforce"),
     )
 
 
@@ -234,6 +235,33 @@ def test_contain_decision_calls_action_broker_with_the_events_pid():
     ))
 
     assert calls == [4242]
+
+
+def test_observation_mode_records_would_contain_without_calling_broker():
+    calls = []
+
+    class _StubBroker:
+        def contain(self, pid, **kwargs):
+            calls.append(pid)
+
+    engine = _force_action(PolicyEngine(), "contain")
+    router = _router(policy_engine=engine, action_broker=_StubBroker(), enforcement_mode="observe")
+
+    decision = router.handle(ProcessActivity(
+        device_id="dev-1",
+        process=ProcessInfo(pid=4242, name="bash"),
+        activity=Activity(type="launch"),
+    ))
+
+    assert calls == []
+    assert decision.decision.action == "log_only"
+    assert "observation-only would-action: contain" in decision.decision.evidence
+    assert decision.decision.reason.startswith("OBSERVED_ONLY:")
+
+
+def test_enforcement_mode_rejects_unknown_values():
+    with pytest.raises(ValueError, match="enforcement_mode"):
+        _router(enforcement_mode="invalid")
 
 
 def test_allow_decision_never_calls_action_broker():

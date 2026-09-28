@@ -1387,3 +1387,87 @@ def test_signup_cannot_join_an_existing_tenant(tmp_path):
     finally:
         server.shutdown()
         store.close()
+
+
+# ---- OPA policy view reports the running daemon, never assumed values ----
+
+def _fake_opa(policies, *, health=200, version="1.18.2"):
+    from http.server import BaseHTTPRequestHandler
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            if self.path == "/health":
+                body, status = {}, health
+            elif self.path == "/v1/data/system/version":
+                body, status = {"result": {"version": version}}, 200
+            elif self.path == "/v1/policies":
+                body, status = {"result": [{"id": pid, "raw": raw} for pid, raw in policies.items()]}, 200
+            else:
+                body, status = {}, 404
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_port}"
+
+
+def test_opa_view_reports_loaded_in_sync_drifted_and_missing_packs(tmp_path):
+    from shield.backend.api import opa_policy_status
+
+    rego = tmp_path / "rego"
+    rego.mkdir()
+    (rego / "smb.rego").write_text("package shield.policy\n# smb\n")
+    (rego / "professional-services.rego").write_text("package shield.policy\n# ps\n")
+    (rego / "regulated.rego").write_text("package shield.policy\n# reg\n")
+    server, url = _fake_opa({
+        "/srv/shield/policies/rego/smb.rego": "package shield.policy\n# smb\n",            # in sync
+        "professional-services.rego": "package shield.policy\n# ps EDITED\n",              # drifted
+        "policies/bcc.rego": "package bcc\n",                                              # not a Shield pack
+    })
+    try:
+        status = opa_policy_status(url, rego_dir=rego)
+    finally:
+        server.shutdown()
+    assert status["reachable"] is True and status["daemon_status"] == "healthy"
+    assert status["opa_version"] == "1.18.2"
+    by_id = {p["id"]: p for p in status["policies"]}
+    assert by_id["smb"]["loaded"] is True and by_id["smb"]["in_sync"] is True
+    assert by_id["professional-services"]["loaded"] is True and by_id["professional-services"]["in_sync"] is False
+    assert by_id["regulated"]["loaded"] is False and by_id["regulated"]["in_sync"] is None
+
+
+def test_opa_view_is_honest_when_the_daemon_is_unreachable(tmp_path):
+    from shield.backend.api import opa_policy_status
+
+    # Reserve a port, then close it, so nothing is listening there.
+    probe = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    port = probe.server_port
+    probe.server_close()
+    status = opa_policy_status(f"http://127.0.0.1:{port}", timeout=0.5)
+    assert status["reachable"] is False
+    assert status["daemon_status"] == "unreachable"
+    assert status["opa_version"] is None
+    assert all(p["loaded"] is False for p in status["policies"])
+
+
+def test_opa_policies_endpoint_serves_live_status_to_admins(tmp_path, monkeypatch):
+    server_opa, url = _fake_opa({}, version="9.9.9")
+    monkeypatch.setenv("SHIELD_BACKEND_OPA_URL", url)
+    server, store, base = _start_backend(tmp_path)
+    try:
+        status, payload = _request(f"{base}/api/shield/opa/policies?tenant_id=tenant-a")
+    finally:
+        server.shutdown()
+        store.close()
+        server_opa.shutdown()
+    assert status == 200
+    assert payload["opa_version"] == "9.9.9"  # from the daemon, not a hardcoded string
+    assert payload["opa_url"] == url

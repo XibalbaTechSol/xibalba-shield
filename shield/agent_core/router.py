@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Callable, Iterable, Protocol
+from typing import Callable, Iterable, Literal, Protocol
 
 from integrity_sdk.telemetry.tracing import get_tracer
 
@@ -80,7 +80,10 @@ class EventRouter:
         decision_sink: Callable[[PolicyDecision], None] | None = None,
         memory_provider: MemoryProviderLike | None = None,
         hermes_publisher: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
+        enforcement_mode: Literal["observe", "enforce"] = "enforce",
     ) -> None:
+        if enforcement_mode not in {"observe", "enforce"}:
+            raise ValueError("enforcement_mode must be 'observe' or 'enforce'")
         self.device = device
         self.registry = registry
         self.policy_engine = policy_engine
@@ -98,6 +101,10 @@ class EventRouter:
         self.decision_sink = decision_sink
         self.memory_provider = memory_provider
         self.hermes_publisher = hermes_publisher
+        # Compatibility default remains enforcement for existing Shield callers.
+        # The policy-pack rollout can pass observe explicitly, then change the
+        # deployment default only after its signed-bundle path is enabled.
+        self.enforcement_mode = enforcement_mode
 
     def _context(self) -> EvaluationContext:
         return EvaluationContext(
@@ -177,6 +184,16 @@ class EventRouter:
                 "falling back to contain (fail-closed)",
                 decision.event_ref.event_id, decision.decision.tier,
             )
+
+        # Policy-pack observation mode preserves the original policy verdict as
+        # evidence while preventing the local responder from acting on it. This
+        # is deliberately applied after Tier-2/fail-closed normalization and
+        # before ActionBroker, so an explicit enforce deployment is unchanged.
+        if self.enforcement_mode == "observe" and decision.decision.action in {"deny", "contain", "escalate"}:
+            would_action = decision.decision.action
+            decision.decision.evidence.append(f"observation-only would-action: {would_action}")
+            decision.decision.reason = f"OBSERVED_ONLY: {decision.decision.reason}"
+            decision.decision.action = "log_only"
 
         # Real-time containment first, before anything else -- this is the antivirus-speed
         # step. Freeze-only (no timeout_seconds): ActionBroker.contain() with a timeout BLOCKS

@@ -461,6 +461,83 @@ if os.environ.get("OIDC_DISCOVERY_URL") and os.environ.get("OIDC_CLIENT_ID"):
         redirect_uri=os.environ.get("OIDC_REDIRECT_URI", "")
     )
 
+# Shield's Rego policy packs (shield/policies/rego/<id>.rego) and their display names.
+SHIELD_POLICY_PACKS = (
+    ("smb", "SMB & Autonomous Workspace", "smb-2026.08"),
+    ("professional-services", "Professional Services & Client Data", "professional-services-2026.08"),
+    ("regulated", "Regulated Enterprise & Healthcare", "regulated-2026.08"),
+)
+
+
+def _opa_get(opa_url: str, path: str, timeout: float) -> tuple[int, Any]:
+    """GET one OPA endpoint; returns (status, parsed JSON or None). Never raises."""
+    try:
+        with urllib.request.urlopen(f"{opa_url}{path}", timeout=timeout) as response:
+            body = response.read()
+            return response.status, (json.loads(body) if body else None)
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+    except (OSError, ValueError):
+        return 0, None
+
+
+def opa_policy_status(opa_url: str | None = None, *, rego_dir: Path | None = None, timeout: float = 1.5) -> dict[str, Any]:
+    """Read-only view of Shield's policy packs against the OPA daemon actually running.
+
+    Everything reported is observed, never assumed: the daemon's health and version come
+    from OPA itself, and a pack counts as loaded only if OPA's /v1/policies lists it. For a
+    loaded pack, `in_sync` says whether OPA's copy is byte-identical to the file shipped
+    here (hash compare), so drift between disk and the running evaluator is visible. If OPA
+    is unreachable the view says so rather than claiming a status. (Replaces a response
+    that hardcoded opa_version "v0.68.0" and daemon_status "healthy".)
+    """
+    opa_url = (opa_url or os.environ.get("SHIELD_BACKEND_OPA_URL", "http://127.0.0.1:8181")).rstrip("/")
+    rego_dir = rego_dir or Path(__file__).resolve().parent.parent / "policies" / "rego"
+    health_status, _ = _opa_get(opa_url, "/health", timeout)
+    reachable = health_status != 0
+    version = None
+    loaded: dict[str, str] = {}
+    if reachable:
+        _, version_doc = _opa_get(opa_url, "/v1/data/system/version", timeout)
+        if isinstance(version_doc, dict):
+            version = (version_doc.get("result") or {}).get("version")
+        _, policies_doc = _opa_get(opa_url, "/v1/policies", timeout)
+        for entry in (policies_doc or {}).get("result", []) if isinstance(policies_doc, dict) else []:
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                loaded[entry["id"]] = str(entry.get("raw") or "")
+    policies = []
+    for pid, name, pack_version in SHIELD_POLICY_PACKS:
+        rego_path = rego_dir / f"{pid}.rego"
+        rego_content = rego_path.read_text(encoding="utf-8") if rego_path.exists() else ""
+        file_hash = f"sha256:{hashlib.sha256(rego_content.encode()).hexdigest()}"
+        # OPA ids are the load path; match on the file name, not the directory it came from.
+        loaded_id = next((policy_id for policy_id in loaded if policy_id == f"{pid}.rego" or policy_id.endswith(f"/{pid}.rego")), None)
+        loaded_hash = f"sha256:{hashlib.sha256(loaded[loaded_id].encode()).hexdigest()}" if loaded_id else None
+        policies.append({
+            "id": pid,
+            "name": name,
+            "version": pack_version,
+            "package": "shield.policy",
+            "file": f"{pid}.rego",
+            "rego": rego_content,
+            "hash": file_hash,
+            "loaded": loaded_id is not None,
+            "loaded_id": loaded_id,
+            "loaded_hash": loaded_hash,
+            "in_sync": (loaded_hash == file_hash) if loaded_id else None,
+        })
+    return {
+        "opa_url": opa_url,
+        "reachable": reachable,
+        "daemon_status": "healthy" if health_status == 200 else ("unreachable" if not reachable else f"unhealthy (HTTP {health_status})"),
+        "opa_version": version,
+        "evaluator_engine": "Open Policy Agent (OPA) / Rego v1",
+        "package_path": "data.shield.policy",
+        "loaded_policy_count": len(loaded),
+        "policies": policies,
+    }
+
+
 def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", dev_disable_admin_auth: bool = False, device_assertion_audience: str = ""):
     # Per-process replay guard for device assertions. A multi-process deployment needs a shared
     # store; until then the short assertion TTL plus audience binding is what bounds replay.
@@ -627,31 +704,7 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
-                rego_dir = Path(__file__).resolve().parent.parent / "policies" / "rego"
-                policies = []
-                for pid, name, ver in [
-                    ("smb", "SMB & Autonomous Workspace", "smb-2026.08"),
-                    ("professional-services", "Professional Services & Client Data", "professional-services-2026.08"),
-                    ("regulated", "Regulated Enterprise & Healthcare", "regulated-2026.08"),
-                ]:
-                    rego_path = rego_dir / f"{pid}.rego"
-                    rego_content = rego_path.read_text(encoding="utf-8") if rego_path.exists() else ""
-                    policies.append({
-                        "id": pid,
-                        "name": name,
-                        "version": ver,
-                        "package": "shield.policy",
-                        "file": f"{pid}.rego",
-                        "rego": rego_content,
-                        "hash": f"sha256:{hashlib.sha256(rego_content.encode()).hexdigest()}",
-                    })
-                self._send_json({
-                    "opa_version": "v0.68.0",
-                    "daemon_status": "healthy",
-                    "evaluator_engine": "Open Policy Agent (OPA) / Rego v1",
-                    "package_path": "data.shield.policy",
-                    "policies": policies,
-                })
+                self._send_json(opa_policy_status())
                 return
             if len(parts) == 5 and parts[:3] == ["api", "shield", "policies"]:
                 if not self._require_device_token(tenant_id=parts[3], device_id=parts[4]):
