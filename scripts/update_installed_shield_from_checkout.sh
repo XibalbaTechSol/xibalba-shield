@@ -48,7 +48,7 @@ if ! "$uv_bin" pip check --python "$python_bin"; then
   echo "Deployed venv has dependency incompatibilities (see above); run sync_production_venv.sh." >&2
   exit 1
 fi
-"$python_bin" -c "import shield.hermes_contract, shield.network_contract, shield.hermes_transport, shield.hermes_analyst" \
+"$python_bin" -c "import shield.cli, shield.policy_engine.engine, shield.integrity_exporter, shield.hermes_contract, shield.network_contract, shield.hermes_transport, shield.hermes_analyst" \
   || { echo "Deployed package failed its import smoke test; not restarting the sensor." >&2; exit 1; }
 
 # The systemd unit invokes this launcher directly; updating the Python package
