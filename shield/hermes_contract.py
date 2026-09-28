@@ -7,6 +7,7 @@ and enforcement remain authoritative; Hermes receives untrusted observations and
 from __future__ import annotations
 
 import hashlib
+import hmac
 import ipaddress
 import json
 import re
@@ -33,8 +34,10 @@ class HermesContractError(ValueError):
     """Raised when a producer or consumer attempts to cross the contract unsafely."""
 
 
-def _hash(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+def _hash(value: Any, *, key: bytes | None = None) -> str:
+    data = str(value).encode("utf-8")
+    digest = hmac.new(key, data, hashlib.sha256).hexdigest() if key else hashlib.sha256(data).hexdigest()
+    return "sha256:" + digest
 
 
 def _path_class(path: str) -> str:
@@ -69,7 +72,7 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _event_view(event: NormalizedEvent | Mapping[str, Any]) -> tuple[dict[str, Any], str, str]:
+def _event_view(event: NormalizedEvent | Mapping[str, Any], *, ref_key: bytes | None = None) -> tuple[dict[str, Any], str, str]:
     raw = event.to_dict() if hasattr(event, "to_dict") else dict(event)
     klass = str(raw.get("class") or "unknown")
     action = "observed"
@@ -83,13 +86,13 @@ def _event_view(event: NormalizedEvent | Mapping[str, Any]) -> tuple[dict[str, A
         view["process"] = {
             "pid": max(0, int(process.get("pid") or 0)), "ppid": max(0, int(process.get("ppid") or 0)),
             "name": str(process.get("name") or "")[:128], "parent_name": str(process.get("parent_name") or "")[:128],
-            "path_class": _path_class(path), "path_hash": _hash(path) if path else None,
+            "path_class": _path_class(path), "path_hash": _hash(path, key=ref_key) if path else None,
             "hash_sha256": process.get("hash_sha256") if _SHA256.fullmatch(str(process.get("hash_sha256") or "")) else None,
         }
     file_info = raw.get("file")
     if isinstance(file_info, Mapping):
         path = str(file_info.get("path") or "")
-        view["file"] = {"name": str(file_info.get("name") or "")[:128], "ext": str(file_info.get("ext") or "")[:32], "path_class": _path_class(path), "path_hash": _hash(path) if path else None}
+        view["file"] = {"name": str(file_info.get("name") or "")[:128], "ext": str(file_info.get("ext") or "")[:32], "path_class": _path_class(path), "path_hash": _hash(path, key=ref_key) if path else None}
     flow = raw.get("flow")
     if isinstance(flow, Mapping):
         view["network"] = {"source_scope": _ip_scope(str(flow.get("src_ip") or "")), "destination_scope": _ip_scope(str(flow.get("dst_ip") or "")), "src_port": int(flow.get("src_port") or 0), "dst_port": int(flow.get("dst_port") or 0), "protocol": str(flow.get("protocol") or "")[:16], "direction": str(flow.get("direction") or "outbound")}
@@ -97,7 +100,7 @@ def _event_view(event: NormalizedEvent | Mapping[str, Any]) -> tuple[dict[str, A
     context = raw.get("context")
     if isinstance(agent, Mapping):
         context = context if isinstance(context, Mapping) else {}
-        view["agent"] = {"agent_ref": _hash(agent.get("agent_id", "")), "type": str(agent.get("type") or "")[:64], "data_source_count": min(1000, len(context.get("data_sources") or [])), "tool_count": min(1000, len(context.get("tools_called") or []))}
+        view["agent"] = {"agent_ref": _hash(agent.get("agent_id", ""), key=ref_key), "type": str(agent.get("type") or "")[:64], "data_source_count": min(1000, len(context.get("data_sources") or [])), "tool_count": min(1000, len(context.get("tools_called") or []))}
     return view, str(raw.get("device_id") or ""), str(raw.get("tenant_id") or "")
 
 
@@ -112,8 +115,8 @@ def _reason_code(decision: Mapping[str, Any]) -> str:
     return "NO_MATCH"
 
 
-def build_event(event: NormalizedEvent | Mapping[str, Any], decision: PolicyDecision | Mapping[str, Any], *, device_role: str = "workstation", sensor: str = "unknown", transport: str = "local-spool", enforcement: Mapping[str, Any] | None = None, delivery_id: str | None = None, attempt: int = 0, acknowledged: bool = False) -> dict[str, Any]:
-    event_view, device_id, tenant_id = _event_view(event)
+def build_event(event: NormalizedEvent | Mapping[str, Any], decision: PolicyDecision | Mapping[str, Any], *, device_role: str = "workstation", sensor: str = "unknown", transport: str = "local-spool", enforcement: Mapping[str, Any] | None = None, delivery_id: str | None = None, attempt: int = 0, acknowledged: bool = False, ref_key: bytes | None = None) -> dict[str, Any]:
+    event_view, device_id, tenant_id = _event_view(event, ref_key=ref_key)
     raw_decision = decision.to_dict() if hasattr(decision, "to_dict") else dict(decision)
     decision_body = raw_decision.get("decision") if isinstance(raw_decision.get("decision"), Mapping) else raw_decision
     rule = raw_decision.get("rule") if isinstance(raw_decision.get("rule"), Mapping) else {}

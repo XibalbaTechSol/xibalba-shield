@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import hmac
 import json
 from pathlib import Path
 
@@ -33,6 +35,15 @@ def test_build_event_is_schema_valid_and_redacted():
     assert "exe_path" not in payload["event"]["process"]
     assert "cmdline" not in payload["event"]["process"]
     assert payload["privacy"]["redaction_proof"].startswith("sha256:")
+
+
+def test_build_event_hmac_protects_path_references():
+    event, decision = _sample()
+    key = b"k" * 32
+    payload = build_event(event, decision, ref_key=key)
+    expected = "sha256:" + hmac.new(key, b"/home/alice/private.py", hashlib.sha256).hexdigest()
+    assert payload["event"]["process"]["path_hash"] == expected
+    assert payload["event"]["process"]["path_hash"] != "sha256:" + hashlib.sha256(b"/home/alice/private.py").hexdigest()
 
 
 def test_unknown_control_fields_are_rejected():
