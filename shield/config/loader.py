@@ -172,6 +172,8 @@ class DeviceConfig:
     backend_ca_file: str = ""
     backend_client_cert: str = ""
     backend_client_key: str = ""
+    # Separate Ed25519 device-auth key; never reuse the agent DID signing key.
+    device_key_path: str = ""
     # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
     # every BCC commitment this device's exporter signs must now bind chain_id +
     # verifying_contract. Defaults match Base Sepolia (CLAUDE.md's "Live deployment").
@@ -217,6 +219,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "backend_ca_file",
         "backend_client_cert",
         "backend_client_key",
+        "device_key_path",
         "chain_id",
         "verifying_contract",
         "tenant_policy_url",

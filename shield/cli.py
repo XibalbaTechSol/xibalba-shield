@@ -475,6 +475,7 @@ def _run(args: argparse.Namespace) -> int:
                 envelope = build_event(
                     event_for_contract, decision, device_role=device_config.device_role or "workstation",
                     sensor=args.sensor, transport="local-spool", enforcement=enforcement,
+                    ref_key=hermes_spool.key,
                 )
                 hermes_spool.publish(envelope, delivery_id=envelope["delivery"]["delivery_id"])
         except Exception as exc:  # noqa: BLE001 -- optional downstream analysis cannot stop local enforcement

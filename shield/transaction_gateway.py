@@ -8,9 +8,9 @@ paymaster, or relayer can consume.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import asdict, dataclass
+from .canonical import canonical_bytes
 from typing import Any, Literal
 
 
@@ -93,7 +93,7 @@ class TransactionIntent:
         return asdict(self)
 
     def intent_hash(self) -> str:
-        encoded = json.dumps(self.canonical(), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        encoded = canonical_bytes(self.canonical())
         return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 

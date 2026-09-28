@@ -7,9 +7,9 @@ boundaries in ``network_policy`` and ``network_adapters``.
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass
 from typing import Any, Mapping
+from .canonical import canonical_bytes
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class NetworkPolicyEngine:
         self.rules = tuple(rules)
         self.version = version
         canonical = [{"rule_id": r.rule_id, "action": r.action, "reason_code": r.reason_code, "match": dict(r.match), "require_approval": r.require_approval} for r in self.rules]
-        digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        digest = hashlib.sha256(canonical_bytes(canonical)).hexdigest()
         self.policy_hash = "sha256:" + digest
 
     @classmethod

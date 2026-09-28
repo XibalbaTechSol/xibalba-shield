@@ -15,34 +15,44 @@ Bundle shapes `shield/config/loader.py` understands:
   - Signed: `{"policy": {...same fields, plus optional "expires_at"...},
               "signature": "<base64 Ed25519 sig>", "signer_public_key": "<base64 pubkey>"}`
 
-The signature covers the canonical JSON encoding of the `policy` object only -- sorted
-keys, no whitespace -- matching the canonicalization convention already used elsewhere
-in this ecosystem (e.g. xibalba-cortex's `_canonical_json`) so a signature verifier
-never has to guess which serialization the signer used.
+The signature covers a versioned wrapper containing the policy, schema, and
+canonicalization identifier.  This keeps the artifact metadata authenticated as well
+as the policy content, while the SDK's JCS implementation supplies one stable byte
+encoding for both signing and verification.
 """
 
 from __future__ import annotations
 
 import base64
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from integrity_sdk.did import Keypair, verify_signature
+from ..canonical import canonical_bytes
+
+POLICY_SIGNATURE_SCHEMA = "xibalba.shield.policy-signature.v2"
 
 
 def canonical_policy_json(policy: dict) -> bytes:
-    """The exact bytes a signature is computed over and verified against --
-    signer and verifier MUST agree byte-for-byte, so this is the single
-    definition both `sign_policy_bundle` and `verify_policy_signature` call."""
-    return json.dumps(policy, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    """Return SDK JCS bytes for the policy object itself."""
+    return canonical_bytes(policy)
+
+
+def _signed_policy_json(policy: dict) -> bytes:
+    return canonical_bytes({
+        "schema": POLICY_SIGNATURE_SCHEMA,
+        "canonicalization": "xibalba.canonical-json.v2",
+        "policy": policy,
+    })
 
 
 def sign_policy_bundle(policy: dict, keypair: Keypair) -> dict:
     """Wrap a plain policy dict (the same shape `load_policy_bundle` already
     accepts unsigned) into the signed-wrapper shape, signed by `keypair`."""
-    signature = keypair.sign(canonical_policy_json(policy))
+    signature = keypair.sign(_signed_policy_json(policy))
     return {
+        "schema": POLICY_SIGNATURE_SCHEMA,
+        "canonicalization": "xibalba.canonical-json.v2",
         "policy": policy,
         "signature": base64.b64encode(signature).decode("ascii"),
         "signer_public_key": base64.b64encode(keypair.public_bytes()).decode("ascii"),
@@ -71,6 +81,8 @@ def verify_policy_signature(doc: dict, trusted_keys: list[str]) -> SignatureResu
     signer_key_b64 = doc.get("signer_public_key")
     if not isinstance(policy, dict) or not signature_b64 or not signer_key_b64:
         return SignatureResult(verified=False, signer_public_key=None, reason="malformed signed-bundle shape")
+    if doc.get("schema") != POLICY_SIGNATURE_SCHEMA or doc.get("canonicalization") != "xibalba.canonical-json.v2":
+        return SignatureResult(verified=False, signer_public_key=None, reason="unsupported signed-bundle schema or canonicalization")
 
     try:
         signature = base64.b64decode(signature_b64, validate=True)
@@ -78,7 +90,7 @@ def verify_policy_signature(doc: dict, trusted_keys: list[str]) -> SignatureResu
     except (ValueError, TypeError) as exc:
         return SignatureResult(verified=False, signer_public_key=None, reason=f"malformed base64: {exc}")
 
-    if not verify_signature(signer_key, canonical_policy_json(policy), signature):
+    if not verify_signature(signer_key, _signed_policy_json(policy), signature):
         return SignatureResult(verified=False, signer_public_key=signer_key_b64, reason="signature does not verify against signer_public_key")
 
     if trusted_keys and signer_key_b64 not in trusted_keys:

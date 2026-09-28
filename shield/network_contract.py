@@ -12,6 +12,8 @@ from typing import Any, Mapping
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from .canonical import canonical_bytes
+
 SCHEMA = "xibalba.shield.hermes.network_event"
 VERSION = "1.0.0"
 SCHEMA_PATH = Path(__file__).with_name("schemas") / "xibalba.shield.hermes.network_event.schema.json"
@@ -112,7 +114,7 @@ def build_network_event(
         "privacy": {"redacted": True, "redaction_version": "network-pii-1", "redaction_proof": "", "omitted_fields": ["raw_ip", "raw_mac", "raw_domain", "raw_url", "payload", "username", "certificate_subject"]},
         "delivery": {"queued": True, "acknowledged": bool(acknowledged), "attempt": _bounded_int(observed.get("attempt"), 100000), "loss_count": _bounded_int(loss_count, 9223372036854775807), "delivery_id": event_id},
     }
-    proof = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    proof = canonical_bytes(payload)
     payload["privacy"]["redaction_proof"] = "sha256:" + hashlib.sha256(proof).hexdigest()
     validate_network_event(payload)
     assert_safe_network_payload(payload)

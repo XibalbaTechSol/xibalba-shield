@@ -46,6 +46,7 @@ import json
 import os
 import secrets
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 from integrity_sdk.bcc import canonical_json_bytes
@@ -110,7 +111,7 @@ def build_assertion(
     return f"{ASSERTION_SCHEME} {_b64u(canonical_json_bytes(claims))}"
 
 
-def load_device_keypair(agent_label: str | None = None) -> Keypair | None:
+def load_device_keypair(*, key_path: str | os.PathLike[str] | None = None) -> Keypair | None:
     """Load the device's Ed25519 key for signing, or None if it is not on disk.
 
     Deliberately read-only. `integrity_sdk.did.load_or_create_did()` silently generates a
@@ -119,12 +120,11 @@ def load_device_keypair(agent_label: str | None = None) -> Keypair | None:
     be able to trigger that, so this reads the key directly and returns None rather than
     creating anything. A missing key means "fall back to the legacy token", not "mint a new one".
     """
-    from integrity_sdk.did import agent_dir
-
-    label = agent_label or os.environ.get("SHIELD_AGENT_LABEL") or "xibalba-shield"
-    key_path = agent_dir(label) / "private_key.pem"
+    configured_path = key_path or os.environ.get("SHIELD_DEVICE_KEY_PATH")
+    if not configured_path:
+        return None
     try:
-        return Keypair.from_pem(key_path.read_bytes())
+        return Keypair.from_pem(Path(configured_path).read_bytes())
     except (OSError, ValueError):
         return None
 
@@ -135,7 +135,7 @@ def device_auth_header(
     device_id: str,
     audience: str,
     device_token: str = "",
-    agent_label: str | None = None,
+    device_key_path: str | os.PathLike[str] | None = None,
 ) -> str:
     """Build the `Authorization` header for a device→backend request.
 
@@ -144,7 +144,7 @@ def device_auth_header(
     Returns an empty string when neither credential is available; the caller then sends no
     Authorization header and the backend fails it closed.
     """
-    keypair = load_device_keypair(agent_label)
+    keypair = load_device_keypair(key_path=device_key_path)
     if keypair is not None:
         return build_assertion(keypair=keypair, tenant_id=tenant_id, device_id=device_id, audience=audience)
     return f"Bearer {device_token}" if device_token else ""

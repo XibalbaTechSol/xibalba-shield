@@ -84,6 +84,12 @@ def test_verify_rejects_malformed_attestation_shape(tmp_path):
     assert "malformed attestation" in result.reason
 
 
+def test_attestation_records_jcs_schema(tmp_path):
+    attestation = sign_artifact(_write_artifact(tmp_path), Keypair.generate())
+    assert attestation["schema"] == "xibalba.shield.release-attestation.v2"
+    assert attestation["canonicalization"] == "xibalba.canonical-json.v2"
+
+
 def test_two_different_artifacts_produce_different_signed_hashes(tmp_path):
     keypair = Keypair.generate()
     path_a = tmp_path / "a.whl"
