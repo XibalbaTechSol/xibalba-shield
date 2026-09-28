@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, BrainCircuit, CheckCircle2, LockKeyhole, Save } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, LockKeyhole, Save, X } from 'lucide-react'
 
 const DEFAULTS = {
   hermesEnabled: true,
@@ -117,7 +117,7 @@ export function HermesAgentView({ api, data = {} }) {
         <div className="hermes-warning"><AlertTriangle size={16} /><span>Saving this profile does not mutate the host service. An operator must reconcile these values with the installed environment and restart the agent through the approved deployment path.</span></div>
       </article>
 
-      <div className="settings-actions-footer"><button type="submit" className="primary-btn"><Save size={14} /> Save Hermes profile</button>{saved && <span className="save-feedback-pill success"><CheckCircle2 size={14} /> Saved</span>}{message && <span className="form-message" aria-live="polite">{message}</span>}{error && <span className="form-message error" role="alert">{error}</span>}</div>
+      <div className="settings-actions-footer"><button type="submit" className="primary-btn"><Save size={14} /> Save Hermes profile</button>{saved && <span className="save-feedback-pill success"><X size={14} /> Saved</span>}{message && <span className="form-message" aria-live="polite">{message}</span>}{error && <span className="form-message error" role="alert">{error}</span>}</div>
     </form>
   )
 }

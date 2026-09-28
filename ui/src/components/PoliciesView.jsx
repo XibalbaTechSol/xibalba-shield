@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileCheck2, Shield, CheckCircle2, HardDrive, RotateCcw, Sliders, LockKeyhole } from 'lucide-react'
+import { FileCheck2, Shield, HardDrive, RotateCcw, Sliders, LockKeyhole, X } from 'lucide-react'
 
 const PRESELECTED_POLICIES = [
   {
@@ -305,10 +305,10 @@ export function PoliciesView({ data, api, refresh }) {
                   <span className="policy-category-tag">{bundle.category}</span>
                   {isControlPlaneActive && (
                     <span className="policy-active-pill">
-                      <CheckCircle2 size={12} /> Control plane target
+                      <X size={12} /> Control plane target
                     </span>
                   )}
-                  {isRuntimeActive && <span className="policy-active-pill"><CheckCircle2 size={12} /> Runtime loaded</span>}
+                  {isRuntimeActive && <span className="policy-active-pill"><X size={12} /> Runtime loaded</span>}
                 </div>
 
                 <h3 className="policy-bundle-title">{bundle.name}</h3>
@@ -399,7 +399,7 @@ export function PoliciesView({ data, api, refresh }) {
 
           {deployResult && (
             <div className="deploy-success-alert">
-              <CheckCircle2 size={16} />
+              <X size={16} />
               <div>
                 <b>Policy Deployed Successfully</b>
                 <p>

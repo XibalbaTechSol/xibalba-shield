@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, KeyRound, Play, ShieldAlert } from 'lucide-react'
+import { KeyRound, Play, ShieldAlert, X } from 'lucide-react'
 
 export function TransactionWorkbench({ api }) {
   const [form, setForm] = useState(() => ({ deviceId: '', deviceToken: '', agentId: 'operator-console', requestId: `console-${Date.now()}`, chainId: '1', to: '0x0000000000000000000000000000000000000001', functionSelector: '0x00000000', valueWei: '0' }))
@@ -73,7 +73,7 @@ export function TransactionWorkbench({ api }) {
     </form>
     {error && <p className="form-message error" role="alert">{error}</p>}
     {result && <div className={`transaction-result ${result.decision?.action === 'allow' ? 'success' : 'warning'}`}>
-      {result.decision?.action === 'allow' ? <CheckCircle2 /> : <ShieldAlert />}
+      {result.decision?.action === 'allow' ? <X /> : <ShieldAlert />}
       <div><b>{result.decision?.action?.toUpperCase() || 'DECISION'}</b><p>{result.decision?.reason || 'No reason returned.'}</p><small>{result.decision?.intent_hash || 'No intent hash'}</small></div>
     </div>}
     {result?.decision?.action === 'escalate' && <div className="approval-panel">

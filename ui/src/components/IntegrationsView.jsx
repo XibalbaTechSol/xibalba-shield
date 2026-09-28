@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import {
   Activity,
-  Check,
-  CheckCircle2,
   Copy,
   Database,
   Flame,
@@ -220,7 +218,7 @@ export function IntegrationsView({ data, api, refresh }) {
           <strong>Xibalba Shield</strong>
           <span><Shield size={15} /> Decisions</span>
           <span><Activity size={15} /> Sensor events</span>
-          <span><CheckCircle2 size={15} /> Audit proofs</span>
+          <span><X size={15} /> Audit proofs</span>
         </div>
         <div className="signal-paths" aria-hidden="true"><i /><i /><i /></div>
         <div className="signal-center"><Radio size={17} /><strong>Secure event routing</strong><small>Filter · transform · deliver</small></div>
@@ -237,7 +235,7 @@ export function IntegrationsView({ data, api, refresh }) {
         <div><Radio size={18} /><span><small>Active pipelines</small><strong>{integrations.length}</strong></span></div>
         <div><Activity size={18} /><span><small>Delivery health</small><strong>{integrations.length ? 'Awaiting test' : 'Not configured'}</strong></span></div>
         <div><Layers size={18} /><span><small>Queued events</small><strong>{integrations.length ? 'Not reported' : 'Not configured'}</strong></span></div>
-        <div><CheckCircle2 size={18} /><span><small>Last delivery</small><strong>{integrations.length ? 'Not reported' : 'No delivery configured'}</strong></span></div>
+        <div><X size={18} /><span><small>Last delivery</small><strong>{integrations.length ? 'Not reported' : 'No delivery configured'}</strong></span></div>
       </div>
 
       {/* Active Integrations Section */}
@@ -297,7 +295,7 @@ export function IntegrationsView({ data, api, refresh }) {
                       disabled={ping.state === 'sending'}
                       title={ping.message || undefined}
                     >
-                      {ping.state === 'sending' ? <><Activity size={13} className="spinning" /><span>Testing…</span></> : ping.state === 'success' ? <><CheckCircle2 size={13} /><span>Delivered ({ping.status})</span></> : ping.state === 'error' ? <><X size={13} /><span>Delivery failed</span></> : <><Send size={13} /><span>Test delivery</span></>}
+                      {ping.state === 'sending' ? <><Activity size={13} className="spinning" /><span>Testing…</span></> : ping.state === 'success' ? <><X size={13} /><span>Delivered ({ping.status})</span></> : ping.state === 'error' ? <><X size={13} /><span>Delivery failed</span></> : <><Send size={13} /><span>Test delivery</span></>}
                     </button>
                   </div>
                 </article>
@@ -441,7 +439,7 @@ export function IntegrationsView({ data, api, refresh }) {
 
               {formMessage && (
                 <div className={`form-feedback-alert ${formMessage.type}`}>
-                  {formMessage.type === 'success' ? <CheckCircle2 size={16} /> : <X size={16} />}
+                    {formMessage.type === 'success' ? <X size={16} /> : <X size={16} />}
                   <span>{formMessage.text}</span>
                 </div>
               )}
@@ -499,7 +497,7 @@ export function IntegrationsView({ data, api, refresh }) {
                     className="copy-chip"
                     onClick={() => copyText(JSON.stringify(inspectPayload, null, 2), 'schema-copy')}
                   >
-                    {copiedId === 'schema-copy' ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedId === 'schema-copy' ? <X size={12} /> : <Copy size={12} />}
                     <span>{copiedId === 'schema-copy' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>

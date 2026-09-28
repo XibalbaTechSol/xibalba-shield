@@ -2680,8 +2680,16 @@ h1, h2, h3, h4, b {
 
 .sparkline-grid {
   stroke: var(--line);
-  stroke-width: .8;
+  stroke-width: .5;
   vector-effect: non-scaling-stroke;
+}
+
+.sparkline polyline {
+  stroke-width: 1.5;
+}
+
+.sparkline circle {
+  opacity: .9;
 }
 
 .sparkline-wrap small,
@@ -9605,6 +9613,248 @@ h1, h2, h3, h4, b {
   color: var(--muted);
 }
 
+/* Final audit pass: an observation is one surface, not a stack of competing
+   fills. Keep the row, summary, expanded details, and raw payload on the same
+   theme token in both modes. */
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .event-row,
+.console.theme-command-center .event-observation-summary,
+.console.theme-command-center .event-detail-panel,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .event-inline-json pre,
+.console.theme-light .event-stream-card,
+.console.theme-light .event-row,
+.console.theme-light .event-observation-summary,
+.console.theme-light .event-detail-panel,
+.console.theme-light .event-inline-json,
+.console.theme-light .event-inline-json pre {
+  background: var(--panel) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+}
+
+/* Detail drawers use the same graphite/light surface hierarchy as the page,
+   including the nested fact grid and routing nodes. */
+.console.theme-light .agent-detail-drawer,
+.console.theme-light .agent-detail-section,
+.console.theme-light .agent-detail-action,
+.console.theme-light .agent-detail-facts,
+.console.theme-light .agent-fact,
+.console.theme-light .routing-node,
+.console.theme-light .memory-result {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+}
+
+.console.theme-light .agent-detail-hero {
+  background: var(--panel-elevated) !important;
+}
+
+.console.theme-light .agent-detail-facts {
+  background: var(--line) !important;
+}
+
+/* Side drawers do not have a separate backdrop element. The spread shadow
+   supplies the same readable scrim as modal and agent-detail overlays. */
+.console .event-drawer {
+  box-shadow: -100vw 0 0 100vw rgba(5, 8, 9, .72), 0 18px 48px rgba(0, 0, 0, .28) !important;
+}
+
+.console.theme-light .event-drawer {
+  box-shadow: -100vw 0 0 100vw rgba(20, 35, 61, .28), 0 18px 48px rgba(43, 43, 45, .22) !important;
+}
+
+/* Use the full Evidence window instead of leaving a large unused right half
+   beside the remediation form. */
+.console .evidence-unified-section .action-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  width: 100%;
+  max-width: none;
+}
+
+.console .evidence-unified-section .action-form label:last-of-type {
+  grid-column: 1 / -1;
+}
+
+.console .evidence-unified-section .action-form button,
+.console .evidence-unified-section .action-form .form-message {
+  width: fit-content;
+}
+
+/* Keep the long Configuration workspace dense enough to scan without
+   changing its deliberate single-page information architecture. */
+.console .configuration-unified {
+  gap: 24px;
+}
+
+.console .configuration-section {
+  gap: 12px;
+  padding-top: 18px;
+}
+
+/* Configuration owns several legacy feature views. Keep their shared page
+   canvas on the same theme background so no light or dark bands appear
+   between the policy, connector, OPA, and developer sections. */
+.console.theme-command-center .configuration-unified,
+.console.theme-command-center .configuration-section,
+.console.theme-light .configuration-unified,
+.console.theme-light .configuration-section {
+  background-color: var(--bg) !important;
+}
+
+/* Configuration schema inspection drawer: the legacy integration fragment
+   rendered these classes without a shared overlay contract, which left the
+   payload view inline at the bottom of the page. */
+.console .drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  background: rgba(5, 8, 9, .72);
+  backdrop-filter: blur(4px);
+}
+
+.console.theme-light .drawer-backdrop {
+  background: rgba(20, 35, 61, .28);
+}
+
+.console .evidence-drawer {
+  width: min(620px, 100vw);
+  height: 100%;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--panel-solid);
+  color: var(--text);
+  box-shadow: -24px 0 70px rgba(0, 0, 0, .36);
+}
+
+.console.theme-light .evidence-drawer {
+  background: var(--panel);
+  box-shadow: -24px 0 70px rgba(43, 43, 45, .22);
+}
+
+.console .evidence-drawer-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-elevated);
+}
+
+.console .drawer-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.console .drawer-title-group h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.console .drawer-close-btn {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.console .drawer-close-btn:hover {
+  border-color: var(--line-hover);
+  background: var(--green-soft);
+  color: var(--text);
+}
+
+.console .evidence-drawer-content {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.console .drawer-subtext {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.console .json-inspector {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.console .json-inspector-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-elevated);
+  color: var(--muted);
+  font: 700 10px/1.1 'Barlow Condensed', sans-serif;
+  letter-spacing: .12em;
+}
+
+.console .copy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: 600 12px/1 'Barlow Condensed', sans-serif;
+}
+
+.console .copy-chip:hover {
+  border-color: var(--line-hover);
+  background: var(--green-soft);
+}
+
+.console .json-inspector pre {
+  max-height: calc(100vh - 190px);
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  background: var(--panel);
+  color: var(--text);
+  font: 12px/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .console .evidence-unified-section .action-form {
+    grid-template-columns: 1fr;
+  }
+
+  .console .evidence-unified-section .action-form label:last-of-type {
+    grid-column: auto;
+  }
+}
+
 /* Final navigation typography lock: the mock uses the same condensed label
    metrics in both themes, including the visible label spans and operator row. */
 .console.theme-command-center .side nav button,
@@ -10656,4 +10906,268 @@ h1, h2, h3, h4, b {
   background: var(--green-soft) !important;
   border-color: var(--line-hover) !important;
   color: var(--text) !important;
+}
+
+/* Configuration final visual pass: keep the page canvas continuous and bring
+   legacy connector/developer actions onto the shared mock button system. */
+.console .configuration-unified,
+.console .configuration-unified > .configuration-section,
+.console .configuration-unified > .configuration-section > .integrations-view,
+.console .configuration-unified > .configuration-section > .developer-view,
+.console .configuration-unified > .configuration-section > .resource {
+  background: var(--bg) !important;
+}
+
+.console .configuration-unified .catalog-icon-box,
+.console .configuration-unified .catalog-icon-box.splunk,
+.console .configuration-unified .catalog-icon-box.elastic,
+.console .configuration-unified .catalog-icon-box.webhook,
+.console .configuration-unified .catalog-icon-box.slack,
+.console .configuration-unified .catalog-icon-box.syslog,
+.console .configuration-unified .contract-icon-box,
+.console .configuration-unified .pulse-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.console .configuration-unified button {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+
+.console .configuration-unified .inspect-btn,
+.console .configuration-unified .ping-btn,
+.console .configuration-unified .preview-schema-btn,
+.console .configuration-unified .connect-btn,
+.console .configuration-unified .save-btn,
+.console .configuration-unified .execute-btn,
+.console .configuration-unified .secondary-btn,
+.console .configuration-unified .icon-chip-btn,
+.console .configuration-unified .opa-source-footer button,
+.console .configuration-unified .pipeline-actions button,
+.console .configuration-unified .catalog-actions button,
+.console .configuration-unified .api-console-main button {
+  min-height: 32px;
+  border: 1px solid var(--line) !important;
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+.console .configuration-unified .inspect-btn:hover,
+.console .configuration-unified .ping-btn:hover:not(:disabled),
+.console .configuration-unified .preview-schema-btn:hover,
+.console .configuration-unified .connect-btn:hover,
+.console .configuration-unified .save-btn:hover:not(:disabled),
+.console .configuration-unified .execute-btn:hover:not(:disabled),
+.console .configuration-unified .secondary-btn:hover,
+.console .configuration-unified .icon-chip-btn:hover,
+.console .configuration-unified .opa-source-footer button:hover,
+.console .configuration-unified .pipeline-actions button:hover:not(:disabled),
+.console .configuration-unified .catalog-actions button:hover,
+.console .configuration-unified .api-console-main button:hover:not(:disabled) {
+  background: var(--green-soft) !important;
+  border-color: var(--line-hover) !important;
+  color: var(--text) !important;
+}
+
+.console .configuration-unified .primary,
+.console .configuration-unified .primary-btn,
+.console .configuration-unified .primary-action-btn,
+.console .configuration-unified .connect-btn,
+.console .configuration-unified .execute-btn,
+.console .configuration-unified .save-btn,
+.console .configuration-unified .deploy-button {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+  color: #fff !important;
+}
+
+.console .configuration-unified .primary:hover:not(:disabled),
+.console .configuration-unified .primary-btn:hover:not(:disabled),
+.console .configuration-unified .primary-action-btn:hover:not(:disabled),
+.console .configuration-unified .connect-btn:hover:not(:disabled),
+.console .configuration-unified .execute-btn:hover:not(:disabled),
+.console .configuration-unified .save-btn:hover:not(:disabled),
+.console .configuration-unified .deploy-button:hover:not(:disabled) {
+  background: var(--green-hover) !important;
+  border-color: var(--green-hover) !important;
+}
+
+/* Keep Configuration copy, tables, and action rows on one left edge. */
+.console .configuration-unified .configuration-section-heading,
+.console .configuration-unified .resource > header,
+.console .configuration-unified .panel-title,
+.console .configuration-unified .section-title-bar,
+.console .configuration-unified .view-header {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.console .configuration-unified .resource > header,
+.console .configuration-unified .panel-title,
+.console .configuration-unified .view-header {
+  margin-bottom: 16px;
+}
+
+.console .configuration-unified .panel-title p,
+.console .configuration-unified .resource > header p,
+.console .configuration-unified .view-header > span,
+.console .configuration-unified .section-desc {
+  margin-left: 0;
+  text-align: left;
+}
+
+.console .configuration-unified .policy-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.console .configuration-unified .policy-table th,
+.console .configuration-unified .policy-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.console .configuration-unified .policy-table th:last-child,
+.console .configuration-unified .policy-table td:last-child {
+  width: 150px;
+  text-align: right;
+}
+
+.console .configuration-unified .policy-table td:last-child button {
+  min-width: 112px;
+  justify-content: center;
+  text-align: center;
+}
+
+.console .configuration-unified .catalog-card-header,
+.console .configuration-unified .catalog-title-group,
+.console .configuration-unified .pipeline-row,
+.console .configuration-unified .pipeline-table-head,
+.console .configuration-unified .pipeline-actions,
+.console .configuration-unified .dev-auth-header,
+.console .configuration-unified .endpoint-route-bar {
+  align-items: center;
+}
+
+.console .configuration-unified .catalog-title-group {
+  text-align: left;
+}
+
+.console .configuration-unified .pipeline-actions {
+  justify-content: flex-end;
+}
+
+/* Enforcement outcome drawer: the record must use the same readable text and
+   code-surface tokens as every other console drawer in both themes. */
+.console .event-drawer {
+  background: var(--panel-solid) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+.console .event-drawer header {
+  background: var(--panel-elevated) !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.console .event-drawer h3,
+.console .event-drawer .eyebrow {
+  color: var(--text) !important;
+}
+
+.console .event-drawer .eyebrow {
+  color: var(--green) !important;
+}
+
+.console .event-drawer .eyebrow svg {
+  color: var(--green) !important;
+  background: transparent !important;
+}
+
+.console .event-drawer pre {
+  background: var(--code-surface, var(--panel-elevated)) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+.console .event-drawer .drawer-close {
+  background: transparent !important;
+  color: var(--muted) !important;
+}
+
+.console .event-drawer .drawer-close:hover {
+  background: var(--green-soft) !important;
+  color: var(--text) !important;
+}
+
+/* Cortex delivery counts sit on the same surface as their parent window;
+   sent and dead-letter values should not render as a separate dark block. */
+.console .outbox-status-card {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+.console .outbox-metrics,
+.console .outbox-metrics span {
+  background: transparent !important;
+}
+
+.console .outbox-metrics b {
+  color: var(--text) !important;
+}
+
+.console .outbox-metrics .danger b {
+  color: var(--red) !important;
+}
+
+/* All drawers use the same base surface as the page panels. */
+.console .device-detail-drawer,
+.console .agent-detail-drawer,
+.console .event-drawer,
+.console .evidence-drawer {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+.console .device-detail-header,
+.console .agent-detail-hero,
+.console .event-drawer header,
+.console .evidence-drawer-header {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+.console .device-detail-drawer pre,
+.console .agent-detail-drawer pre,
+.console .event-drawer pre,
+.console .evidence-drawer pre {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+/* Checkmarks are status glyphs, not filled badges. Keep their container flat
+   and let the surrounding border/surface establish the state. */
+.console svg[data-lucide='check'],
+.console svg[data-lucide='check-circle-2'],
+.console svg[data-lucide='circle-check'],
+.console .check-icon,
+.console .checkmark,
+.console .checkmark-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.console .configuration-unified svg[data-lucide='check'],
+.console .configuration-unified svg[data-lucide='check-circle-2'],
+.console .configuration-unified svg[data-lucide='circle-check'] {
+  color: currentColor;
 }

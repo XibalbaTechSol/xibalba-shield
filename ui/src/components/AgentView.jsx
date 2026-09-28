@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, CheckCircle2, Cpu, HardDrive, LockKeyhole, Network, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react'
+import { Activity, Cpu, HardDrive, LockKeyhole, Network, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react'
 
 const DEFAULT_RESPONDER_CAPABILITIES = {
   freeze_process: true,
@@ -198,7 +198,7 @@ export function AgentView({ data, refresh, api }) {
       <div className="responder-grid">{RESPONDER_DEFINITIONS.map(({ key, label, description, icon: Icon }) => {
         const enabled = responderCapabilities[key] === true
         return <article className={`responder-card ${enabled ? 'enabled' : 'disabled'}`} key={key}>
-              <div className="responder-card-top"><span className="responder-icon"><Icon size={16} /></span><span className={`responder-status ${enabled ? 'ready' : 'locked'}`}>{enabled ? <><CheckCircle2 size={13} /> Policy-capable</> : <><LockKeyhole size={13} /> Gate required</>}</span></div>
+              <div className="responder-card-top"><span className="responder-icon"><Icon size={16} /></span><span className={`responder-status ${enabled ? 'ready' : 'locked'}`}>{enabled ? <><X size={13} /> Policy-capable</> : <><LockKeyhole size={13} /> Gate required</>}</span></div>
           <h4>{label}</h4><p>{description}</p>
           <button type="button" className="responder-action" disabled aria-disabled="true" title={enabled ? 'Invoked by policy decisions from the authenticated agent' : 'Runtime validation is required before this responder can be enabled'}>{enabled ? 'Policy-driven' : 'Unavailable until validated'}</button>
         </article>

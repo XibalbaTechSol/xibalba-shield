@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import {
   Activity,
-  Check,
   Code2,
   Copy,
   Cpu,
@@ -11,6 +10,7 @@ import {
   Key,
   Play,
   Shield,
+  X,
 } from 'lucide-react'
 
 const API_ENDPOINTS = [
@@ -370,7 +370,7 @@ func main() {
                 onClick={() => copyToClipboard(connection.token, 'token-copy')}
                 title="Copy token"
               >
-                {copiedKey === 'token-copy' ? <Check size={13} /> : <Copy size={13} />}
+                {copiedKey === 'token-copy' ? <X size={13} /> : <Copy size={13} />}
               </button>
             </div>
           </div>
@@ -440,7 +440,7 @@ func main() {
                   className="copy-chip"
                   onClick={() => copyToClipboard(requestBodyText, 'body-copy')}
                 >
-                  {copiedKey === 'body-copy' ? <Check size={12} /> : <Copy size={12} />}
+                  {copiedKey === 'body-copy' ? <X size={12} /> : <Copy size={12} />}
                   <span>{copiedKey === 'body-copy' ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
@@ -471,7 +471,7 @@ func main() {
                     copyToClipboard(JSON.stringify(responseResult.data, null, 2), 'response-copy')
                   }
                 >
-                  {copiedKey === 'response-copy' ? <Check size={12} /> : <Copy size={12} />}
+                  {copiedKey === 'response-copy' ? <X size={12} /> : <Copy size={12} />}
                   <span>{copiedKey === 'response-copy' ? 'Copied' : 'Copy Response'}</span>
                 </button>
               </div>
@@ -504,7 +504,7 @@ func main() {
                 className="copy-snippet-btn"
                 onClick={() => copyToClipboard(snippets[activeSnippetTab], 'snippet-copy')}
               >
-                {copiedKey === 'snippet-copy' ? <Check size={12} /> : <Copy size={12} />}
+                  {copiedKey === 'snippet-copy' ? <X size={12} /> : <Copy size={12} />}
                 <span>{copiedKey === 'snippet-copy' ? 'Copied' : 'Copy Code'}</span>
               </button>
             </div>

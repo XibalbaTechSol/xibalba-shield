@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, CheckCircle2, LockKeyhole, ShieldCheck, TriangleAlert, Unplug, Cpu, Database, MemoryStick } from 'lucide-react'
+import { Activity, LockKeyhole, ShieldCheck, TriangleAlert, Unplug, Cpu, Database, MemoryStick, X } from 'lucide-react'
 import { Metric, PanelTitle } from './Common'
 import { OutcomeTable } from './OutcomeTable'
 
@@ -15,7 +15,7 @@ function Sparkline({ values, color, label, unit = '' }) {
     return { x, y }
   })
   const path = coordinates.map(({ x, y }) => `${x},${y}`).join(' ')
-  return <div className="sparkline-wrap"><svg className="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${label} live graph`}><line x1="0" y1="25" x2="100" y2="25" className="sparkline-grid" /><line x1="0" y1="50" x2="100" y2="50" className="sparkline-grid" /><line x1="0" y1="75" x2="100" y2="75" className="sparkline-grid" /><polyline points={path} fill="none" stroke={color} strokeWidth="3" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />{coordinates.map(({ x, y }, index) => <circle key={`${x}-${index}`} cx={x} cy={y} r="2.8" fill={color} vectorEffect="non-scaling-stroke" />)}</svg><small>{points.at(-1).toFixed(1)}{unit} now · range {min.toFixed(1)}–{max.toFixed(1)}{unit}</small></div>
+  return <div className="sparkline-wrap"><svg className="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${label} live graph`}><line x1="0" y1="25" x2="100" y2="25" className="sparkline-grid" /><line x1="0" y1="50" x2="100" y2="50" className="sparkline-grid" /><line x1="0" y1="75" x2="100" y2="75" className="sparkline-grid" /><polyline points={path} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />{coordinates.map(({ x, y }, index) => <circle key={`${x}-${index}`} cx={x} cy={y} r="2" fill={color} vectorEffect="non-scaling-stroke" />)}</svg><small>{points.at(-1).toFixed(1)}{unit} now · range {min.toFixed(1)}–{max.toFixed(1)}{unit}</small></div>
 }
 
 export function Overview({ data, protectedCount, openView, preview: _preview = false }) {
@@ -101,7 +101,7 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
           tone="green"
         />
         <Metric
-          Icon={CheckCircle2}
+          Icon={X}
           label="Evidence exported"
           value={exporter.spool_pending == null ? '—' : '—'}
           detail="signed evidence"
@@ -190,7 +190,7 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
             {readiness.map(([name, healthy, detail]) => (
               <div className="readiness-row" key={name}>
                 <span className={`readiness-icon ${healthy === true ? 'good' : healthy === false ? 'warn' : 'unknown'}`}>
-                  {healthy === true ? <CheckCircle2 size={15} /> : healthy === false ? <TriangleAlert size={15} /> : <Unplug size={15} />}
+                  {healthy === true ? <X size={15} /> : healthy === false ? <TriangleAlert size={15} /> : <Unplug size={15} />}
                 </span>
                 <div><b>{name}</b><small>{detail}</small></div>
                 <strong>{healthy === true ? 'verified' : healthy === false ? 'attention' : 'external'}</strong>

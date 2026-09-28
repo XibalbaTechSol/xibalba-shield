@@ -3,8 +3,6 @@ import {
   Activity,
   AlertTriangle,
   Bell,
-  Check,
-  CheckCircle2,
   Copy,
   Cpu,
   Key,
@@ -19,6 +17,7 @@ import {
   Radio,
   Wifi,
   RotateCw,
+  X,
 } from 'lucide-react'
 import { ShieldApi } from '../api'
 import { readSession, writeSession, removeSession } from '../storage'
@@ -498,7 +497,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
             </div>
             <div className="settings-fields-grid"><div className="field-group"><label htmlFor="sensorCadence">Telemetry cadence</label><select id="sensorCadence" value={sensorCadence} onChange={(event) => setSensorCadence(event.target.value)}><option value="25">25 ms · low latency</option><option value="50">50 ms · balanced</option><option value="100">100 ms · lower overhead</option></select></div><div className="field-group"><label>Current helper state</label><div className="settings-readout">{liveRow?.status?.sensors?.attached === true ? `Attached · ${liveRow.status.sensors.attach_mode || 'runtime mode'}` : 'Attachment unverified'}</div><span className="field-hint">Enabled is configuration intent; each event family needs its own live attachment and last-event proof.</span></div></div>
           </article>
-          <div className="settings-actions-footer"><button type="submit" className="primary-btn"><RotateCw size={14} /> Save sensor settings</button>{sensorSaved && <span className="save-feedback-pill success"><CheckCircle2 size={14} /> Saved</span>}</div>
+          <div className="settings-actions-footer"><button type="submit" className="primary-btn"><RotateCw size={14} /> Save sensor settings</button>{sensorSaved && <span className="save-feedback-pill success"><X size={14} /> Saved</span>}</div>
         </form>
       )}
 
@@ -510,7 +509,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
             <dl className="session-props-grid"><div><dt>Control-plane URL</dt><dd><code>{connection.baseUrl || 'Not configured'}</code></dd></div><div><dt>Transport</dt><dd>{tlsEnabled ? 'HTTPS with client certificate' : 'HTTP · development only'}</dd></div><div><dt>Last runtime status</dt><dd>{liveRow?.updated_at || 'Not reported'}</dd></div><div><dt>OPA health</dt><dd>{liveRow?.status?.opa?.healthy === true ? 'Healthy' : 'Unverified'}</dd></div><div><dt>Certificate expiry</dt><dd>Host-managed · not exposed</dd></div><div><dt>CA fingerprint</dt><dd>Host-managed · not exposed</dd></div></dl>
             <label className="toggle-item"><input type="checkbox" checked={autoReconnect} onChange={(event) => setAutoReconnect(event.target.checked)} /><div><b>Reconnect on transient failure</b><p>Allow the endpoint watchdog to retry transport without weakening certificate verification.</p></div></label>
           </article>
-          <div className="settings-actions-footer"><button type="submit" className="primary-btn"><RotateCw size={14} /> Save connectivity preference</button>{tlsSaved && <span className="save-feedback-pill success"><CheckCircle2 size={14} /> Saved</span>}</div>
+          <div className="settings-actions-footer"><button type="submit" className="primary-btn"><RotateCw size={14} /> Save connectivity preference</button>{tlsSaved && <span className="save-feedback-pill success"><X size={14} /> Saved</span>}</div>
           {message && <p className="form-message" aria-live="polite">{message}</p>}
         </form>
       )}
@@ -671,7 +670,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                 </button>
                 {postureSaved && (
                   <span className="save-feedback-pill">
-                    <CheckCircle2 size={14} />
+                    <X size={14} />
                     <span>{postureSaved}</span>
                   </span>
                 )}
@@ -720,7 +719,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
             {mintedToken && (
               <div className="minted-token-alert">
                 <div className="minted-token-header">
-                  <CheckCircle2 size={16} />
+                  <X size={16} />
                   <b>New Tenant Admin Token Generated</b>
                 </div>
                 <p>Copy this token immediately. For security, newly minted tokens cannot be viewed again once dismissed.</p>
@@ -731,7 +730,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                     className="copy-chip"
                     onClick={() => copyToClipboard(mintedToken, 'minted-copy')}
                   >
-                    {copiedKey === 'minted-copy' ? <Check size={13} /> : <Copy size={13} />}
+                    {copiedKey === 'minted-copy' ? <X size={13} /> : <Copy size={13} />}
                     <span>{copiedKey === 'minted-copy' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
@@ -760,7 +759,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                   className="copy-token-btn"
                   onClick={() => copyToClipboard(connection.token, 'current-token')}
                 >
-                  {copiedKey === 'current-token' ? <Check size={13} /> : <Copy size={13} />}
+                    {copiedKey === 'current-token' ? <X size={13} /> : <Copy size={13} />}
                   <span>{copiedKey === 'current-token' ? 'Copied' : 'Copy Token'}</span>
                 </button>
               </div>
@@ -882,7 +881,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
               Direct integration with <code>shield.backend.email_delivery</code> for dispatching cryptographically verifiable alert receipts.
             </p>
             <div className={`form-feedback-alert ${smtpConfigured ? 'success' : 'error'}`} role="status">
-              {smtpConfigured ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+              {smtpConfigured ? <X size={16} /> : <AlertTriangle size={16} />}
               <span>{smtpConfigured ? 'SMTP destination configured in this form; delivery still requires a successful test.' : 'SMTP destination is incomplete; test delivery is unavailable until host, port, and recipient are provided.'}</span>
             </div>
 
@@ -926,7 +925,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
 
             {emailStatus && (
               <div className={`form-feedback-alert ${emailStatus.ok ? 'success' : 'error'}`}>
-                {emailStatus.ok ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                {emailStatus.ok ? <X size={16} /> : <AlertTriangle size={16} />}
                 <span>{emailStatus.text}</span>
               </div>
             )}

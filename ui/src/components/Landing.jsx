@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Check, Crosshair, FileCheck2, Fingerprint, LockKeyhole, Radar, RotateCcw, Settings2, Shield, SquareTerminal, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, Crosshair, FileCheck2, Fingerprint, LockKeyhole, Radar, RotateCcw, Settings2, Shield, SquareTerminal, Workflow, X } from 'lucide-react'
 import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
@@ -72,9 +72,9 @@ export function Landing({ next }) {
             <a href="#platform" className="learn-more-link">See how it works</a>
           </div>
           <div className="checks">
-            <span><Check aria-hidden="true" /> Kernel telemetry</span>
-            <span><Check aria-hidden="true" /> Signed policies</span>
-            <span><Check aria-hidden="true" /> Receipt-backed enforcement</span>
+            <span><X aria-hidden="true" /> Kernel telemetry</span>
+            <span><X aria-hidden="true" /> Signed policies</span>
+            <span><X aria-hidden="true" /> Receipt-backed enforcement</span>
           </div>
         </div>
 
