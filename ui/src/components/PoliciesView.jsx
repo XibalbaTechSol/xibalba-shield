@@ -271,12 +271,6 @@ export function PoliciesView({ data, api, refresh }) {
   return (
     <div className="policies-view">
       <section className="resource">
-        <header>
-          <p className="eyebrow">PRESELECTED POLICY BUNDLES</p>
-          <h2>Active Policy Governance</h2>
-          <span>Select from three pre-engineered zero-trust policy profiles, deploy to enrolled devices, or inspect rollback history.</span>
-        </header>
-
         <form className="policy-enforcement-panel settings-card" onSubmit={saveEnforcement}>
           <div className="settings-card-header"><div className="settings-card-title"><Sliders size={18} /><h3>Enforcement controls</h3></div><span className="live-status-pill"><LockKeyhole size={13} /> Policy-gated</span></div>
           <p className="settings-card-desc">Define when Shield acts automatically and when a human must approve a proposal. Changes are tenant-scoped and auditable.</p>

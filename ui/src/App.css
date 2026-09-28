@@ -229,7 +229,7 @@ h1, h2, h3, h4, b {
   background: var(--bg-gradient);
   overflow-x: clip;
 }
-.site-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid rgba(255,255,255,.055); background: rgba(6,11,9,.82); backdrop-filter: blur(18px); }
+.site-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid rgba(255,255,255,.22); background: rgba(6,11,9,.82); backdrop-filter: blur(18px); }
 .brand-link { color: inherit; text-decoration: none; }
 
 .site-nav {
@@ -1488,18 +1488,18 @@ h1, h2, h3, h4, b {
 .command-nav { display: none; }
 
 .console.theme-command-center {
-  --bg: #14171a;
-  --bg-gradient: #14171a;
-  --panel: #1b1f23;
-  --panel-solid: #1b1f23;
+  --bg: #0d0f11;
+  --bg-gradient: #0d0f11;
+  --panel: #0d0f11;
+  --panel-solid: #0d0f11;
   --panel-elevated: #262b30;
-  --line: rgba(255, 255, 255, .14);
-  --line-hover: rgba(255, 255, 255, .35);
+  --line: rgba(255, 255, 255, .24);
+  --line-hover: rgba(255, 255, 255, .4);
   --text: #eef0f1;
   --muted: #b7bcc1;
   --dim: #9aa1a8;
-  --green: #9fc3df;
-  --green-hover: #cfe4f3;
+  --green: #5980a6;
+  --green-hover: #416180;
   --green-soft: rgba(159, 195, 223, .16);
   --green-glow: rgba(159, 195, 223, .2);
   --cyan: #9fc3df;
@@ -1777,7 +1777,6 @@ h1, h2, h3, h4, b {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: #0b1015;
-  overflow: hidden;
 }
 .signal-stack { display: grid; gap: 10px; }
 .signal-stack strong { margin-bottom: 2px; color: #fff; font-size: 13px; }
@@ -2204,7 +2203,6 @@ h1, h2, h3, h4, b {
 .responder-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--line);
 }
 
 .responder-item {
@@ -3094,13 +3092,13 @@ h1, h2, h3, h4, b {
    use the same flat industrial system as the Console reference. */
 .landing,
 .auth {
-  --mock-bg: #14171a;
-  --mock-panel: #1b1f23;
+  --mock-bg: #0d0f11;
+  --mock-panel: #0d0f11;
   --mock-elevated: #262b30;
-  --mock-line: rgba(255,255,255,.14);
+  --mock-line: rgba(255,255,255,.22);
   --mock-text: #eef0f1;
   --mock-muted: #b7bcc1;
-  --mock-accent: #9fc3df;
+  --mock-accent: #5980a6;
   --mock-amber: #d7aa6c;
   background: var(--mock-bg);
   color: var(--mock-text);
@@ -3133,7 +3131,7 @@ h1, h2, h3, h4, b {
 .landing .primary,
 .auth .primary { border-radius: 0; border-color: var(--mock-accent); background: var(--mock-accent); color: #14171a; box-shadow: none; }
 .landing .primary:hover,
-.auth .primary:hover { background: #cfe4f3; }
+.auth .primary:hover { background: #597ea3; }
 .landing .hero { max-width: 1240px; min-height: 600px; padding: 88px 24px; gap: 72px; }
 .landing .hero h1 { max-width: 640px; font-size: clamp(46px, 5vw, 66px); line-height: .98; letter-spacing: -.015em; }
 .landing .hero h1 em,
@@ -4136,7 +4134,7 @@ h1, h2, h3, h4, b {
   align-items: center;
   justify-content: space-between;
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--line);
   font-size: 11px;
   color: var(--dim);
 }
@@ -4366,7 +4364,7 @@ h1, h2, h3, h4, b {
   background: rgba(255, 255, 255, 0.03);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
 }
 
 .config-tag b {
@@ -4379,7 +4377,7 @@ h1, h2, h3, h4, b {
   justify-content: space-between;
   gap: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--line);
 }
 
 .inspect-btn,
@@ -4398,7 +4396,7 @@ h1, h2, h3, h4, b {
 .inspect-btn {
   background: rgba(255, 255, 255, 0.05);
   color: var(--muted);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
 }
 
 .inspect-btn:hover {
@@ -4430,7 +4428,7 @@ h1, h2, h3, h4, b {
 }
 
 .catalog-card {
-  background: var(--panel);
+  background: var(--panel-solid);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -4514,7 +4512,7 @@ h1, h2, h3, h4, b {
   justify-content: space-between;
   gap: 8px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--line);
 }
 
 .preview-schema-btn {
@@ -5174,7 +5172,7 @@ h1, h2, h3, h4, b {
   color: var(--dim);
   background: rgba(255, 255, 255, 0.03);
   padding: 4px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   margin-top: auto;
 }
 
@@ -6928,8 +6926,8 @@ h1, h2, h3, h4, b {
   --panel: #e9e9ea;
   --panel-solid: #e9e9ea;
   --panel-elevated: #f8f8f8;
-  --line: rgba(29, 31, 32, .15);
-  --line-hover: rgba(29, 31, 32, .32);
+  --line: rgba(29, 31, 32, .28);
+  --line-hover: rgba(29, 31, 32, .45);
   --text: #1d1f20;
   --muted: #62676c;
   --dim: #777d82;
@@ -7883,7 +7881,7 @@ h1, h2, h3, h4, b {
 }
 
 .console input[type='checkbox']::before {
-  content: '✓';
+  content: '✕';
   color: var(--text);
   font-size: 12px;
   font-weight: 800;
@@ -7904,6 +7902,20 @@ h1, h2, h3, h4, b {
 .console input[type='checkbox']:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
+}
+
+/* Chrome/WebKit force a light autofill background that ignores our theme
+   colors entirely. Repaint it with the current panel/text colors using the
+   standard huge-inset-shadow trick (the only reliable override). */
+.console input:-webkit-autofill,
+.console input:-webkit-autofill:hover,
+.console input:-webkit-autofill:focus,
+.console input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--panel-solid) inset !important;
+  box-shadow: 0 0 0 1000px var(--panel-solid) inset !important;
+  caret-color: var(--text);
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 /* Shield console shape system: containers and controls are square or
@@ -8008,18 +8020,18 @@ h1, h2, h3, h4, b {
 /* Canonical mock tokens. Keep the rendered console tied to the reference
    implementation even when older component rules appear earlier in this file. */
 .console.theme-command-center {
-  --bg: #14171a;
-  --bg-gradient: #14171a;
-  --panel: #1b1f23;
-  --panel-solid: #1b1f23;
+  --bg: #0d0f11;
+  --bg-gradient: #0d0f11;
+  --panel: #0d0f11;
+  --panel-solid: #0d0f11;
   --panel-elevated: #262b30;
-  --line: rgba(255, 255, 255, .14);
-  --line-hover: rgba(255, 255, 255, .35);
+  --line: rgba(255, 255, 255, .24);
+  --line-hover: rgba(255, 255, 255, .4);
   --text: #eef0f1;
   --muted: #b7bcc1;
   --dim: #9aa1a8;
-  --green: #9fc3df;
-  --green-hover: #cfe4f3;
+  --green: #5980a6;
+  --green-hover: #416180;
   --green-soft: rgba(159, 195, 223, .16);
   --green-glow: rgba(159, 195, 223, .2);
   --cyan: #9fc3df;
@@ -8378,6 +8390,13 @@ h1, h2, h3, h4, b {
   width: 100%;
   max-width: 100%;
   overflow: hidden;
+  /* The corner-mark ::before bleeds 4px past its card on every side (see
+     "Mock registration crosses" below). Without this padding, this
+     overflow:hidden clips that bleed on the left/right/bottom edges,
+     cutting the cross into an L. Only 4px is needed; kept at 6px for a
+     safety margin against sub-pixel rounding. */
+  padding-inline: 6px;
+  padding-bottom: 6px;
 }
 
 /* Shared page rhythm: every workspace uses the same heading, copy, label,
@@ -9261,6 +9280,22 @@ h1, h2, h3, h4, b {
   max-width: 28px;
 }
 
+/* The expanded sidebar has room for the full wordmark -- the calc(100% -
+   42px) cap above was clipping "Xibalba Shield" by a few px. Only the
+   collapsed rail (handled above, and by .collapsed .brand b's display:none)
+   needs to shrink to the logo alone. */
+.console.theme-command-center .side:not(.collapsed) > header .brand,
+.console.theme-light .side:not(.collapsed) > header .brand {
+  max-width: none;
+  overflow: visible;
+}
+
+.console.theme-command-center .side:not(.collapsed) > header .brand b,
+.console.theme-light .side:not(.collapsed) > header .brand b {
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .console.theme-command-center .side > header .brand img,
 .console.theme-light .side > header .brand img {
   width: 38px;
@@ -9420,7 +9455,6 @@ h1, h2, h3, h4, b {
 
 /* Nested mock windows keep their own frame even when their interior uses the
    same graphite field as the surrounding page. */
-.console.theme-command-center .settings-readout,
 .console.theme-command-center .audit-event,
 .console.theme-command-center .policy-rules-summary,
 .console.theme-command-center .agent-reasoning-callout,
@@ -9428,12 +9462,10 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .response-json-box,
 .console.theme-command-center .code-snippets-section,
 .console.theme-command-center .pipeline-table,
-.console.theme-command-center .pipeline-row,
 .console.theme-command-center .event-inline-json,
 .console.theme-command-center .opa-source-code,
 .console.theme-command-center .report-preview,
 .console.theme-command-center .body-editor,
-.console.theme-command-center .readiness-row,
 .console.theme-command-center .sensor,
 .console.theme-command-center .agent-fact,
 .console.theme-command-center .routing-node,
@@ -9442,7 +9474,6 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .transaction-result,
 .console.theme-command-center .approval-panel,
 .console.theme-command-center .theme-choice,
-.console.theme-command-center .snippet-body,
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item {
   border: 1px solid var(--line);
@@ -9888,7 +9919,12 @@ h1, h2, h3, h4, b {
 }
 
 /* Mock registration crosses: every visible window/card gets the same four
-   corner markers without introducing extra DOM or changing layout. */
+   corner markers. The marker itself is a "+" that straddles the border
+   (like the mock's crosshair), drawn on ::before rather than the box's own
+   background so it can bleed a few px past the edge without moving layout.
+   Verified against the mock's own .blueprint markup: it is never nested, so
+   an element only gets its own mark when it is not a descendant of another
+   marked box -- the :not(:is(...) *) guard below enforces that here too. */
 .console.theme-command-center :is(
   .metric, .panel, .resource, .settings-card, .action-form,
   .resource-card, .agent-card, .responder-card, .responder-panel,
@@ -9896,16 +9932,40 @@ h1, h2, h3, h4, b {
   .transaction-result, .integration-card, .network-card, .opa-card,
   .developer-view, .api-explorer-layout, .event-stream-toolbar,
   .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box, .code-snippets-section,
-  .opa-source-code, .report-preview, .body-editor, .policy-rules-summary,
-  .agent-reasoning-callout, .settings-readout, .toggle-item,
-  .hybrid-architecture-card, .hybrid-pair, .hybrid-detail-panel,
-  .outbox-status-card, .routing-node, .memory-result, .agent-fact,
-  .device-detail-summary, .theme-choice, .snippet-body, .endpoint-item,
-  .readiness-row, .sensor, .contract-card, .catalog-card,
-  .evidence-runtime-strip, .telemetry-chart, .evidence-reference-metrics,
-  .evidence-reference-grid > .resource
-),
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *),
 .console.theme-light :is(
   .metric, .panel, .resource, .settings-card, .action-form,
   .resource-card, .agent-card, .responder-card, .responder-panel,
@@ -9913,17 +9973,131 @@ h1, h2, h3, h4, b {
   .transaction-result, .integration-card, .network-card, .opa-card,
   .developer-view, .api-explorer-layout, .event-stream-toolbar,
   .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box, .code-snippets-section,
-  .opa-source-code, .report-preview, .body-editor, .policy-rules-summary,
-  .agent-reasoning-callout, .settings-readout, .toggle-item,
-  .hybrid-architecture-card, .hybrid-pair, .hybrid-detail-panel,
-  .outbox-status-card, .routing-node, .memory-result, .agent-fact,
-  .device-detail-summary, .theme-choice, .snippet-body, .endpoint-item,
-  .readiness-row, .sensor, .contract-card, .catalog-card,
-  .evidence-runtime-strip, .telemetry-chart, .evidence-reference-metrics,
-  .evidence-reference-grid > .resource
-) {
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *) {
+  position: relative !important;
   border-radius: 0 !important;
+  background-image: none !important;
+}
+
+.console.theme-command-center :is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *)::before,
+.console.theme-light :is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *)::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: -4px !important;
+  pointer-events: none !important;
   background-repeat: no-repeat !important;
   background-image:
     linear-gradient(var(--frame-tick), var(--frame-tick)),
@@ -9934,10 +10108,16 @@ h1, h2, h3, h4, b {
     linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)) !important;
-  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px,
-    8px 1px, 1px 8px, 8px 1px, 1px 8px !important;
-  background-position: top left, top left, top right, top right,
-    bottom left, bottom left, bottom right, bottom right !important;
+  background-size: 9px 1px, 1px 9px, 9px 1px, 1px 9px,
+    9px 1px, 1px 9px, 9px 1px, 1px 9px !important;
+  /* Each pair straddles the real border: the short (1px) axis sits on the
+     border line (offset by the pseudo's own -4px inset), the long (9px)
+     axis is centered on the corner so the mark reads as a "+", not an "L". */
+  background-position:
+    top 4px left 0px, top 0px left 4px,
+    top 4px right 0px, top 0px right 4px,
+    bottom 4px left 0px, bottom 0px left 4px,
+    bottom 4px right 0px, bottom 0px right 4px !important;
 }
 
 /* Additional named windows that are not descendants of the shared card
@@ -9951,7 +10131,31 @@ h1, h2, h3, h4, b {
   .transaction-form, .change-queue-card, .appearance-card,
   .operator-panel, .routing-section, .integrations-section,
   .contracts-section, .event-detail-panel, .modal-card
-),
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *),
 .console.theme-light :is(
   .agent-toolbar, .agent-grid, .agent-unified-section,
   .evidence-unified-section, .decisions-approvals-section,
@@ -9961,9 +10165,109 @@ h1, h2, h3, h4, b {
   .transaction-form, .change-queue-card, .appearance-card,
   .operator-panel, .routing-section, .integrations-section,
   .contracts-section, .event-detail-panel, .modal-card
-) {
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *) {
+  position: relative !important;
   border-radius: 0 !important;
   border-color: var(--frame-line, var(--line)) !important;
+  background-image: none !important;
+}
+
+.console.theme-command-center :is(
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *)::before,
+.console.theme-light :is(
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+):not(:is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box,
+  .code-snippets-section, .opa-source-code, .report-preview,
+  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
+  .settings-readout, .toggle-item, .hybrid-architecture-card,
+  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
+  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
+  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
+  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
+  .evidence-reference-metrics, .evidence-reference-grid > .resource,
+  .agent-toolbar, .agent-grid, .agent-unified-section,
+  .evidence-unified-section, .decisions-approvals-section,
+  .decisions-policy-section, .policy-enforcement-panel,
+  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
+  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
+  .transaction-form, .change-queue-card, .appearance-card,
+  .operator-panel, .routing-section, .integrations-section,
+  .contracts-section, .event-detail-panel, .modal-card
+  ) *)::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: -4px !important;
+  pointer-events: none !important;
   background-repeat: no-repeat !important;
   background-image:
     linear-gradient(var(--frame-tick), var(--frame-tick)),
@@ -9974,10 +10278,16 @@ h1, h2, h3, h4, b {
     linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)) !important;
-  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px,
-    8px 1px, 1px 8px, 8px 1px, 1px 8px !important;
-  background-position: top left, top left, top right, top right,
-    bottom left, bottom left, bottom right, bottom right !important;
+  background-size: 9px 1px, 1px 9px, 9px 1px, 1px 9px,
+    9px 1px, 1px 9px, 9px 1px, 1px 9px !important;
+  /* Each pair straddles the real border: the short (1px) axis sits on the
+     border line (offset by the pseudo's own -4px inset), the long (9px)
+     axis is centered on the corner so the mark reads as a "+", not an "L". */
+  background-position:
+    top 4px left 0px, top 0px left 4px,
+    top 4px right 0px, top 0px right 4px,
+    bottom 4px left 0px, bottom 0px left 4px,
+    bottom 4px right 0px, bottom 0px right 4px !important;
 }
 
 /* Every real window/card gets a complete frame. The mock uses corner ticks as
@@ -10012,17 +10322,10 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .agent-detail-facts,
 .console.theme-command-center .routing-section,
 .console.theme-command-center .api-explorer-layout,
-.console.theme-command-center .api-endpoints-nav,
-.console.theme-command-center .api-console-main,
 .console.theme-command-center .response-pane,
 .console.theme-command-center .event-inline-json,
-.console.theme-command-center .settings-readout,
-.console.theme-command-center .toggle-item,
 .console.theme-command-center .policy-history-row,
 .console.theme-command-center .event-stream-toolbar,
-.console.theme-command-center .evidence-runtime-strip,
-.console.theme-command-center .pipeline-row,
-.console.theme-command-center .readiness-row,
 .console.theme-command-center .agent-fact,
 .console.theme-command-center .routing-node,
 .console.theme-command-center .memory-result,
@@ -10030,7 +10333,6 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .transaction-result,
 .console.theme-command-center .approval-panel,
 .console.theme-command-center .theme-choice,
-.console.theme-command-center .snippet-body,
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item,
 .console.theme-command-center .outcome-ledger .outcome-row,
@@ -10063,17 +10365,10 @@ h1, h2, h3, h4, b {
 .console.theme-light .agent-detail-facts,
 .console.theme-light .routing-section,
 .console.theme-light .api-explorer-layout,
-.console.theme-light .api-endpoints-nav,
-.console.theme-light .api-console-main,
 .console.theme-light .response-pane,
 .console.theme-light .event-inline-json,
-.console.theme-light .settings-readout,
-.console.theme-light .toggle-item,
 .console.theme-light .policy-history-row,
 .console.theme-light .event-stream-toolbar,
-.console.theme-light .evidence-runtime-strip,
-.console.theme-light .pipeline-row,
-.console.theme-light .readiness-row,
 .console.theme-light .agent-fact,
 .console.theme-light .routing-node,
 .console.theme-light .memory-result,
@@ -10081,7 +10376,6 @@ h1, h2, h3, h4, b {
 .console.theme-light .transaction-result,
 .console.theme-light .approval-panel,
 .console.theme-light .theme-choice,
-.console.theme-light .snippet-body,
 .console.theme-light .contract-card,
 .console.theme-light .endpoint-item,
 .console.theme-light .outcome-ledger .outcome-row {
@@ -10281,7 +10575,7 @@ h1, h2, h3, h4, b {
 .console.theme-light .snippet-body,
 .console.theme-light .contract-card,
 .console.theme-light .endpoint-item {
-  background-color: transparent !important;
+  background-color: var(--panel-solid) !important;
 }
 
 .console.theme-command-center .status-badge,
@@ -10378,9 +10672,9 @@ h1, h2, h3, h4, b {
   max-width: none;
 }
 
-/* Use one crisp, geometric checkmark everywhere instead of the platform
-   glyph. This keeps the selected state aligned in toggles and packet options
-   in both themes. */
+/* Use one crisp X glyph everywhere instead of the platform default. This
+   keeps the selected state aligned in toggles and packet options in both
+   themes. */
 .console input[type='checkbox'] {
   width: 18px;
   height: 18px;
@@ -10392,12 +10686,12 @@ h1, h2, h3, h4, b {
 }
 
 .console input[type='checkbox']::before {
-  content: '';
-  width: 8px;
-  height: 4px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: translateY(-1px) rotate(-45deg) scale(0);
+  content: '✕';
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  transform: scale(0);
   transform-origin: center;
 }
 
@@ -10407,7 +10701,7 @@ h1, h2, h3, h4, b {
 }
 
 .console input[type='checkbox']:checked::before {
-  transform: translateY(-1px) rotate(-45deg) scale(1);
+  transform: scale(1);
 }
 
 /* Overlay surfaces follow the same square-window system as the main workspaces. */
@@ -10842,8 +11136,15 @@ h1, h2, h3, h4, b {
 .landing .primary:hover:not(:disabled),
 .landing .cta-btn:hover,
 .auth .primary.submit:hover:not(:disabled) {
-  background: #cfe4f3;
-  border-color: #cfe4f3;
+  background: #597ea3;
+  border-color: #597ea3;
+}
+
+.landing .primary:active:not(:disabled),
+.landing .cta-btn:active,
+.auth .primary.submit:active:not(:disabled) {
+  background: #416180;
+  border-color: #416180;
 }
 
 .auth .local-connect,
@@ -10992,6 +11293,38 @@ h1, h2, h3, h4, b {
 .console .configuration-unified .deploy-button:hover:not(:disabled) {
   background: var(--green-hover) !important;
   border-color: var(--green-hover) !important;
+}
+
+/* One button size and one field size for every action control and text
+   input/select on this page -- these had accumulated ten different
+   heights (28px-45px) across primary/secondary/table-row buttons. */
+.console .configuration-unified .primary,
+.console .configuration-unified .primary-btn,
+.console .configuration-unified .primary-action-btn,
+.console .configuration-unified .secondary-btn,
+.console .configuration-unified .select-bundle-btn,
+.console .configuration-unified .deploy-button,
+.console .configuration-unified .connect-btn,
+.console .configuration-unified .inspect-btn,
+.console .configuration-unified .ping-btn,
+.console .configuration-unified .preview-schema-btn {
+  height: auto !important;
+  min-height: 38px !important;
+  padding: 9px 16px !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+
+.console .configuration-unified input[type="text"],
+.console .configuration-unified input[type="date"],
+.console .configuration-unified input[type="number"],
+.console .configuration-unified select,
+.console .configuration-unified .form-select {
+  height: auto !important;
+  min-height: 38px !important;
+  padding: 9px 14px !important;
+  font-size: 13px !important;
 }
 
 /* Keep Configuration copy, tables, and action rows on one left edge. */

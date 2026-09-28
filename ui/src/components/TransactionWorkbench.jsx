@@ -62,8 +62,8 @@ export function TransactionWorkbench({ api }) {
       <small className="evidence-label">Device credentials are used only for this request and are never persisted.</small>
     </header>
     <form className="transaction-form" onSubmit={simulate}>
-      <label>Device ID<input required value={form.deviceId} onChange={update('deviceId')} placeholder="demo-linux-001" /></label>
-      <label>Device token<input required type="password" value={form.deviceToken} onChange={update('deviceToken')} /></label>
+      <label>Device ID<input required autoComplete="off" value={form.deviceId} onChange={update('deviceId')} placeholder="demo-linux-001" /></label>
+      <label>Device token<input required type="password" autoComplete="new-password" value={form.deviceToken} onChange={update('deviceToken')} /></label>
       <label>Agent ID<input required value={form.agentId} onChange={update('agentId')} /></label>
       <label>Chain ID<input required type="number" min="1" value={form.chainId} onChange={update('chainId')} /></label>
       <label>Destination<input required value={form.to} onChange={update('to')} /></label>
