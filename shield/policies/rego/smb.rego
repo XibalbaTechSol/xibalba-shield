@@ -95,3 +95,36 @@ name := "Escalate sensitive file write metadata" if {
 version := "1.0.0" if rule_1
 version := "1.0.0" if rule_2
 version := "1.0.0" if rule_3
+
+# integrity-core docs/EXECUTION_PLAN.md A3 "permit means permitted": `decision`/`reason_code`
+# carry the C3 decision contract (integrity_sdk.core.decision) alongside the legacy
+# action/message/rule_id/name/version vars above, which stay unchanged for
+# shield/opa_local.py's readiness probe and any other existing consumer. Deliberately no
+# `default` for either var: when no rule matches, both are genuinely undefined (absent
+# from the query result), which is what lets `core.decision.resolve()` apply this pack's
+# own per-event-class default rather than a value hardcoded in Rego.
+decision := "deny" if rule_1
+
+decision := "deny" if {
+	not rule_1
+	rule_2
+}
+
+decision := "deny" if {
+	not rule_1
+	not rule_2
+	rule_3
+}
+
+reason_code := "SMB_CONTAIN_SHADOW_AI_PROCESS" if rule_1
+
+reason_code := "SMB_DENY_UNREGISTERED_AGENT" if {
+	not rule_1
+	rule_2
+}
+
+reason_code := "SMB_ESCALATE_SENSITIVE_FILE_WRITE" if {
+	not rule_1
+	not rule_2
+	rule_3
+}

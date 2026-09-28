@@ -182,6 +182,11 @@ def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_pat
             "rule_id": "block-python",
             "name": "Block python",
             "version": "1.0.0",
+            # decision/reason_code: without these, resolve() treats this as NO_MATCH and
+            # applies the event class's pack default instead of the mocked "contain" --
+            # see docs/EXECUTION_PLAN.md A3.
+            "decision": "deny",
+            "reason_code": "TEST_CONTAIN_BLOCK_PYTHON",
         },
     )
 

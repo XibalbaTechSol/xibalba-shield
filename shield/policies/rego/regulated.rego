@@ -144,3 +144,48 @@ version := "1.0.0" if regulated_rule_1
 version := "1.0.0" if regulated_rule_2
 version := "1.0.0" if regulated_rule_3
 version := "1.0.0" if regulated_rule_4
+
+# See shield/policies/rego/smb.rego's matching comment: `decision`/`reason_code` carry the
+# C3 decision contract (integrity_sdk.core.decision), deliberately undefined (no default)
+# on no-match so `core.decision.resolve()` applies this pack's own per-event-class default
+# -- this profile is the one that declares `agent_event` deny-by-default (docs/EXECUTION_PLAN.md
+# A3: "hipaa agent tool calls deny").
+decision := "deny" if regulated_rule_1
+
+decision := "deny" if {
+	not regulated_rule_1
+	regulated_rule_2
+}
+
+decision := "deny" if {
+	not regulated_rule_1
+	not regulated_rule_2
+	regulated_rule_3
+}
+
+decision := "deny" if {
+	not regulated_rule_1
+	not regulated_rule_2
+	not regulated_rule_3
+	regulated_rule_4
+}
+
+reason_code := "REGULATED_DENY_UNREGISTERED_AGENT" if regulated_rule_1
+
+reason_code := "REGULATED_DENY_PHI_CONTEXT" if {
+	not regulated_rule_1
+	regulated_rule_2
+}
+
+reason_code := "REGULATED_DENY_HIGH_RISK_OUTPUT" if {
+	not regulated_rule_1
+	not regulated_rule_2
+	regulated_rule_3
+}
+
+reason_code := "REGULATED_ESCALATE_SENSITIVE_WRITE" if {
+	not regulated_rule_1
+	not regulated_rule_2
+	not regulated_rule_3
+	regulated_rule_4
+}

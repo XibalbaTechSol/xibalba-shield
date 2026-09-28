@@ -138,7 +138,9 @@ def test_run_dev_sensor_processes_real_events_end_to_end(tmp_path, capsys):
     log = EventLog(log_path)
     assert log.count() == 5
     rows = log.recent(5)
-    assert all(row["decision"]["action"] == "allow" for row in rows)  # no rules loaded -> default allow
+    # No rules loaded -> pack default. Real OPA's default is "log_only", not "allow" (no real
+    # Rego rule in this repo ever produces "allow" -- docs/EXECUTION_PLAN.md A3).
+    assert all(row["decision"]["action"] == "log_only" for row in rows)
 
 
 def test_run_fetches_assigned_policy_when_device_config_has_policy_url(tmp_path, monkeypatch, capsys):
@@ -273,7 +275,10 @@ def test_siem_export_command_writes_jsonl(tmp_path, capsys):
 
 
 def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys, mock_opa):
-    mock_opa.return_value = OPADecision(allow=False, raw_result={"action": "deny", "rule_id": "deny-network"})
+    mock_opa.return_value = OPADecision(
+        allow=False,
+        raw_result={"action": "deny", "rule_id": "deny-network", "decision": "deny", "reason_code": "TEST_DENY_NETWORK"},
+    )
     log_path = tmp_path / "decisions.jsonl"
     rules_path = tmp_path / "rules.json"
     rules_path.write_text(json.dumps({
@@ -311,6 +316,8 @@ def test_run_wires_simulated_slm_backend_for_escalations(tmp_path, capsys, mock_
             "rule_id": "needs-tier2",
             "name": "Needs Tier 2",
             "version": "1.0.0",
+            "decision": "deny",
+            "reason_code": "TEST_ESCALATE_NEEDS_TIER2",
         },
     )
     log_path = tmp_path / "decisions.jsonl"
