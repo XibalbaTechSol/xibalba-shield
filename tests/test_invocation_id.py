@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 import pytest
-from integrity_sdk.policy.opa_client import OPADecision
+from shield.opa_client import OPADecision
 
 from shield.agent_core.eventlog import EventLog
 from shield.agent_core.registry import AgentRegistry, DeviceContext

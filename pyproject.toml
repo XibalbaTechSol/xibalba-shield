@@ -22,7 +22,13 @@ dependencies = [
     # third-party agent runtime would use it -- no privileged API, no special-cased access.
     # Local-first authority: uv resolves this to the sibling Integrity-core checkout below.
     # Shield and Cortex must consume the same newest SDK tree as the Core workspace.
-    "integrity-sdk",
+    # `[connector]` (docs/EXECUTION_PLAN.md A2/A3): Shield uses did/agent_identity/client/bcc/
+    # telemetry.tracing, none of which are in the dependency-light SDK core -- explicitly
+    # requesting the extra is what lets the SDK drop these from its own base `dependencies`.
+    "integrity-sdk[connector]",
+    # shield/opa_client.py's own direct dependency (it no longer imports the SDK's async
+    # OPA client, which the SDK's Phase A1 restructure removed -- see that module's docstring).
+    "httpx>=0.27.0",
     "jsonschema>=4.23.0",
     "pyjwt[crypto]>=2.13.0",
     "requests>=2.34.2",

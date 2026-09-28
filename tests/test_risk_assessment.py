@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
-from integrity_sdk.policy.opa_client import OPADecision
+from shield.opa_client import OPADecision
 
 from shield.policy_engine.engine import EvaluationContext, PolicyEngine
 from shield.policy_engine.risk import assess_event
