@@ -52,7 +52,24 @@ done
 stable xibalba-shield.service 15 || { echo "sensor not stable after deploy; stop" >&2; exit 1; }
 echo "deployed $(git -C "$REPO" rev-parse --short HEAD); sensor stable"
 
-echo "== 2/7 spool dir and HMAC key"
+echo "== 2/7 preconditions: tenant binding, analyst profile; then spool dir and HMAC key"
+# The Hermes contract rejects events without a tenant. The sensor falls back to
+# device.json's tenant when the eBPF helper's SHIELD_TENANT_ID is unset -- so at least one
+# must be set, or every real contain event would fail to spool (silently, after containment).
+TENANT=$("$PY" -c 'import json;print(json.load(open("/etc/xibalba-shield/device.json")).get("tenant_id") or "")')
+if [[ -z "$TENANT" ]] && ! grep -qE '^SHIELD_TENANT_ID=.+' /etc/xibalba-shield/shield.env 2>/dev/null; then
+  echo "no tenant: device.json tenant_id is empty and shield.env has no SHIELD_TENANT_ID; stop" >&2; exit 1
+fi
+echo "tenant binding present (device.json tenant_id=${TENANT:-<empty, helper env set>})"
+# The analyst profile is version-controlled in packaging/hermes/; install or refresh it.
+PROFILE=/home/xibalba/.hermes/profiles/xibalba-shield-analyst
+[[ -d "$PROFILE" ]] || { echo "missing $PROFILE; run as xibalba: hermes profile create xibalba-shield-analyst --no-alias --no-skills; stop" >&2; exit 1; }
+for f in config.yaml SOUL.md; do
+  if ! cmp -s "$REPO/packaging/hermes/xibalba-shield-analyst/$f" "$PROFILE/$f"; then
+    install -o xibalba -g xibalba -m 0644 "$REPO/packaging/hermes/xibalba-shield-analyst/$f" "$PROFILE/$f"
+    echo "analyst profile $f refreshed from repo"
+  fi
+done
 install -d -o xibalba-shield -g xibalba-shield -m 2770 "$SPOOL"
 if [[ ! -s "$KEY" ]]; then
   ( umask 077; head -c 32 /dev/urandom > "$KEY" )

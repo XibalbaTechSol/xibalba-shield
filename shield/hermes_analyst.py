@@ -238,21 +238,34 @@ class ShieldHermesAnalyst:
         """Resolve the analyst profile's tool list exactly as ``hermes -z`` would, without a
         model call. Any tool, MCP server or plugin fails closed. Cached for an hour."""
         profile_home = self.config.hermes_home_root / self.config.profile
+        # Builds the same AIAgent `hermes -z` builds (config toolsets + MCP discovery) and
+        # counts the tool schemas it would send. No conversation is run, so no model call.
+        # Output goes to the real stdout and the process hard-exits, because Hermes
+        # redirects/prints during construction and leaves MCP threads running.
         script = (
-            "import json\n"
+            "import json, logging, os, sys\n"
+            "logging.disable(logging.CRITICAL)\n"
             "from hermes_cli.config import load_config\n"
+            "from hermes_cli.runtime_provider import resolve_runtime_provider\n"
             "from hermes_cli.tools_config import _get_platform_tools\n"
-            "from model_tools import get_tool_definitions\n"
+            "from hermes_cli.mcp_startup import ensure_mcp_discovery_before_agent_build\n"
+            "from run_agent import AIAgent\n"
             "cfg = load_config()\n"
-            "ts = sorted(_get_platform_tools(cfg, 'cli'))\n"
-            "defs = get_tool_definitions(enabled_toolsets=ts, quiet_mode=True)\n"
+            "model = (cfg.get('model') or {}).get('default')\n"
+            "rt = resolve_runtime_provider(requested=None, target_model=model)\n"
+            "ensure_mcp_discovery_before_agent_build(logger=logging.getLogger('preflight'), single_query=True)\n"
+            "agent = AIAgent(api_key=rt.get('api_key'), base_url=rt.get('base_url'), provider=rt.get('provider'), api_mode=rt.get('api_mode'),"
+            " model=model, enabled_toolsets=sorted(_get_platform_tools(cfg, 'cli')), quiet_mode=True, platform='cli', session_db=None)\n"
             "mem = cfg.get('memory') or {}\n"
-            "print(json.dumps({'tools': [d['function']['name'] for d in defs], 'mcp_servers': sorted(cfg.get('mcp_servers') or {}),"
-            " 'plugins': cfg.get('plugins'), 'hooks': bool(cfg.get('hooks')), 'memory_enabled': mem.get('memory_enabled', True)}))\n"
+            "sys.__stdout__.write(json.dumps({'tools': [t.get('function', {}).get('name') for t in (agent.tools or [])],"
+            " 'mcp_servers': sorted(cfg.get('mcp_servers') or {}), 'plugins': cfg.get('plugins'), 'hooks': bool(cfg.get('hooks')),"
+            " 'memory_enabled': mem.get('memory_enabled', True)}) + '\\n')\n"
+            "sys.__stdout__.flush()\n"
+            "os._exit(0)\n"
         )
         env = self._hermes_env()
         env["HERMES_HOME"] = str(profile_home)
-        result = subprocess.run([self.config.hermes_python, "-c", script], capture_output=True, text=True, timeout=60, env=env, cwd=str(Path(self.config.hermes_python).parents[2]), check=False)
+        result = subprocess.run([self.config.hermes_python, "-c", script], capture_output=True, text=True, timeout=150, env=env, cwd=str(Path(self.config.hermes_python).parents[2]), check=False)
         try:
             report = json.loads(result.stdout.strip().splitlines()[-1])
         except (IndexError, json.JSONDecodeError):
@@ -360,9 +373,10 @@ class ShieldHermesAnalyst:
             self._record(event_id, "model_failed", payload, key=key, model_called=True, usage=self._read_usage(usage_path), detail={"error": str(exc)[:300]})
             return
         usage = self._read_usage(usage_path)
-        if usage.get("api_calls") not in (None, 1):
-            # More than one API call means the agent looped (a tool call or retry) --
-            # the toolless contract did not hold for this run, so its answer is discarded.
+        if usage.get("api_calls") != 1:
+            # Exactly one API call is the toolless contract. More means the agent looped
+            # (a tool call or retry); a missing report means it cannot be proven. Either
+            # way the answer is discarded.
             self._record(event_id, "model_invalid", payload, key=key, model_called=True, usage=usage, detail={"error": f"api_calls={usage.get('api_calls')}"})
             return
         try:
@@ -406,7 +420,17 @@ class ShieldHermesAnalyst:
             row = conn.execute("SELECT * FROM analyses WHERE event_id=?", (event_id,)).fetchone()
         if row is None or row["cortex_status"] not in ("pending",):
             return
+        if event_id.startswith("canary-"):
+            # Install-time canaries prove the pipeline end to end but must not leave a
+            # synthetic advisory in Shield's real memory.
+            with self._ledger() as conn:
+                conn.execute("UPDATE analyses SET cortex_status='skipped_canary' WHERE event_id=?", (event_id,))
+            return
         advisory = json.loads(row["advisory_json"])
+        # Only enum/number/allowlisted fields go to Shield's memory, which the interactive
+        # xibalba-shield profile (with tools) recalls from. The model's free-text
+        # `uncertainty` stays in the local ledger -- same rule as the notification path.
+        advisory = {key: advisory[key] for key in ("classification", "confidence", "evidence_refs", "recommendation") if key in advisory}
         content = json.dumps({"event_id": event_id, "rule_id": row["rule_id"], "policy_action": row["policy_action"], "advisory": advisory, "analyst_profile": self.config.profile}, sort_keys=True, separators=(",", ":"))
         content_hash = "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
         body = {

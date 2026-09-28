@@ -69,6 +69,9 @@ def test_material_event_is_analysed_and_written_to_cortex_as_shield(tmp_path):
     assert body["source"]["agent_id"] == "did:integrity:shield"
     assert body["evidence_class"] == "inference"
     assert json.loads(body["content"])["advisory"]["recommendation"] == "investigate"
+    # Model free text never reaches Shield's own (tool-bearing) memory.
+    assert "uncertainty" not in json.loads(body["content"])["advisory"]
+    assert "No command line." not in body["content"]
 
 
 def test_non_material_event_never_reaches_the_model(tmp_path):
@@ -190,3 +193,25 @@ def test_end_to_end_through_a_real_spool(tmp_path):
 
 def test_parse_accepts_single_json_fence():
     assert parse_advisory("```json\n" + json.dumps(GOOD) + "\n```")["classification"] == "suspicious_tmp_execution"
+
+
+def test_missing_usage_report_is_treated_as_unproven(tmp_path):
+    fakes = Fakes()
+
+    def runner_without_usage(prompt, usage_path):
+        return json.dumps(GOOD)
+
+    analyst = _analyst(tmp_path, fakes)
+    analyst._runner = runner_without_usage
+    analyst.handle(_payload())
+    assert _outcome(analyst, "evt-1") == "model_invalid"
+
+
+def test_canary_is_analysed_but_never_written_to_cortex(tmp_path):
+    fakes = Fakes()
+    analyst = _analyst(tmp_path, fakes)
+    analyst.handle(_payload(event_id="canary-123"))
+    assert _outcome(analyst, "canary-123") == "analysed"
+    assert fakes.posted == []
+    with analyst._ledger() as conn:
+        assert conn.execute("SELECT cortex_status FROM analyses").fetchone()[0] == "skipped_canary"
