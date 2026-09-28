@@ -39,30 +39,43 @@ browser profile never creates, reads, or rotates key material. Operators can ins
 transport counters through the authenticated `GET /api/shield/hermes-status` endpoint. Hermes
 does not authorize Shield decisions or enforcement.
 
+**Shield Hermes analyst.** It is deployed in shadow mode as of 2026-09-27. Shield's DID is the
+Hermes `xibalba-shield` agent. `shield/hermes_analyst.py` gives it a toolless, analysis-only
+judgment step over its own material events (scope `material`: contain, deny, escalate):
+
+- **Model call:** at most one per event, through the memory-off `xibalba-shield-analyst`
+  profile, and only after a preflight proves the profile exposes zero tools.
+- **Spend:** capped at 6 per hour and 40 per day.
+- **Output:** strictly validated advisories stored in a local ledger, plus one
+  `shield_advisory` memory in Shield's Cortex. The Cortex memory carries no model free text.
+
+It never requests or performs enforcement. Operations, invariants and rollback are in
+[`docs/runbooks/hermes-analyst.md`](docs/runbooks/hermes-analyst.md).
+
 This repository is the **immune system** in a three-repository ecosystem designed as a living
-organism. (`integrity-dashboard` — the operator presentation layer, previously developed as a
-separate `integrity-mvp` repository — now lives inside `integrity-core` as a component, not a
-fourth sibling repository; the table below reflects that.)
+organism. (`integrity-dashboard`, the operator presentation layer, moved with the userapi from
+`integrity-core` to [`integrity-console`](https://github.com/XibalbaTechSol/integrity-console)
+in integrity-core's 2026-09-28 restructure, Phase A1.)
 
 | Repository | Analogy | Role |
 |---|---|---|
 | `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
 | **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
-| `integrity-core` | 🦴 The Unifying Backend (+ 👁️ Control Center) | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts — plus `integrity-dashboard/`, the operator presentation layer that visualizes health and surfaces evidence |
+| `integrity-core` | 🦴 The Unifying Backend (+ 👁️ Control Center) | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts. The operator dashboard lives in `integrity-console` |
 
 Integrity Protocol is specified in [`XibalbaTechSol/integrity-core`](https://github.com/XibalbaTechSol/integrity-core) [`docs/SPEC.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/SPEC.md). This repository does not define protocol invariants. Shield is a producer of signed evidence and a local enforcement agent.
 
 **How the Immune System connects:**
 - **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
 - **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to integrity-core's BCC middleware and Oracle, running alongside an independent OpenTelemetry span for every decision.
-- **Outbound (to Control Center):** `integrity-core`'s `integrity-dashboard/` component surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
+- **Outbound (to Control Center):** `integrity-console`'s `integrity-dashboard/` surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
 
 ```mermaid
 flowchart LR
     Agent["🤖 Agent"] -->|"System calls &<br/>tool execution"| Immune["🛡️ xibalba-shield<br/>(This repo)"]
     Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 integrity-core<br/>(BCC → Oracle → Chain)"]
     Brain["🧠 xibalba-cortex"] -->|"Session Merkle roots"| Backbone
-    Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-core/integrity-dashboard<br/>(Shield page)"]
+    Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-console/integrity-dashboard<br/>(Shield page)"]
     Eyes -->|"Operator interventions<br/>& policy updates"| Agent
 ```
 
@@ -138,6 +151,19 @@ Use `scripts/verify_responder_gates.py` against disposable targets on the deploy
 follow [`docs/runbooks/linux-agent.md`](docs/runbooks/linux-agent.md) to install the proof. Code
 and root-free contract tests are complete; the current checkout does not claim privileged proof
 for the three gated responders until that host run succeeds.
+
+`scripts/enable_dev_unsafe_responders.sh` is a development-only override. It marks every
+readiness proof as passed, and the sensor logs "production readiness proofs are bypassed" on
+each start. To remove it safely, run `sudo scripts/restore_production_responder_gates.sh`. The
+script backs up the configuration, removes the override, and checks that the sensor is stable.
+It proves with before-and-after `/tmp` canaries that SIGSTOP containment, which is never gated,
+still works, and it rolls back automatically on any failure.
+
+**Production venv.** `/opt/xibalba-shield/venv` must equal `uv.lock`:
+
+- `scripts/sync_production_venv.sh` (sudo) syncs it, with a full snapshot, a clean `pip check`,
+  zero drift, service restarts, a containment canary and automatic rollback.
+- `scripts/update_installed_shield_from_checkout.sh` refuses to deploy onto a drifted venv.
 
 ## The Xibalba Agent: Hybrid Cascading Architecture (A2A)
 
@@ -746,7 +772,7 @@ python3 scripts/pilot_gate_report.py \
 
 No local script can close root-only, live RPC/oracle, native Windows/macOS, OS hardening, signed installer, or multi-day workload gates without those real target artifacts. Missing artifacts report `BLOCKED`, not pass.
 
-Known e2e caveat in this workspace: the current global Python environment has an editable `integrity_sdk` from `/home/xibalba/Projects/INTEGRITY/integrity-sdk`, not this repo's pinned `integrity-core` dependency. Live exporter validation should be run from a clean virtual environment installed with `uv pip install -e ".[dev]" --python .venv/bin/python`.
+Live exporter validation should be run from a clean virtual environment built from this repository's `uv.lock` (`uv sync`), which pins `integrity-sdk` to the sibling `integrity-core` checkout. Do not rely on a globally installed editable SDK.
 
 ## Security Posture
 

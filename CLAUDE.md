@@ -67,13 +67,22 @@ shield/
 ├── release/             # Package signing + versioned-release/symlink rollback (2026-09-06)
 │                        # -- separate key/trust domain from config/signing.py's policy
 │                        # signing; not yet wired into the live systemd ExecStart path
+├── hermes_contract.py   # Redacted Shield->Hermes event contract (JSON Schema in schemas/)
+├── hermes_transport.py  # HermesSpool: HMAC-authenticated, bounded file spool; group_shared
+│                        # mode for the sensor->analyst account split (never world-readable)
+├── hermes_analyst.py    # Shield's Hermes analyst: toolless, analysis-only advisory per
+│                        # material event, ledger + one Cortex `shield_advisory` memory.
+│                        # Runbook: docs/runbooks/hermes-analyst.md
 └── cli.py               # `shield status/events/validate/run/fetch-policy/verify-log/
-                         #  siem-export/local-run` — spec §4.6
+                         #  siem-export/local-run` — spec §4.6. `run --enforcement-mode
+                         #  observe|enforce` (default enforce); Hermes config errors disable
+                         #  publication with a warning, never stop the sensor
 
 slm_training/           # Tier-2 SLM training pipeline — app.py, train.py (QLoRA),
                           # generate_dataset.py, dataset.jsonl, models/ (Qwen2.5-0.5B GGUF)
 policies/                # defaults/ (JSON: smb, professional-services, regulated) + rego/
-packaging/systemd/       # systemd service unit + env example
+packaging/systemd/       # systemd units (sensor, eBPF helper, shield-hermes-analyst) + env example
+packaging/hermes/        # version-controlled Hermes profile files (Shield SOUL, analyst profile)
 models/                  # GGUF model weights (Llama-3.2-1B, Qwen2.5-0.5B) + HF cache
 assets/                  # brand assets (logos, favicons, OG image)
 docs/                    # wiki/ (synced to GitHub wiki), audits/, runbooks/, design/
@@ -92,7 +101,9 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest        # 138 passed, 9 skipped in the current root-free suite
+.venv/bin/python -m pytest --basetemp=.pytest-tmp   # 451 passed, 12 skipped (2026-09-28)
+# --basetemp keeps pytest's temp dirs out of /tmp: the live Shield sensor on this box
+# SIGSTOPs executables run from /tmp (e.g. test-built venvs), which looks like a hang.
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
 shield status                    # local decision-log summary
 shield events --recent 20        # recent policy decisions
