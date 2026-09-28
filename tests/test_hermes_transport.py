@@ -101,3 +101,25 @@ def test_group_shared_spool_still_refuses_world_access(tmp_path):
     spool._chmod_if_owner = lambda path, mode: None  # type: ignore[method-assign]
     with pytest.raises(HermesTransportError):
         spool._ensure_dirs()
+
+
+def test_group_shared_opens_under_a_sandbox_that_forbids_setgid_chmod(tmp_path, monkeypatch):
+    # systemd RestrictSUIDSGID=true: chmod with S_ISGID fails with EPERM, even as the owner
+    # and even when the directory is already 2770. That crashed the C5 install's step 4.
+    import os
+    import stat
+
+    root = tmp_path / "spool"
+    root.mkdir()
+    os.chmod(root, 0o2770)
+    real_chmod = os.chmod
+
+    def sandboxed_chmod(path, mode, *args, **kwargs):
+        if mode & stat.S_ISGID:
+            raise PermissionError(1, "Operation not permitted", str(path))
+        return real_chmod(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(os, "chmod", sandboxed_chmod)
+    spool = HermesSpool(root, key=b"k" * 32, group_shared=True)
+    assert spool.publish(_payload(tmp_path), delivery_id="delivery-s") == "delivery-s"
+    assert stat.S_IMODE(root.stat().st_mode) == 0o2770
