@@ -28,6 +28,7 @@ Status values: `PASS` = matches the current mock target, `PARTIAL` = implemented
 | Heading scale | Mock-sized, condensed hierarchy | Shared page/title scale | PARTIAL | Pixel-check page-specific heading blocks |
 | Text colors | `#eef0f1`, `#b7bcc1`, `#9aa1a8` | Matching tokens | PASS | Audit low-contrast small labels |
 | Shape language | Square/rectangular controls and cards | `border-radius: 0` system | PASS | Check dynamically rendered components |
+| Icon treatment | Transparent icon wells; stroke carries state color | Transparent Lucide icon wells | PASS | Verify drawer/action icons |
 
 ## Layout and geometry
 
@@ -42,6 +43,19 @@ Status values: `PASS` = matches the current mock target, `PARTIAL` = implemented
 | Card internal padding | Mock surface rhythm | `20px` / `14px` compact scale | PARTIAL | Check dense tables and drawers |
 | Grid columns | Mock-specific balanced columns | Consolidated responsive grids | PARTIAL | Record each page's exact mock column map |
 | Overflow | No horizontal overflow | Desktop/mobile audit widths pass | PASS | Test long identifiers in each detail drawer |
+
+## Verified route evidence
+
+| Route | Dark render | Light render | Mobile render | Console errors | Current verdict |
+|---|---|---|---|---|---|
+| Posture | `/tmp/shield-dashboard-dark.png` | `/tmp/shield-dashboard-light.png` | `/tmp/shield-dashboard-light-mobile.png` | 0 | PASS on shell; compare populated mock data |
+| Agent | route audit passed | `/tmp/shield-agent-light.png` | audit coverage passed | 0 | PARTIAL: compare unified section heights |
+| Network | route audit passed | `/tmp/shield-network-light.png` | audit coverage passed | 0 | PARTIAL: compare control/form geometry |
+| Decisions | route audit passed | `/tmp/shield-decisions-light.png` | audit coverage passed | 0 | PARTIAL: compare populated event state |
+| Evidence | route audit passed | `/tmp/shield-evidence-light.png` | audit coverage passed | 0 | PARTIAL: compare table density |
+| Configuration | route audit passed | `/tmp/shield-configuration-light.png` | audit coverage passed | 0 | PARTIAL: compare section ordering and spacing |
+
+The route audit confirms rendering and browser health; `PARTIAL` means the current screenshot and the available mock do not yet share the same data/scroll state for pixel-level equivalence.
 
 ## Navigation and header
 

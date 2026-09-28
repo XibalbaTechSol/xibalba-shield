@@ -9685,3 +9685,26 @@ h1, h2, h3, h4, b {
 .console.theme-light .outcome-ledger .outcome-row {
   border: 1px solid var(--line) !important;
 }
+
+/* Mock-matched icon treatment: transparent wells with Lucide strokes carrying
+   the semantic color. */
+.console .metric > div > span,
+.console .metric > div > span.green,
+.console .metric > div > span.amber,
+.console .responder-icon,
+.console .agent-icon,
+.console .agent-detail-icon,
+.console .routing-node-icon {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.console .metric > div > span {
+  width: 22px;
+  height: 22px;
+}
+
+.console .routing-node.active .routing-node-icon,
+.console .routing-node.configured .routing-node-icon {
+  background: transparent !important;
+}
