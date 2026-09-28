@@ -1,30 +1,34 @@
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
-from shield.opa_local import PACKAGE_ROOT, PROFILES, selected_profile_metadata, supervised_opa, _query
+from integrity_sdk.core.opa import OpaClient
+
+from shield.opa_local import load_signed_profile_pack, supervised_opa
+from shield.pack_profiles import PACKAGE_ROOT, PACK_DIRS_BY_PROFILE
 
 
-@pytest.mark.parametrize("profile", sorted(PROFILES))
-def test_selected_profile_metadata_is_bound_to_rego_bytes(profile):
-    version, digest = selected_profile_metadata(profile)
-    assert version == "1.0.0"
-    assert digest == f"sha256:{hashlib.sha256(PROFILES[profile].read_bytes()).hexdigest()}"
-    assert PROFILES[profile].is_relative_to(PACKAGE_ROOT)
+@pytest.mark.parametrize("profile", sorted(PACK_DIRS_BY_PROFILE))
+def test_selected_profile_pack_is_verified_and_bound_to_package(profile):
+    pack = load_signed_profile_pack(profile)
+    assert pack.manifest["version"] == "1.0.0"
+    assert pack.pack_hash.startswith("sha256:")
+    assert PACK_DIRS_BY_PROFILE[profile].is_relative_to(PACKAGE_ROOT)
+    assert pack.policy_modules()
 
 
 def test_unknown_profile_fails_closed():
-    with pytest.raises(ValueError, match="unsupported OPA profile"):
-        selected_profile_metadata("all")
+    with pytest.raises(ValueError, match="unsupported policy profile"):
+        load_signed_profile_pack("all")
 
 
-@pytest.mark.parametrize("profile", sorted(PROFILES))
+@pytest.mark.parametrize("profile", sorted(PACK_DIRS_BY_PROFILE))
 def test_supervised_opa_real_profile_probe(profile):
-    with supervised_opa(profile, timeout=5) as url:
+    with supervised_opa(profile, timeout=5) as (url, pack):
         assert url.startswith("http://127.0.0.1:")
-        result = _query(url, {
+        client = OpaClient(url)
+        client.install(pack)
+        result = client.query(pack, {
             "event": {"process": {"exe_path": "/tmp/ordinary"}},
             "ctx": {"registered_agent_ids": {}},
         })

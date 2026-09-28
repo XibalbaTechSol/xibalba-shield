@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..policy_engine import EVENT_DEFAULTS_BY_PROFILE
+from ..pack_profiles import PACK_DIRS_BY_PROFILE
 from ..schemas.policy_rule import PolicyRule
 
 
@@ -155,12 +155,17 @@ class DeviceConfig:
     device_id: str
     tenant_id: str = ""
     device_role: str = ""
-    # docs/EXECUTION_PLAN.md A3 "permit means permitted": which compliance vertical this
-    # device's PolicyEngine uses for its per-event-class no-match default (empty string ==
-    # today's existing behavior, log_only everywhere). Deliberately just a name, not a
-    # guarantee that the matching Rego bundle is actually loaded into OPA -- that's still an
-    # out-of-band operational concern (see cli.py's own `--opa-command`/`--opa-url`).
+    # docs/EXECUTION_PLAN.md A3: which built-in `policies/packs/<name>/` directory this
+    # device's PolicyEngine loads and enforces (empty string == no pack, `cli.py`'s `_run`
+    # falls back to `--pack-dir`/legacy JSON rules). The pack.yaml manifest is the one place
+    # a profile's per-event-class no-match default is declared now -- see
+    # `shield.pack_profiles.PACK_DIRS_BY_PROFILE`.
     policy_profile: str = ""
+    # Multibase Ed25519 public keys (see `shield.pack_signing`) trusted to sign the pack
+    # this device loads -- deliberately a *different* format/list from
+    # `trusted_signing_keys` above (base64, for the legacy JSON-bundle scheme): different
+    # signing domain, never sharing a trust list (see `shield/pack_signing.py`'s docstring).
+    trusted_pack_signers: list[str] = field(default_factory=list)
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
     backend_url: str = ""
@@ -223,6 +228,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "trusted_signing_keys",
         "require_signed_policy",
         "policy_profile",
+        "trusted_pack_signers",
     }
     unknown = set(doc.keys()) - known_fields
     if unknown:
@@ -246,9 +252,13 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         raise ConfigError(f"device config file {p}: every \"trusted_signing_keys\" entry must be a string")
     if "require_signed_policy" in kwargs and not isinstance(kwargs["require_signed_policy"], bool):
         raise ConfigError(f"device config file {p}: \"require_signed_policy\" must be a boolean")
-    if kwargs.get("policy_profile", "") not in ({"", *EVENT_DEFAULTS_BY_PROFILE}):
+    if kwargs.get("policy_profile", "") not in ({"", *PACK_DIRS_BY_PROFILE}):
         raise ConfigError(
             f"device config file {p}: \"policy_profile\" must be one of "
-            f"{sorted(EVENT_DEFAULTS_BY_PROFILE)} or omitted, got {kwargs['policy_profile']!r}"
+            f"{sorted(PACK_DIRS_BY_PROFILE)} or omitted, got {kwargs['policy_profile']!r}"
         )
+    if "trusted_pack_signers" in kwargs and not isinstance(kwargs["trusted_pack_signers"], list):
+        raise ConfigError(f"device config file {p}: \"trusted_pack_signers\" must be an array")
+    if any(not isinstance(key, str) for key in kwargs.get("trusted_pack_signers", [])):
+        raise ConfigError(f"device config file {p}: every \"trusted_pack_signers\" entry must be a string")
     return DeviceConfig(**kwargs)

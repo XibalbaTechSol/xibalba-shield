@@ -23,7 +23,10 @@ from .agent_core.registry import AgentRegistry, DeviceContext
 from .agent_core.router import EventRouter
 from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_config, load_policy_bundle
 from .config.hot_reload import PolicyHotReloader
-from .policy_engine import PolicyEngine, event_defaults_for_profile
+from .pack_loading import PackLoadError, resolve_pack
+from .policy_engine import PolicyEngine
+
+from integrity_sdk.core.opa import OpaError
 
 DEFAULT_LOG_PATH = Path.home() / ".xibalba-shield" / "decisions.jsonl"
 
@@ -254,14 +257,28 @@ def _run(args: argparse.Namespace) -> int:
             print(f"shield run: unable to start supervised OPA: {exc}", file=sys.stderr)
             return 1
 
-    policy_engine = PolicyEngine(
-        opa_url=args.opa_url, policy_version=policy_version, policy_hash=policy_hash,
-        event_defaults=event_defaults_for_profile(device_config.policy_profile),
-    )
+    pack = getattr(args, "pack", None)  # `local-run` pre-resolves its own chosen --profile pack
+    if pack is None:
+        try:
+            pack = resolve_pack(
+                device_config, pack_dir=args.pack_dir, trusted_pack_signers=args.trusted_pack_signers,
+            )
+        except PackLoadError as exc:
+            print(f"shield run: {exc}", file=sys.stderr)
+            return 1
+    try:
+        policy_engine = PolicyEngine(opa_url=args.opa_url, pack=pack)
+    except OpaError as exc:
+        print(f"shield run: unable to install policy pack into OPA: {exc}", file=sys.stderr)
+        return 1
+    # The pack is the source of truth for what's actually enforced now -- report its
+    # version/hash, not the legacy JSON bundle's (rules/policy_version/policy_hash above
+    # remain the separate --rules hash-pinning mechanism `PolicyHotReloader` tracks).
+    pack_version, pack_hash = pack.manifest["version"], pack.pack_hash
     from .runtime_status import publish_runtime_status
     publish_runtime_status(
         device_config=device_config,
-        policy_status=(reloader.status().__dict__ if reloader else {"healthy": bool(policy_hash), "active_policy_version": policy_version, "active_policy_hash": policy_hash}),
+        policy_status=(reloader.status().__dict__ if reloader else {"healthy": True, "active_policy_version": pack_version, "active_policy_hash": pack_hash}),
         opa_status=policy_engine.health_status(),
     )
     if args.rules is not None:
@@ -656,13 +673,38 @@ def _sign_policy(args: argparse.Namespace) -> int:
     return 0
 
 
-def _local_run(args: argparse.Namespace) -> int:
-    from .opa_local import selected_profile_metadata, supervised_opa
+def _sign_pack(args: argparse.Namespace) -> int:
+    """Sign the complete Rego pack, including its manifest and all policy bytes."""
+    from integrity_sdk.core.packs import PackError, sign_pack
+
+    from .pack_signing import DEFAULT_PACK_KEY_PATH, load_or_generate_pack_keypair, pack_signer_multibase
 
     try:
-        with supervised_opa(args.profile, opa_binary=args.opa_binary, timeout=args.opa_timeout) as opa_url:
+        key_path = args.key or DEFAULT_PACK_KEY_PATH
+        keypair, generated = load_or_generate_pack_keypair(key_path)
+        compiled = sign_pack(args.pack_dir, keypair)
+    except (OSError, ValueError, PackError) as exc:
+        print(f"shield sign-pack: {exc}", file=sys.stderr)
+        return 1
+
+    if generated:
+        print(f"generated a new pack-signing keypair at {key_path} (0600) -- back this up, it cannot be recovered")
+    print(
+        f"OK   signed pack {args.pack_dir}  pack_hash={compiled.pack_hash} "
+        f"signer_public_key={pack_signer_multibase(keypair)}"
+    )
+    return 0
+
+
+def _local_run(args: argparse.Namespace) -> int:
+    from .opa_local import supervised_opa
+
+    try:
+        with supervised_opa(args.profile, opa_binary=args.opa_binary, timeout=args.opa_timeout) as (opa_url, pack):
             args.opa_url = opa_url
-            args.policy_version, args.policy_hash = selected_profile_metadata(args.profile)
+            args.pack = pack
+            args.pack_dir = None
+            args.trusted_pack_signers = None
             args.device_config = None
             args.rules = None
             args.tenant_id = ""
@@ -758,6 +800,17 @@ def main(argv: list[str] | None = None) -> int:
     p_sign_policy.add_argument("--expires-at", default=None, help="optional ISO-8601 expiry, e.g. 2026-12-01T00:00:00Z")
     p_sign_policy.set_defaults(func=_sign_policy)
 
+    p_sign_pack = sub.add_parser("sign-pack", help="sign an Integrity policy pack with an Ed25519 keypair")
+    p_sign_pack.add_argument(
+        "--pack-dir", type=Path, required=True,
+        help="pack directory containing pack.yaml and one or more .rego files",
+    )
+    p_sign_pack.add_argument(
+        "--key", type=Path, default=None,
+        help="Ed25519 private key PEM file; generated at the default Shield path if omitted",
+    )
+    p_sign_pack.set_defaults(func=_sign_pack)
+
     p_run = sub.add_parser("run", help="run the real enforcement loop: sensor -> policy engine -> containment -> exporter")
     p_run.add_argument("--sensor", choices=_SENSOR_CHOICES, required=True,
                        help="process-exec/file-write/tcp-connect need root (real eBPF); dev needs neither (synthetic)")
@@ -780,6 +833,14 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--opa-command", nargs="+", default=None,
                         help="optional OPA command to supervise; it must listen at --opa-url",
                         metavar="COMMAND")
+    p_run.add_argument("--pack-dir", type=Path, default=None,
+                        help="a signed Integrity pack directory to enforce (docs/EXECUTION_PLAN.md "
+                             "A3); overrides --device-config's policy_profile. Requires "
+                             "--trusted-pack-signer (or the device config's trusted_pack_signers)")
+    p_run.add_argument("--trusted-pack-signer", action="append", default=None, dest="trusted_pack_signers",
+                        metavar="MULTIBASE_KEY",
+                        help="a multibase Ed25519 public key trusted to sign --pack-dir's pack; "
+                             "may be given more than once")
     p_run.add_argument("--opa-url", default="http://localhost:8181",
                         help="local OPA sidecar the policy engine evaluates rules against "
                              "(PolicyEngine's own default — was previously hardcoded and "

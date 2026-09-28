@@ -1,0 +1,15 @@
+# docs/EXECUTION_PLAN.md A3 -- see shield/policies/packs/smb/pack.yaml for the shared
+# rationale (kernel_range, entrypoint choice). agent_event: deny is the literal
+# "hipaa agent tool calls deny; device sensor events are log_only" case the plan names.
+pack_format: integrity.pack/1
+name: regulated
+version: 1.0.0
+kernel_range: ">=1.0.0 <2.0.0"
+decision_contract: integrity.decision/1
+entrypoint: data.shield.policy
+event_classes:
+  process_activity: {no_match: log_only}
+  file_activity: {no_match: log_only}
+  network_flow: {no_match: log_only}
+  agent_event: {no_match: deny}
+description: "Regulated/HIPAA profile -- unmatched agent tool calls deny by default; device sensor classes stay log_only. Real Rego rules deny PHI-context access without an active BAA."

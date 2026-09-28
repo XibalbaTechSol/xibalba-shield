@@ -1,0 +1,14 @@
+# docs/EXECUTION_PLAN.md A3 -- see shield/policies/packs/smb/pack.yaml for the shared
+# rationale (kernel_range, entrypoint choice).
+pack_format: integrity.pack/1
+name: professional-services
+version: 1.0.0
+kernel_range: ">=1.0.0 <2.0.0"
+decision_contract: integrity.decision/1
+entrypoint: data.shield.policy
+event_classes:
+  process_activity: {no_match: log_only}
+  file_activity: {no_match: log_only}
+  network_flow: {no_match: log_only}
+  agent_event: {no_match: log_only}
+description: "Professional-services profile -- log_only on every event class by default; real Rego rules deny unregistered/unapproved agent activity and escalate client-data context."

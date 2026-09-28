@@ -1,10 +1,7 @@
-from unittest.mock import AsyncMock, patch
-
-from shield.opa_client import OPADecision
-
 from shield.policy_engine.engine import EvaluationContext, PolicyEngine
 from shield.policy_engine.risk import assess_event
 from shield.schemas.events import Activity, FileActivity, FileInfo, ProcessActivity, ProcessInfo
+from tests.pack_test_support import install_fake_opa
 
 
 def _process(path: str, severity: str = "low"):
@@ -42,10 +39,9 @@ def test_sensitive_file_reaches_review_action_without_high_confidence_containmen
     assert assessment.human_required is False
 
 
-def test_engine_hardens_permissive_opa_result_for_suspicious_execution():
-    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as evaluate:
-        evaluate.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
-        decision = PolicyEngine().evaluate(_process("/tmp/dropper", "high"), EvaluationContext(device_id="dev-1"))
+def test_engine_hardens_permissive_opa_result_for_suspicious_execution(monkeypatch):
+    install_fake_opa(monkeypatch)
+    decision = PolicyEngine().evaluate(_process("/tmp/dropper", "high"), EvaluationContext(device_id="dev-1"))
     assert decision.decision.action == "contain"
     assert decision.rule.rule_id == "_local-risk-containment"
     assert decision.decision.confidence >= 0.90
