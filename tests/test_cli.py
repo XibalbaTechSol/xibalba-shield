@@ -566,3 +566,69 @@ def test_policy_rollback_to_unknown_hash_fails_cleanly(tmp_path, capsys):
 
     assert code == 1
     assert "FAIL" in capsys.readouterr().err
+
+
+# ---- Hermes publication is optional: bad config disables it, never the sensor ----
+
+def test_run_keeps_enforcing_when_hermes_spool_config_is_invalid(tmp_path, monkeypatch, capsys):
+    # A key file that is too short makes HermesSpool refuse to open. Before C5 this made
+    # `shield run` exit 1, which crash-loops the systemd sensor (the 03:16 outage class).
+    key = tmp_path / "hermes.key"
+    key.write_bytes(b"short")
+    monkeypatch.setenv("SHIELD_HERMES_SPOOL", str(tmp_path / "spool"))
+    monkeypatch.setenv("SHIELD_HERMES_KEY", str(key))
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-id", "test-dev", "--max-events", "2", "--dev-interval", "0",
+    ])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "processed 2 event(s)" in captured.out
+    assert "Hermes publication disabled" in captured.err
+
+
+def test_run_keeps_enforcing_when_only_one_hermes_variable_is_set(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("SHIELD_HERMES_SPOOL", str(tmp_path / "spool"))
+    monkeypatch.delenv("SHIELD_HERMES_KEY", raising=False)
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-id", "test-dev", "--max-events", "1", "--dev-interval", "0",
+    ])
+    assert code == 0
+    assert "configured together" in capsys.readouterr().err
+
+
+def test_run_rejects_unknown_hermes_scope_without_stopping(tmp_path, monkeypatch, capsys):
+    key = tmp_path / "hermes.key"
+    key.write_bytes(b"k" * 32)
+    monkeypatch.setenv("SHIELD_HERMES_SPOOL", str(tmp_path / "spool"))
+    monkeypatch.setenv("SHIELD_HERMES_KEY", str(key))
+    monkeypatch.setenv("SHIELD_HERMES_EVENT_SCOPE", "everything")
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-id", "test-dev", "--max-events", "1", "--dev-interval", "0",
+    ])
+    assert code == 0
+    assert "unknown Hermes event scope" in capsys.readouterr().err
+
+
+def test_material_scope_spools_only_material_decisions(tmp_path, monkeypatch):
+    # Dev sensor + no rules = every decision is "allow". Scope "all" spools them (the
+    # positive control); scope "material" (contain/deny/escalate) must spool none.
+    key = tmp_path / "hermes.key"
+    key.write_bytes(b"k" * 32)
+    monkeypatch.setenv("SHIELD_HERMES_KEY", str(key))
+    spooled = {}
+    for scope in ("all", "material"):
+        spool = tmp_path / f"spool-{scope}"
+        monkeypatch.setenv("SHIELD_HERMES_SPOOL", str(spool))
+        monkeypatch.setenv("SHIELD_HERMES_EVENT_SCOPE", scope)
+        code = main([
+            "--log-path", str(tmp_path / f"decisions-{scope}.jsonl"),
+            "run", "--sensor", "dev", "--device-id", "test-dev", "--tenant-id", "tenant-1",
+            "--max-events", "3", "--dev-interval", "0",
+        ])
+        assert code == 0
+        spooled[scope] = len(list((spool / "pending").glob("*.json")))
+    assert spooled["all"] == 3
+    assert spooled["material"] == 0

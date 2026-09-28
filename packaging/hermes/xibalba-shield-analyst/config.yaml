@@ -1,0 +1,35 @@
+# Config for the isolated `xibalba-shield-analyst` Hermes profile (C5 plan, decision D1).
+#
+# This profile is the Shield agent's *judgment* step only: one toolless, memory-off,
+# one-shot answer over a single redacted Shield event that the shield-hermes-analyst
+# supervisor hands it as fenced DATA. Shield's identity (DID 2ea17967...6bc4) and
+# memory stay in the `xibalba-shield` profile; the supervisor, not this model, writes
+# the validated advisory into Shield's Cortex as that DID.
+#
+# A profile's config.yaml is a full replacement, not an overlay on ~/.hermes/config.yaml,
+# so omission is what disables things here:
+#   - no `mcp_servers`  -> no Cortex/memory tools (blocks memory poisoning via telemetry)
+#   - no `plugins`      -> no integrity_telemetry / xibalba_cortex observer
+#   - no `hooks`        -> nothing for HERMES_ACCEPT_HOOKS=1 (set by -z) to auto-approve
+#   - memory off        -> the run is not recorded as a session memory anywhere
+# Built-in tools are removed by the explicit empty cli toolset list below; the
+# supervisor's canary check verifies the built agent really has zero tools.
+# Credentials: none here -- falls back to the shared ~/.hermes/auth.json Codex login.
+model:
+  default: gpt-5.6-luna
+  provider: openai-codex
+  base_url: https://chatgpt.com/backend-api/codex
+agent:
+  max_turns: 1
+  verify_on_stop: false
+  verbose: false
+  reasoning_effort: low
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+compression:
+  enabled: false
+streaming:
+  enabled: false
+platform_toolsets:
+  cli: []
