@@ -5,7 +5,13 @@ from unittest.mock import patch, AsyncMock
 import pytest
 
 from shield.opa_client import OPADecision, OPAUnavailableError
-from shield.policy_engine.engine import REGULATED_EVENT_DEFAULTS, EvaluationContext, PolicyEngine
+from shield.policy_engine.engine import (
+    DEFAULT_EVENT_DEFAULTS,
+    REGULATED_EVENT_DEFAULTS,
+    EvaluationContext,
+    PolicyEngine,
+    event_defaults_for_profile,
+)
 from shield.opa_local import selected_profile_metadata, supervised_opa
 from shield.schemas.events import (
     Activity,
@@ -222,6 +228,25 @@ def test_unknown_event_class_denies_in_enforce_mode():
         )
         decision = engine.evaluate(event, _ctx())
     assert decision.decision.action == "deny"
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected"),
+    [
+        ("smb", DEFAULT_EVENT_DEFAULTS),
+        ("professional-services", DEFAULT_EVENT_DEFAULTS),
+        ("regulated", REGULATED_EVENT_DEFAULTS),
+    ],
+)
+def test_event_defaults_for_profile_selects_the_named_map(profile, expected):
+    assert event_defaults_for_profile(profile) == expected
+
+
+@pytest.mark.parametrize("profile", ["", "unrecognized-profile"])
+def test_event_defaults_for_profile_falls_back_to_default_for_unset_or_unknown(profile):
+    """`DeviceConfig.policy_profile` defaults to "" -- an operator who never set the new
+    field must see today's existing behavior, not a KeyError or a silently different map."""
+    assert event_defaults_for_profile(profile) == DEFAULT_EVENT_DEFAULTS
 
 
 def test_malformed_raw_decision_denies_in_enforce_mode():

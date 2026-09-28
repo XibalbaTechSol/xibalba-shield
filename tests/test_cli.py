@@ -349,6 +349,54 @@ def test_run_wires_simulated_slm_backend_for_escalations(tmp_path, capsys, mock_
     assert "SIMULATED SLM" in row["decision"]["reason"]
 
 
+def test_run_wires_device_config_policy_profile_into_the_policy_engine(tmp_path, monkeypatch, capsys):
+    """docs/EXECUTION_PLAN.md A3: `cli.py`'s `_run` selects `REGULATED_EVENT_DEFAULTS` (vs.
+    the log_only-everywhere default) from `DeviceConfig.policy_profile`, not a hardcoded map.
+    Asserts the real construction path, not just `event_defaults_for_profile()` in isolation."""
+    from shield.policy_engine.engine import REGULATED_EVENT_DEFAULTS
+
+    captured_kwargs = {}
+    real_policy_engine = __import__("shield.cli", fromlist=["PolicyEngine"]).PolicyEngine
+
+    def spying_policy_engine(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return real_policy_engine(*args, **kwargs)
+
+    monkeypatch.setattr("shield.cli.PolicyEngine", spying_policy_engine)
+    config_path = _write(tmp_path / "device.json", {"device_id": "test-dev", "policy_profile": "regulated"})
+
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-config", str(config_path),
+        "--max-events", "1", "--dev-interval", "0", "--no-exporter", "--no-containment",
+    ])
+
+    assert code == 0
+    assert captured_kwargs["event_defaults"] == REGULATED_EVENT_DEFAULTS
+
+
+def test_run_defaults_to_log_only_event_defaults_without_a_policy_profile(tmp_path, monkeypatch, capsys):
+    from shield.policy_engine.engine import DEFAULT_EVENT_DEFAULTS
+
+    captured_kwargs = {}
+    real_policy_engine = __import__("shield.cli", fromlist=["PolicyEngine"]).PolicyEngine
+
+    def spying_policy_engine(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return real_policy_engine(*args, **kwargs)
+
+    monkeypatch.setattr("shield.cli.PolicyEngine", spying_policy_engine)
+
+    code = main([
+        "--log-path", str(tmp_path / "decisions.jsonl"),
+        "run", "--sensor", "dev", "--device-id", "test-dev",
+        "--max-events", "1", "--dev-interval", "0", "--no-exporter", "--no-containment",
+    ])
+
+    assert code == 0
+    assert captured_kwargs["event_defaults"] == DEFAULT_EVENT_DEFAULTS
+
+
 def test_run_requires_device_id_without_device_config(tmp_path, capsys):
     code = main([
         "--log-path", str(tmp_path / "decisions.jsonl"),

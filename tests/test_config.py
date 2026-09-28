@@ -171,6 +171,27 @@ def test_device_config_reject_policy_downgrades_must_be_boolean(tmp_path):
         load_device_config(path)
 
 
+@pytest.mark.parametrize("profile", ["", "smb", "professional-services", "regulated"])
+def test_device_config_accepts_known_policy_profiles(tmp_path, profile):
+    path = tmp_path / "device.json"
+    doc = {"device_id": "dev-1"}
+    if profile:
+        doc["policy_profile"] = profile
+    path.write_text(json.dumps(doc))
+
+    config = load_device_config(path)
+
+    assert config.policy_profile == profile
+
+
+def test_device_config_rejects_unknown_policy_profile(tmp_path):
+    path = tmp_path / "device.json"
+    path.write_text(json.dumps({"device_id": "dev-1", "policy_profile": "not-a-real-profile"}))
+
+    with pytest.raises(ConfigError, match="policy_profile"):
+        load_device_config(path)
+
+
 def test_device_config_missing_device_id_raises_config_error(tmp_path):
     path = tmp_path / "device.json"
     path.write_text(json.dumps({"tenant_id": "tenant-xyz"}))

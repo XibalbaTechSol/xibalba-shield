@@ -55,6 +55,23 @@ REGULATED_EVENT_DEFAULTS: Mapping[str, str] = {
     "agent_event": DENY,
 }
 
+# Keyed the same as shield/opa_local.py's PROFILES -- the one place a compliance vertical's
+# name already exists in this repo -- so DeviceConfig.policy_profile (config/loader.py) has
+# a single source of truth for which event_defaults a `shield run` deployment gets, instead
+# of a second hardcoded profile-name list drifting from the first.
+EVENT_DEFAULTS_BY_PROFILE: Mapping[str, Mapping[str, str]] = {
+    "smb": DEFAULT_EVENT_DEFAULTS,
+    "professional-services": DEFAULT_EVENT_DEFAULTS,
+    "regulated": REGULATED_EVENT_DEFAULTS,
+}
+
+
+def event_defaults_for_profile(profile: str) -> Mapping[str, str]:
+    """`profile` is `DeviceConfig.policy_profile` -- "" (not set) or an unrecognized value
+    both fall back to `DEFAULT_EVENT_DEFAULTS`, today's existing behavior, rather than
+    raising: an operator who never set this new field must see no behavior change."""
+    return EVENT_DEFAULTS_BY_PROFILE.get(profile, DEFAULT_EVENT_DEFAULTS)
+
 # Reason-code substrings that distinguish Shield's finer-grained enforcement actions from
 # a plain `deny` under the coarser 3-way decision contract (permit/deny/log_only) -- see
 # `_translate_decision`'s docstring for why this mapping exists at all.

@@ -23,7 +23,7 @@ from .agent_core.registry import AgentRegistry, DeviceContext
 from .agent_core.router import EventRouter
 from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_config, load_policy_bundle
 from .config.hot_reload import PolicyHotReloader
-from .policy_engine import PolicyEngine
+from .policy_engine import PolicyEngine, event_defaults_for_profile
 
 DEFAULT_LOG_PATH = Path.home() / ".xibalba-shield" / "decisions.jsonl"
 
@@ -254,7 +254,10 @@ def _run(args: argparse.Namespace) -> int:
             print(f"shield run: unable to start supervised OPA: {exc}", file=sys.stderr)
             return 1
 
-    policy_engine = PolicyEngine(opa_url=args.opa_url, policy_version=policy_version, policy_hash=policy_hash)
+    policy_engine = PolicyEngine(
+        opa_url=args.opa_url, policy_version=policy_version, policy_hash=policy_hash,
+        event_defaults=event_defaults_for_profile(device_config.policy_profile),
+    )
     from .runtime_status import publish_runtime_status
     publish_runtime_status(
         device_config=device_config,

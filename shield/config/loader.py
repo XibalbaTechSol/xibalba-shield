@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..policy_engine import EVENT_DEFAULTS_BY_PROFILE
 from ..schemas.policy_rule import PolicyRule
 
 
@@ -154,6 +155,12 @@ class DeviceConfig:
     device_id: str
     tenant_id: str = ""
     device_role: str = ""
+    # docs/EXECUTION_PLAN.md A3 "permit means permitted": which compliance vertical this
+    # device's PolicyEngine uses for its per-event-class no-match default (empty string ==
+    # today's existing behavior, log_only everywhere). Deliberately just a name, not a
+    # guarantee that the matching Rego bundle is actually loaded into OPA -- that's still an
+    # out-of-band operational concern (see cli.py's own `--opa-command`/`--opa-url`).
+    policy_profile: str = ""
     bcc_middleware_url: str = "http://localhost:8000"
     oracle_url: str = "http://localhost:8080"
     backend_url: str = ""
@@ -215,6 +222,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "reject_policy_downgrades",
         "trusted_signing_keys",
         "require_signed_policy",
+        "policy_profile",
     }
     unknown = set(doc.keys()) - known_fields
     if unknown:
@@ -238,4 +246,9 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         raise ConfigError(f"device config file {p}: every \"trusted_signing_keys\" entry must be a string")
     if "require_signed_policy" in kwargs and not isinstance(kwargs["require_signed_policy"], bool):
         raise ConfigError(f"device config file {p}: \"require_signed_policy\" must be a boolean")
+    if kwargs.get("policy_profile", "") not in ({"", *EVENT_DEFAULTS_BY_PROFILE}):
+        raise ConfigError(
+            f"device config file {p}: \"policy_profile\" must be one of "
+            f"{sorted(EVENT_DEFAULTS_BY_PROFILE)} or omitted, got {kwargs['policy_profile']!r}"
+        )
     return DeviceConfig(**kwargs)
