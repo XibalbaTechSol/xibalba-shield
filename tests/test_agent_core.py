@@ -14,16 +14,14 @@ from shield.schemas.events import (
 )
 from shield.schemas.policy_rule import PolicyRule
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
-from shield.opa_client import OPADecision
+from tests.pack_test_support import install_fake_opa
 
 @pytest.fixture(autouse=True)
-def mock_opa():
-    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
-        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
-        yield mock_eval
+def mock_opa(monkeypatch):
+    return install_fake_opa(monkeypatch)
 
 def _router(**kwargs):
     device = DeviceContext(device_id="dev-1", tenant_id="t", device_role="workstation")

@@ -11,14 +11,23 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
-from shield.opa_client import OPADecision
+import pytest
 
 from shield.config import PolicyHotReloader
 from shield.policy_engine import PolicyEngine
 from shield.policy_engine.engine import EvaluationContext
 from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
+from tests.pack_test_support import install_fake_opa
+from shield.opa_local import load_signed_profile_pack
+
+
+@pytest.fixture(autouse=True)
+def mock_opa(monkeypatch):
+    # Hot-reload status tests intentionally exercise the legacy metadata path with
+    # no active pack. The one decision test supplies a verified pack explicitly.
+    return install_fake_opa(monkeypatch, inject_pack=False)
 
 
 def _write_rules(path, rule_ids: list[str], revision: int | None = None):
@@ -159,14 +168,13 @@ def test_malformed_edit_keeps_last_known_good_rules(tmp_path):
     assert reloaded is False
 
 
-@patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock)
-def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_path):
+def test_malformed_edit_preserves_prior_decision_behavior(mock_opa, tmp_path):
     """The safety property is enforcement, not just rule-list preservation.
 
     Rewritten post-OPA-delegation (2026-08-07, commit f86c0f0): `PolicyEngine` no longer
     takes a `rules=` list or matches JSON conditions/actions itself -- actual rule matching
-    is OPA's job now (see policy_engine/engine.py, test_policy_engine.py's own
-    `@patch(...opa_evaluate...)` pattern, which this mirrors). What `PolicyHotReloader`
+    is OPA's job now (see policy_engine/engine.py and test_policy_engine.py's pack-aware
+    OPA seam). What `PolicyHotReloader`
     still controls on `PolicyEngine` is exactly `policy_version`/`policy_hash` (see
     config/hot_reload.py) -- those are what must stay pinned to the last-known-good bundle
     across a malformed edit, echoed unchanged in every decision OPA produces in the
@@ -174,9 +182,7 @@ def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_pat
     `reloaded is False`; this test proves the consequence that matters -- a live decision's
     `policy.version`/`policy.hash` fields don't silently change underneath a bad edit.
     """
-    mock_evaluate.return_value = OPADecision(
-        allow=False,
-        raw_result={
+    mock_opa.return_value = {
             "action": "contain",
             "message": "Blocked.",
             "rule_id": "block-python",
@@ -187,13 +193,12 @@ def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_pat
             # see docs/EXECUTION_PLAN.md A3.
             "decision": "deny",
             "reason_code": "TEST_CONTAIN_BLOCK_PYTHON",
-        },
-    )
+        }
 
     path = tmp_path / "rules.json"
     _write_rules(path, ["block-python"])
 
-    engine = PolicyEngine()
+    engine = PolicyEngine(pack=load_signed_profile_pack("smb"))
     reloader = PolicyHotReloader(engine, path)
     reloader.check_and_reload()
 
@@ -205,7 +210,7 @@ def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_pat
     ctx = EvaluationContext(tenant_id="tenant-xyz", device_role="clinical_desktop", device_id="dev-1")
     before = engine.evaluate(event, ctx)
     assert before.decision.action == "contain"
-    assert before.policy.version == "v-1"
+    assert before.policy.version == "1.0.0"
 
     path.write_text("{not valid json")
     _bump_mtime(path, 5)
@@ -215,7 +220,7 @@ def test_malformed_edit_preserves_prior_decision_behavior(mock_evaluate, tmp_pat
 
     after = engine.evaluate(event, ctx)
     assert after.decision.action == "contain"
-    assert after.policy.version == "v-1"  # unchanged by the malformed edit, not blanked/bumped
+    assert after.policy.version == "1.0.0"  # unchanged by the malformed edit, not blanked/bumped
     after = engine.evaluate(event, ctx)
     assert after.decision.action == before.decision.action
     assert after.rule.rule_id == before.rule.rule_id

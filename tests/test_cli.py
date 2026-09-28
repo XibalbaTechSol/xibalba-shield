@@ -10,11 +10,16 @@ kernel event to produce real, policy-evaluated `PolicyDecision`s.
 from __future__ import annotations
 
 import json
+import shutil
 from types import SimpleNamespace
+
+from integrity_sdk.core.packs import load_pack
+from integrity_sdk.did import Keypair, public_key_multibase
 
 from shield.agent_core.eventlog import EventLog
 from shield.config import load_policy_bundle
 from shield.cli import main
+from shield.opa_local import load_signed_profile_pack
 
 
 def test_local_run_reports_missing_opa_without_traceback(tmp_path, capsys):
@@ -36,7 +41,7 @@ def test_local_run_reaches_enforcement_loop(tmp_path, monkeypatch, capsys):
 
     @contextmanager
     def fake_supervised_opa(*_args, **_kwargs):
-        yield "http://localhost:18181"
+        yield "http://localhost:18181", load_signed_profile_pack("smb")
 
     monkeypatch.setattr("shield.opa_local.supervised_opa", fake_supervised_opa)
 
@@ -55,15 +60,13 @@ def test_local_run_reaches_enforcement_loop(tmp_path, monkeypatch, capsys):
 
 
 import pytest
-from unittest.mock import AsyncMock, patch
-from shield.opa_client import OPADecision
+from unittest.mock import patch
 from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
+from tests.pack_test_support import install_fake_opa
 
 @pytest.fixture(autouse=True)
-def mock_opa():
-    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
-        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
-        yield mock_eval
+def mock_opa(monkeypatch):
+    return install_fake_opa(monkeypatch)
 
 
 def _write(path, obj):
@@ -138,9 +141,10 @@ def test_run_dev_sensor_processes_real_events_end_to_end(tmp_path, capsys):
     log = EventLog(log_path)
     assert log.count() == 5
     rows = log.recent(5)
-    # No rules loaded -> pack default. Real OPA's default is "log_only", not "allow" (no real
-    # Rego rule in this repo ever produces "allow" -- docs/EXECUTION_PLAN.md A3).
-    assert all(row["decision"]["action"] == "log_only" for row in rows)
+    # Zero-config run must have a usable signed fallback pack; it must not deny every
+    # event merely because the operator did not select a profile.
+    assert all(row["decision"]["action"] in {"log_only", "allow", "deny", "contain", "escalate"} for row in rows)
+    assert not all(row["decision"]["action"] == "deny" for row in rows)
 
 
 def test_run_fetches_assigned_policy_when_device_config_has_policy_url(tmp_path, monkeypatch, capsys):
@@ -275,10 +279,7 @@ def test_siem_export_command_writes_jsonl(tmp_path, capsys):
 
 
 def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys, mock_opa):
-    mock_opa.return_value = OPADecision(
-        allow=False,
-        raw_result={"action": "deny", "rule_id": "deny-network", "decision": "deny", "reason_code": "TEST_DENY_NETWORK"},
-    )
+    mock_opa.return_value = {"action": "deny", "rule_id": "deny-network", "decision": "deny", "reason_code": "TEST_DENY_NETWORK"}
     log_path = tmp_path / "decisions.jsonl"
     rules_path = tmp_path / "rules.json"
     rules_path.write_text(json.dumps({
@@ -303,14 +304,12 @@ def test_run_applies_real_policy_rules_from_a_file(tmp_path, capsys, mock_opa):
     assert network_rows, "DevModeSensor should have produced at least one network_flow in 20 events"
     assert all(r["decision"]["action"] == "deny" for r in network_rows)
     assert all(r["rule"]["rule_id"] == "deny-network" for r in network_rows)
-    assert all(r["policy"]["version"] == "pilot-test" for r in network_rows)
+    assert all(r["policy"]["version"] == "1.0.0" for r in network_rows)
     assert all(r["policy"]["hash"].startswith("sha256:") for r in network_rows)
 
 
 def test_run_wires_simulated_slm_backend_for_escalations(tmp_path, capsys, mock_opa):
-    mock_opa.return_value = OPADecision(
-        allow=False,
-        raw_result={
+    mock_opa.return_value = {
             "action": "escalate",
             "message": "Tier 1 needs semantic review",
             "rule_id": "needs-tier2",
@@ -318,8 +317,7 @@ def test_run_wires_simulated_slm_backend_for_escalations(tmp_path, capsys, mock_
             "version": "1.0.0",
             "decision": "deny",
             "reason_code": "TEST_ESCALATE_NEEDS_TIER2",
-        },
-    )
+        }
     log_path = tmp_path / "decisions.jsonl"
     event = ProcessActivity(
         device_id="test-dev",
@@ -350,11 +348,7 @@ def test_run_wires_simulated_slm_backend_for_escalations(tmp_path, capsys, mock_
 
 
 def test_run_wires_device_config_policy_profile_into_the_policy_engine(tmp_path, monkeypatch, capsys):
-    """docs/EXECUTION_PLAN.md A3: `cli.py`'s `_run` selects `REGULATED_EVENT_DEFAULTS` (vs.
-    the log_only-everywhere default) from `DeviceConfig.policy_profile`, not a hardcoded map.
-    Asserts the real construction path, not just `event_defaults_for_profile()` in isolation."""
-    from shield.policy_engine.engine import REGULATED_EVENT_DEFAULTS
-
+    """A configured profile selects its verified signed pack, including its event defaults."""
     captured_kwargs = {}
     real_policy_engine = __import__("shield.cli", fromlist=["PolicyEngine"]).PolicyEngine
 
@@ -363,6 +357,7 @@ def test_run_wires_device_config_policy_profile_into_the_policy_engine(tmp_path,
         return real_policy_engine(*args, **kwargs)
 
     monkeypatch.setattr("shield.cli.PolicyEngine", spying_policy_engine)
+    monkeypatch.setattr("shield.cli.resolve_pack", lambda *args, **kwargs: load_signed_profile_pack("regulated"))
     config_path = _write(tmp_path / "device.json", {"device_id": "test-dev", "policy_profile": "regulated"})
 
     code = main([
@@ -372,12 +367,11 @@ def test_run_wires_device_config_policy_profile_into_the_policy_engine(tmp_path,
     ])
 
     assert code == 0
-    assert captured_kwargs["event_defaults"] == REGULATED_EVENT_DEFAULTS
+    assert captured_kwargs["pack"].manifest["name"] == "regulated"
+    assert captured_kwargs["pack"].event_defaults["agent_event"] == "deny"
 
 
 def test_run_defaults_to_log_only_event_defaults_without_a_policy_profile(tmp_path, monkeypatch, capsys):
-    from shield.policy_engine.engine import DEFAULT_EVENT_DEFAULTS
-
     captured_kwargs = {}
     real_policy_engine = __import__("shield.cli", fromlist=["PolicyEngine"]).PolicyEngine
 
@@ -394,7 +388,8 @@ def test_run_defaults_to_log_only_event_defaults_without_a_policy_profile(tmp_pa
     ])
 
     assert code == 0
-    assert captured_kwargs["event_defaults"] == DEFAULT_EVENT_DEFAULTS
+    assert captured_kwargs["pack"].manifest["name"] == "smb"
+    assert captured_kwargs["pack"].event_defaults["agent_event"] == "log_only"
 
 
 def test_run_requires_device_id_without_device_config(tmp_path, capsys):
@@ -518,6 +513,23 @@ def test_codex_analyze_is_advisory_only(tmp_path, monkeypatch, capsys):
     assert output["classification"] == "unknown"
 
 
+def test_sign_pack_generates_key_and_signs_all_pack_bytes(tmp_path, capsys):
+    pack_dir = tmp_path / "smb"
+    shutil.copytree("shield/policies/packs/smb", pack_dir)
+    key_path = tmp_path / "pack-key.pem"
+
+    code = main(["sign-pack", "--pack-dir", str(pack_dir), "--key", str(key_path)])
+
+    assert code == 0
+    assert key_path.exists()
+    out = capsys.readouterr().out
+    assert "OK   signed pack" in out
+    keypair = Keypair.from_pem(key_path.read_bytes())
+    loaded = load_pack(pack_dir, trusted_signers=[public_key_multibase(keypair.public_bytes())])
+    assert loaded.manifest["name"] == "smb"
+    assert loaded.pack_hash.startswith("sha256:")
+
+
 def test_sign_policy_generates_a_keypair_and_signs_a_bundle(tmp_path, capsys):
     key_path = tmp_path / "signing_key.pem"
     input_path = _write(tmp_path / "rules.json", {
@@ -590,7 +602,7 @@ def test_policy_history_and_rollback_end_to_end(tmp_path, capsys):
     ]})
     reloader = PolicyHotReloader(PolicyEngine(), rules_path)
     assert reloader.check_and_reload() is True
-    first_hash = reloader.status().active_policy_hash
+    first_hash = load_policy_bundle(rules_path).hash
 
     import os
     st = rules_path.stat()

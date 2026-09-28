@@ -105,6 +105,8 @@ class PolicyEngine:
         self._opa_healthy: bool | None = None
         self._last_opa_check_at: str | None = None
         self._last_opa_error: str | None = None
+        self._legacy_policy_version = ""
+        self._legacy_policy_hash = ""
         if pack is not None:
             self.install_pack(pack)
 
@@ -120,6 +122,27 @@ class PolicyEngine:
             self._pack = None
             self._opa_client.install(pack)
             self._pack = pack
+
+    @property
+    def policy_version(self) -> str:
+        """Status metadata; the verified pack remains enforcement authority."""
+        if self._pack is not None:
+            return str(self._pack.manifest["version"])
+        return self._legacy_policy_version
+
+    @policy_version.setter
+    def policy_version(self, _value: str) -> None:
+        if self._pack is None:
+            self._legacy_policy_version = _value
+
+    @property
+    def policy_hash(self) -> str:
+        return self._pack.pack_hash if self._pack is not None else self._legacy_policy_hash
+
+    @policy_hash.setter
+    def policy_hash(self, _value: str) -> None:
+        if self._pack is None:
+            self._legacy_policy_hash = _value
 
     def health_status(self) -> dict[str, str | bool | None]:
         """Return advisory runtime health from the most recent policy evaluation.

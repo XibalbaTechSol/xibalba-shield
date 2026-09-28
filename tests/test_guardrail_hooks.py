@@ -31,14 +31,12 @@ from shield.policy_engine.engine import PolicyEngine
 from shield.schemas.policy_rule import PolicyRule
 
 
-from unittest.mock import AsyncMock, patch
-from shield.opa_client import OPADecision
+from unittest.mock import patch
+from tests.pack_test_support import install_fake_opa
 
 @pytest.fixture(autouse=True)
-def mock_opa():
-    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
-        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
-        yield mock_eval
+def mock_opa(monkeypatch):
+    return install_fake_opa(monkeypatch)
 
 def _router():
     return EventRouter(
@@ -50,9 +48,7 @@ def _router():
 def set_mock_deny(mock_eval):
     # decision/reason_code required: without them resolve() treats this as NO_MATCH and
     # applies the pack default (log_only), not the mocked "deny" -- docs/EXECUTION_PLAN.md A3.
-    mock_eval.return_value = OPADecision(
-        allow=False, raw_result={"action": "deny", "decision": "deny", "reason_code": "TEST_DENY"}
-    )
+    mock_eval.return_value = {"action": "deny", "decision": "deny", "reason_code": "TEST_DENY"}
 
 
 # ---- ingress ----
@@ -147,6 +143,7 @@ def test_guard_output_denies_high_risk_and_never_invokes_call(mock_opa):
 # ---- post-action verification ----
 
 def test_verify_post_action_matching_hashes_is_low_risk_and_returns_decision(mock_opa):
+    mock_opa.return_value = {}
     router = _router()
     decision = verify_post_action(
         router, agent_id="a1", agent_name="Agent", tool_name="write_file",

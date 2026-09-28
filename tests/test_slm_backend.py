@@ -12,19 +12,14 @@ from shield.agent_core.slm_backend import (
 from shield.policy_engine.engine import EvaluationContext, PolicyEngine
 from shield.schemas.events import Activity, ProcessActivity, ProcessInfo
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-from shield.opa_client import OPADecision
+from tests.pack_test_support import install_fake_opa
 
 
 @pytest.fixture(autouse=True)
-def mock_opa():
-    # Same convention as test_agent_core.py -- PolicyEngine delegates to a real OPA REST
-    # client; these tests exercise slm_backend.py, not OPA itself, so a fixed OPA response
-    # keeps Tier 1 deterministic without needing a live OPA server.
-    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
-        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
-        yield mock_eval
+def mock_opa(monkeypatch):
+    return install_fake_opa(monkeypatch)
 
 
 def _ctx() -> EvaluationContext:

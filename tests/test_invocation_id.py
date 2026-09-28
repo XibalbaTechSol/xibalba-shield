@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from shield.opa_client import OPADecision
+from tests.pack_test_support import install_fake_opa
 
 from shield.agent_core.eventlog import EventLog
 from shield.agent_core.registry import AgentRegistry, DeviceContext
@@ -24,10 +24,8 @@ from shield.schemas.events import (
 
 
 @pytest.fixture(autouse=True)
-def mock_opa():
-    with patch("shield.policy_engine.engine.opa_evaluate", new_callable=AsyncMock) as mock_eval:
-        mock_eval.return_value = OPADecision(allow=True, raw_result={"action": "allow"})
-        yield mock_eval
+def mock_opa(monkeypatch):
+    return install_fake_opa(monkeypatch)
 
 
 def _decision(**kwargs) -> PolicyDecision:

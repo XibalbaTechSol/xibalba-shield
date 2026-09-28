@@ -91,13 +91,18 @@ def supervised_opa(profile: str, *, opa_binary: str = "opa", port: int | None = 
                     result = client.query(pack, probe_input)
                     if not isinstance(result, dict) or result.get("rule_id") != expected_rule or result.get("version") != "1.0.0":
                         raise RuntimeError("OPA readiness probe returned an unexpected selected-profile rule")
-                    yield url, pack
-                    return
+                    break
                 except (OpaError, OSError, ValueError, RuntimeError) as exc:
                     last_error = exc
                     installed = False  # OPA may not have been up yet for `install` to have taken
                     time.sleep(0.05)
-            raise TimeoutError(f"OPA profile {profile!r} did not become ready: {last_error}")
+            else:
+                raise TimeoutError(f"OPA profile {profile!r} did not become ready: {last_error}")
+
+            # Keep caller exceptions outside the readiness retry handler. A failed query in
+            # the caller is a real test/application failure, not evidence that OPA needs
+            # another startup attempt; catching it here breaks context-manager semantics.
+            yield url, pack
         finally:
             if process.poll() is None:
                 process.terminate()
