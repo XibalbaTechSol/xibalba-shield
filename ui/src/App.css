@@ -9920,6 +9920,62 @@ h1, h2, h3, h4, b {
   background: transparent !important;
 }
 
+/* Remaining light-mode neutral wells should read as part of the page field,
+   not as unrelated white cards. */
+.console.theme-light input:not([type='checkbox']):not([type='radio']),
+.console.theme-light select,
+.console.theme-light textarea,
+.console.theme-light .form-select,
+.console.theme-light .toggle-item,
+.console.theme-light .resource-card,
+.console.theme-light .catalog-card,
+.console.theme-light .hybrid-detail-panel,
+.console.theme-light .audit-event,
+.console.theme-light .empty,
+.console.theme-light .empty-stream-state,
+.console.theme-light .empty-row,
+.console.theme-light .posture-option-card,
+.console.theme-light .active-token-row,
+.console.theme-light .token-reveal-row,
+.console.theme-light .session-props-grid > div,
+.console.theme-light .form-feedback-alert,
+.console.theme-light .minted-token-alert,
+.console.theme-light .json-rows pre,
+.console.theme-light .json-rows details,
+.console.theme-light .signal-routing-map {
+  background-color: transparent !important;
+  box-shadow: none;
+}
+
+.console.theme-light .form-select:focus,
+.console.theme-light input:not([type='checkbox']):not([type='radio']):focus,
+.console.theme-light select:focus,
+.console.theme-light textarea:focus {
+  background-color: transparent !important;
+}
+
+.console .audit-event,
+.console .toggle-item,
+.console .resource-card,
+.console .catalog-card,
+.console .hybrid-detail-panel,
+.console .posture-option-card,
+.console .active-token-row,
+.console .token-reveal-row,
+.console .session-props-grid > div {
+  border-radius: 0 !important;
+}
+
+.console.theme-light .json-rows details {
+  border-radius: 0 !important;
+}
+
+.console .agent-unified-workspace .action-form,
+.console .agent-workspace .action-form {
+  width: 100%;
+  max-width: none;
+}
+
 /* Keep only stateful surfaces filled. */
 .console.theme-command-center .routing-node.active,
 .console.theme-command-center .endpoint-item.active,
