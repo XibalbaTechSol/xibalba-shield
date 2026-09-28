@@ -183,10 +183,47 @@ export function SettingsChangeQueue({ api }) {
     try { await api.decideSettingsChangeRequest(requestId, action); await refresh(); setMessage(`Change ${completed[action] || action}.`) }
     catch (error) { setMessage(error instanceof Error ? error.message : String(error)) }
   }
-  return <article className="settings-card"><div className="settings-card-header"><div className="settings-card-title"><ShieldAlert size={18} /><h3>Containment & guardrail approvals</h3></div><span className="live-status-pill">Two-step change control</span></div><p className="field-hint">High-impact settings are queued for explicit approval and can be rolled back without editing raw configuration.</p>{requests.length === 0 ? <p className="empty-state">No pending or historical change requests.</p> : <div className="audit-event-list">{requests.slice(0, 8).map((request) => <div className="audit-event" key={request.request_id}><b>{request.category} · {request.status}</b><small>{request.request_id} · {request.created_at}</small><div className="settings-actions-footer">{request.status === 'pending' && <><button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'approve')}>Approve</button><button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'reject')}>Reject</button></>}{request.status === 'approved' && <button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'rollback')}>Rollback</button>}</div></div>)}</div>}{message && <span className="form-message" aria-live="polite">{message}</span>}</article>
+  return (
+    <article className="settings-card change-queue-card">
+      <div className="settings-card-header">
+        <div className="settings-card-title">
+          <ShieldAlert size={18} />
+          <div>
+            <p className="eyebrow">GOVERNANCE GATES</p>
+            <h3>Containment &amp; guardrail approvals</h3>
+          </div>
+        </div>
+        <span className="live-status-pill">Two-step change control</span>
+      </div>
+      <p className="settings-card-desc">High-impact settings are queued for explicit approval and can be rolled back without editing raw configuration.</p>
+      {requests.length === 0 ? <p className="empty-state">No pending or historical change requests.</p> : (
+        <div className="change-queue-list">
+          {requests.slice(0, 8).map((request) => (
+            <div className="change-request-row" key={request.request_id}>
+              <div className="change-request-copy">
+                <div className="change-request-title">
+                  <b>{request.category}</b>
+                  <span className={`change-request-status ${request.status}`}>{request.status}</span>
+                </div>
+                <small>{request.request_id} · {request.created_at}</small>
+              </div>
+              <div className="change-request-actions">
+                {request.status === 'pending' && <>
+                  <button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'approve')}>Approve</button>
+                  <button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'reject')}>Reject</button>
+                </>}
+                {request.status === 'approved' && <button type="button" className="secondary-btn" onClick={() => decide(request.request_id, 'rollback')}>Rollback</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {message && <span className="form-message" aria-live="polite">{message}</span>}
+    </article>
+  )
 }
 
-export function SettingsView({ connection, logout, data = {}, theme = 'legacy', onThemeChange }) {
+export function SettingsView({ connection, logout, data = {}, theme = 'command-center', onThemeChange, embedded = false }) {
   const account = connection.account || {}
   const [activeTab, setActiveTab] = useState('posture')
   const [message, setMessage] = useState('')
@@ -301,7 +338,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'legacy', 
     const nextTheme = event.target.value
     writeSession('shield-console-theme', nextTheme)
     onThemeChange?.(nextTheme)
-    setThemeMessage(nextTheme === 'command-center' ? 'Command Center theme applied.' : 'Legacy Shield theme restored.')
+    setThemeMessage(nextTheme === 'command-center' ? 'Dark Command Center theme applied.' : 'Light mock theme applied.')
     window.setTimeout(() => setThemeMessage(''), 3000)
   }
 
@@ -379,9 +416,9 @@ export function SettingsView({ connection, logout, data = {}, theme = 'legacy', 
   }
 
   return (
-    <div className="settings-container">
+    <div className={`settings-container${embedded ? ' settings-container-embedded' : ''}`}>
       {/* Header */}
-      <header className="view-header">
+      {!embedded && <header className="view-header">
         <div className="eyebrow-badge">
           <Sliders size={13} className="pulse-icon" />
           <span>ENTERPRISE CONTROL PLANE</span>
@@ -390,10 +427,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'legacy', 
         <span>
           Configure autonomous containment modes, cryptographic tokens, alert routing, and tenant administrative controls.
         </span>
-        <small className="evidence-label">
-          Evidence class: authenticated local control-plane data; synthetic/demo records are labeled explicitly.
-        </small>
-      </header>
+      </header>}
 
       {/* Settings Navigation Tabs */}
       <div className="settings-tabs-bar" role="tablist" aria-label="Settings sections">
@@ -492,15 +526,15 @@ export function SettingsView({ connection, logout, data = {}, theme = 'legacy', 
               </div>
               <p className="settings-card-desc">Choose how the Shield console is presented. This changes the UI theme only; it does not change endpoint policy, telemetry, or enforcement behavior.</p>
               <div className="theme-choice-grid" role="radiogroup" aria-label="Console theme">
-                <label className={`theme-choice ${theme === 'legacy' ? 'selected' : ''}`}>
-                  <input type="radio" name="consoleTheme" value="legacy" checked={theme === 'legacy'} onChange={handleThemeChange} />
-                  <span className="theme-swatch theme-swatch-legacy" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Legacy Shield</b><small>Original dark operator console</small></span>
-                </label>
                 <label className={`theme-choice ${theme === 'command-center' ? 'selected' : ''}`}>
                   <input type="radio" name="consoleTheme" value="command-center" checked={theme === 'command-center'} onChange={handleThemeChange} />
                   <span className="theme-swatch theme-swatch-command" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Command Center</b><small>Light evidence workspace</small></span>
+                  <span><b>Dark Command Center</b><small>Dark industrial control plane</small></span>
+                </label>
+                <label className={`theme-choice ${theme === 'light' ? 'selected' : ''}`}>
+                  <input type="radio" name="consoleTheme" value="light" checked={theme === 'light'} onChange={handleThemeChange} />
+                  <span className="theme-swatch theme-swatch-light" aria-hidden="true"><i /><i /><i /></span>
+                  <span><b>Light</b><small>Bright operator workspace</small></span>
                 </label>
               </div>
               {themeMessage && <p className="form-message" role="status" aria-live="polite">{themeMessage}</p>}
@@ -795,8 +829,8 @@ export function SettingsView({ connection, logout, data = {}, theme = 'legacy', 
               <label className="toggle-item">
                 <input type="checkbox" checked={realOnly} onChange={(e) => setRealOnly(e.target.checked)} />
                 <div>
-                  <b>Real telemetry only</b>
-                  <p>Real device telemetry only. Synthetic and preview records are never shown in this operator workflow.</p>
+                  <b>Authenticated telemetry</b>
+                  <p>Use authenticated device telemetry only. Synthetic and preview records are never shown in this operator workflow.</p>
                 </div>
               </label>
               <label className="toggle-item">

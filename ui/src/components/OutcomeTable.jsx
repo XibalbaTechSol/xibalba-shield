@@ -20,14 +20,13 @@ export function OutcomeTable({ outcomes }) {
       <article className="panel events">
         <PanelTitle
           title="Enforcement outcomes"
-          copy="Recorded containment attempts, including failures"
+          copy="Containment attempts and their verified runtime outcomes"
         />
-        <div className="event-table" role="region" aria-label="Enforcement outcomes table" tabIndex={0}>
+        <div className="event-table outcome-ledger" role="region" aria-label="Enforcement outcomes table" tabIndex={0}>
           <header>
-            <span>RESULT</span>
-            <span>ACTION</span>
-            <span>DEVICE</span>
-            <span>DETAIL</span>
+            <span>OUTCOME</span>
+            <span>DEVICE / TARGET</span>
+            <span>RUNTIME DETAIL</span>
             <span>TIME</span>
           </header>
           {outcomes && outcomes.length > 0 ? (
@@ -36,21 +35,18 @@ export function OutcomeTable({ outcomes }) {
               const decision = o.completed === false ? 'failed' : o.decision || o.action || 'recorded'
               return (
                 <button
-                  className="event-row"
+                  className="event-row outcome-row"
                   type="button"
                   key={record.id || i}
                   onClick={() => setSelected(record)}
                   aria-haspopup="dialog"
                 >
-                  <span>
+                  <span className="outcome-status-cell">
                     <i className={decision} aria-hidden="true" />
-                    <b>{decision}</b>
+                    <span><b>{decision}</b><small>{o.action || 'recorded'}</small></span>
                   </span>
-                  <code>{o.action || '—'}</code>
-                  <span>{record.device_id || o.device_id || '—'}</span>
-                  <code className="detail-truncate" title={o.error || o.target || o.event_id || ''}>
-                    {o.error || o.target || o.event_id || '—'}
-                  </code>
+                  <span className="outcome-target-cell"><b>{record.device_id || o.device_id || '—'}</b><small>{o.target || o.event_id || 'No target recorded'}</small></span>
+                  <span className="outcome-detail-cell"><code className="detail-truncate" title={o.error || o.reason || o.event_id || ''}>{o.error || o.reason || o.event_id || 'No failure detail recorded'}</code><small>{o.completed === false ? 'Runtime proof failed' : 'Recorded locally'}</small></span>
                   <small>{record.created_at || o.time || '—'}</small>
                 </button>
               )

@@ -27,7 +27,7 @@ function normalizeAction(action) {
   return ACTION_ALIASES[value] || value
 }
 
-export function EventStreamView({ data }) {
+export function EventStreamView({ data, timeRange = '24h' }) {
   const [search, setSearch] = useState('')
   const [actionFilter, setActionFilter] = useState('all')
   const [classFilter, setClassFilter] = useState('all')
@@ -47,6 +47,8 @@ export function EventStreamView({ data }) {
       reason: `${Number(item.count || item.observation_count || 0).toLocaleString()} observed ${item.event_class || 'system'} activities in this minute.`,
     }))
 
+    const rangeMs = { '24h': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000, '30d': 30 * 24 * 60 * 60 * 1000 }[timeRange]
+    const cutoff = rangeMs ? Date.now() - rangeMs : 0
     return [...decisions, ...testEvents, ...rollups]
       .map((item, idx) => {
       const dec = item.decision || {}
@@ -87,8 +89,13 @@ export function EventStreamView({ data }) {
         observationCount: Number(item.count || item.observation_count || 1),
       }
       })
+      .filter((event) => {
+        if (!cutoff) return true
+        const timestamp = new Date(event.time).getTime()
+        return !Number.isFinite(timestamp) || timestamp >= cutoff
+      })
       .sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
-  }, [data.summary, data.events])
+  }, [data.summary, data.events, timeRange])
 
   // Filter events
   const filteredEvents = useMemo(() => {
@@ -252,8 +259,16 @@ export function EventStreamView({ data }) {
         </div>
       </div>
 
-      {/* Stream Cards */}
-      <div className="event-cards-stream">
+      <div className="event-ledger-intro">
+        <div>
+          <span className="eyebrow">EVENT LEDGER</span>
+          <b>{filteredEvents.length} visible record{filteredEvents.length === 1 ? '' : 's'}</b>
+        </div>
+        <small>Newest first · aggregated observations stay loss-bounded</small>
+      </div>
+
+      {/* Compact decision ledger */}
+      <div className="event-cards-stream" role="list" aria-label="Decision event ledger">
         {filteredEvents.length === 0 ? (
           <div className="empty-stream-state">
             <Activity size={32} />
@@ -275,7 +290,7 @@ export function EventStreamView({ data }) {
           filteredEvents.map((evt, idx) => {
             const isExpanded = expandedRowIndex === idx
             return (
-              <article key={`${evt.id}-${idx}`} className={`event-stream-card action-${evt.action}`}>
+              <article key={`${evt.id}-${idx}`} className={`event-stream-card event-ledger-row action-${evt.action}`} role="listitem">
                 {/* Event Card Header */}
                 <div className="event-card-top">
                   <div className="event-badges-row">
@@ -311,25 +326,16 @@ export function EventStreamView({ data }) {
                   <span className="event-id-ref">ID: <code>{evt.id}</code></span>
                 </div>
 
-                {/* Prominent Agent Reasoning Callout */}
-                <div className="agent-reasoning-callout">
-                  <div className="reasoning-header">
-                    <Brain size={14} className="reasoning-icon" />
-                    <b>{evt.eventClass === 'agent_event' ? (evt.agentId ? 'Authenticated agent attribution' : 'Agent event · identity unbound') : 'Shield policy evaluation'}</b>
-                    <span className="matched-rule-tag">
-                      <Shield size={11} /> Rule: <code>{evt.ruleName}</code> ({evt.ruleId} v{evt.ruleVersion})
-                    </span>
+                {/* Compact observation summary; full evidence remains on demand. */}
+                <div className="event-observation-summary">
+                  <div className="event-observation-title">
+                    <b>{evt.eventClass === 'agent_event' ? (evt.agentId ? 'Authenticated agent' : 'Unbound agent event') : 'Shield policy evaluation'}</b>
+                    <span className="event-observation-rule">{evt.ruleName}</span>
                   </div>
-                  <p className="reasoning-rationale">
-                    {evt.reason}{evt.eventClass === 'agent_event' && !evt.agentId ? ' This event is device-scoped until a canonical agent identity is attached.' : ''}
-                  </p>
-                  <div className="reasoning-footer-meta">
-                    <span className="guardrail-tier">Governance Tier: {evt.tier}</span>
-                    <span className="export-status">
-                      {evt.source === 'observation_rollup'
-                        ? '○ Local Shield observation · aggregated'
-                        : evt.exported ? '✓ Receipt Exported & Verified' : '○ Local Execution'}
-                    </span>
+                  <p>{evt.reason}</p>
+                  <div className="event-observation-meta">
+                    <span>{evt.tier}</span>
+                    <span>{evt.source === 'observation_rollup' ? 'Local observation · aggregated' : evt.exported ? 'Receipt verified' : 'Local execution'}</span>
                   </div>
                 </div>
 
@@ -338,15 +344,17 @@ export function EventStreamView({ data }) {
                   <button
                     type="button"
                     className="toggle-raw-btn"
+                    aria-expanded={isExpanded}
+                    aria-controls={`event-details-${idx}`}
                     onClick={() => setExpandedRowIndex(isExpanded ? null : idx)}
                   >
                     {isExpanded ? (
                       <>
-                        <ChevronUp size={13} /> Hide Details
+                        <ChevronUp size={13} /> Hide observation details
                       </>
                     ) : (
                       <>
-                        <ChevronDown size={13} /> Inspect JSON Payload
+                        <ChevronDown size={13} /> Expand observation
                       </>
                     )}
                   </button>
@@ -362,8 +370,19 @@ export function EventStreamView({ data }) {
 
                 {/* Inline JSON payload when expanded */}
                 {isExpanded && (
-                  <div className="event-inline-json">
-                    <pre>{JSON.stringify(evt.raw, null, 2)}</pre>
+                  <div className="event-detail-panel" id={`event-details-${idx}`}>
+                    <dl className="event-detail-grid">
+                      <div><dt>Rule</dt><dd>{evt.ruleName}</dd></div>
+                      <div><dt>Rule version</dt><dd>{evt.ruleId} · v{evt.ruleVersion}</dd></div>
+                      <div><dt>Governance</dt><dd>{evt.tier}</dd></div>
+                      <div><dt>Evidence</dt><dd>{evt.source === 'observation_rollup' ? 'Local observation · aggregated' : evt.exported ? 'Receipt verified' : 'Local execution'}</dd></div>
+                      <div><dt>Agent attribution</dt><dd>{evt.agentId || 'Device-scoped / unbound'}</dd></div>
+                      <div><dt>Target</dt><dd>{evt.target}</dd></div>
+                    </dl>
+                    <details className="event-inline-json">
+                      <summary>Raw event payload</summary>
+                      <pre>{JSON.stringify(evt.raw, null, 2)}</pre>
+                    </details>
                   </div>
                 )}
               </article>

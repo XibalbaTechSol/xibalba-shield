@@ -275,9 +275,6 @@ export function PoliciesView({ data, api, refresh }) {
           <p className="eyebrow">PRESELECTED POLICY BUNDLES</p>
           <h2>Active Policy Governance</h2>
           <span>Select from three pre-engineered zero-trust policy profiles, deploy to enrolled devices, or inspect rollback history.</span>
-          <small className="evidence-label">
-            Evidence class: authenticated local control-plane data; synthetic/demo records are labeled explicitly.
-          </small>
         </header>
 
         <form className="policy-enforcement-panel settings-card" onSubmit={saveEnforcement}>

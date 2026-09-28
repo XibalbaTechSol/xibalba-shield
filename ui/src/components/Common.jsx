@@ -106,9 +106,6 @@ export function Resource({ title, copy, children }) {
         <p className="eyebrow">LIVE CONTROL PLANE</p>
         <h2>{title}</h2>
         <span>{copy}</span>
-        <small className="evidence-label">
-          Evidence class: authenticated local control-plane data; synthetic/demo records are labeled explicitly.
-        </small>
       </header>
       {title === 'Account & control plane' && (
         <>

@@ -2,16 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   Bell,
-  BrainCircuit,
-  CircleUserRound,
   Gauge,
   HardDrive,
   LogOut,
+  Moon,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Sliders,
+  Sun,
   TriangleAlert,
   X,
-  Shield,
   Workflow,
   FileSearch,
 } from 'lucide-react'
@@ -47,21 +48,22 @@ async function fetchCortexNamespaces() {
 }
 
 const NAV = [
-  ['overview', Gauge, 'Command center', 'COMMAND CENTER'],
-  ['fleet', HardDrive, 'Fleet & identity', 'OPERATIONS'],
-  ['response', Activity, 'Detect & respond', 'OPERATIONS'],
-  ['governance', Workflow, 'Policy & approvals', 'GOVERNANCE'],
-  ['evidence', FileSearch, 'Evidence & integrations', 'ASSURANCE'],
-  ['hermes', BrainCircuit, 'Hermes agent', 'ASSURANCE'],
-  ['settings', Sliders, 'Settings', 'SYSTEM'],
-  ['developer', Shield, 'Developer', 'SYSTEM'],
+  ['overview', Gauge, 'Posture', 'COMMAND CENTER'],
+  ['agent', HardDrive, 'Agent', 'OPERATIONS'],
+  ['network', Activity, 'Network', 'OPERATIONS'],
+  ['decisions', Workflow, 'Decisions', 'GOVERNANCE'],
+  ['evidence', FileSearch, 'Evidence', 'ASSURANCE'],
+  ['configuration', Sliders, 'Configuration', 'SYSTEM'],
 ]
 const VIEW_LABELS = Object.fromEntries(NAV.map(([id, , label]) => [id, label]))
 
-export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange }) {
+export function Dashboard({ connection, logout, theme = 'command-center', onThemeChange }) {
   const [realOnly, setRealOnly] = useState(() => readSession('shield-real-only') !== 'false')
   const [menu, setMenu] = useState(false)
+  const [navCollapsed, setNavCollapsed] = useState(false)
+  const [profileMenu, setProfileMenu] = useState(false)
   const [view, setView] = useState('overview')
+  const [timeRange, setTimeRange] = useState('24h')
   const [selectedAgentId, setSelectedAgentId] = useState(() => {
     const shared = sharedScopeFromUrl()
     return shared.agentId || readSession('shield-selected-agent')
@@ -87,6 +89,12 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
     message: 'Connecting to control plane',
   })
   const [refreshing, setRefreshing] = useState(false);
+  const lightMode = theme === 'light'
+  const toggleTheme = () => {
+    const nextTheme = lightMode ? 'command-center' : 'light'
+    writeSession('shield-console-theme', nextTheme)
+    onThemeChange?.(nextTheme)
+  }
 
 
 
@@ -212,10 +220,19 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
   }
 
   return (
-    <main className={`console ${theme === 'command-center' ? 'theme-command-center' : 'theme-legacy'}`}>
-      <aside className={menu ? 'side open' : 'side'} aria-label="Console navigation">
+    <main className={`console ${theme === 'command-center' ? 'theme-command-center' : 'theme-light'}`}>
+      <aside className={`side${menu ? ' open' : ''}${navCollapsed ? ' collapsed' : ''}`} aria-label="Console navigation">
         <header>
           <Brand />
+          <button
+            type="button"
+            className="nav-collapse-btn"
+            aria-label={navCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+            title={navCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+            onClick={() => setNavCollapsed((collapsed) => !collapsed)}
+          >
+            {navCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+          </button>
           <button
             type="button"
             className="menu-close-btn"
@@ -244,6 +261,10 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
           </div>)}
         </nav>
         <div className="bottom-profile" style={{ marginTop: 'auto', padding: '1rem 0.75rem 0' }}>
+          {profileMenu && <div className="profile-menu" role="menu">
+            <button type="button" role="menuitem" onClick={() => { setProfileMenu(false); openView('settings') }}>Settings</button>
+            <button type="button" role="menuitem" onClick={() => logout()}>Log out</button>
+          </div>}
           <nav aria-label="Account navigation" className="account-nav">
             <button
               type="button"
@@ -258,9 +279,10 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
             type="button"
             className="profile-btn"
             aria-label="Open operator profile settings"
-            onClick={() => openView('settings')}
+            aria-expanded={profileMenu}
+            onClick={() => setProfileMenu((open) => !open)}
           >
-            <CircleUserRound aria-hidden="true" />
+            <span className="profile-avatar" aria-hidden="true">{(connection.account?.display_name || 'Operator profile').trim().slice(0, 1).toUpperCase()}</span>
             <span className="profile-name">{connection.account?.display_name || 'Operator profile'}</span>
           </button>
         </div>
@@ -276,9 +298,17 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
           >
             <Menu aria-hidden="true" />
           </button>
+          <div className="command-brand">
+            <Brand />
+          </div>
           <div className="top-title">
             <h1>{VIEW_LABELS[view] || 'Shield console'}</h1>
             <p>{connection.tenant} · {connection.baseUrl}</p>
+          </div>
+          <div className="header-identity" aria-label="Current Shield workspace">
+            <span className="header-identity-kicker">SHIELD CONTROL PLANE</span>
+            <strong>Operator console</strong>
+            <small>{connection.tenant || 'Authenticated tenant'}</small>
           </div>
           <div className="tools">
             <label className="shared-agent-picker">
@@ -302,6 +332,15 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
                 ))}
               </select>
             </label>
+            <button
+              aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+              title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+            >
+              {lightMode ? <Moon aria-hidden="true" /> : <Sun aria-hidden="true" />}
+            </button>
             <button
               aria-label="Refresh data"
               title="Refresh"
@@ -327,26 +366,47 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
                 ? 'Connecting'
                 : 'Disconnected'}
             </span>
-            {realOnly && <span className="telemetry-mode-badge" role="status">REAL TELEMETRY ONLY</span>}
+            <button
+              type="button"
+              className="audit-packet-button"
+              onClick={() => openView('evidence')}
+            >
+              Export audit packet
+            </button>
           </div>
+          <nav className="command-nav" aria-label="Control plane navigation">
+            {[
+              ['overview', 'Posture'],
+              ['agent', 'Agent'],
+              ['network', 'Network'],
+              ['decisions', 'Decisions'],
+              ['evidence', 'Evidence'],
+              ['configuration', 'Configuration'],
+            ].map(([id, label]) => (
+              <button key={id} type="button" className={view === id ? 'active' : ''} onClick={() => openView(id)}>
+                {label}
+              </button>
+            ))}
+          </nav>
         </header>
 
         {status.state === 'error' && (
           <div className="api-alert" role="alert">
             <TriangleAlert aria-hidden="true" />
             <span>
-              <b>Control plane unavailable</b>: {status.message}. {realOnly ? 'Real telemetry only is enabled; synthetic fallback data is hidden.' : 'Showing clearly labeled preview data where available.'}
+              <b>Control plane unavailable</b>: {status.message}. {realOnly ? 'Authenticated telemetry mode is enabled; synthetic fallback data is hidden.' : 'Showing clearly labeled preview data where available.'}
             </span>
             <button type="button" onClick={refresh}>Retry</button>
           </div>
         )}
 
-        <div className="content">
+        <div className={`content ${view}-page`}>
           {view === 'overview' ? (
             <Overview
               data={data}
               protectedCount={protectedCount}
               openView={openView}
+              timeRange={timeRange}
               preview={status.state !== 'live'}
             />
           ) : (
@@ -359,6 +419,7 @@ export function Dashboard({ connection, logout, theme = 'legacy', onThemeChange 
                 logout={logout}
                 theme={theme}
                 onThemeChange={onThemeChange}
+                timeRange={timeRange}
               />
           )}
         </div>

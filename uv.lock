@@ -996,9 +996,6 @@ connector = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
     { name = "psutil" },
-    { name = "requests" },
-    { name = "web3" },
-]
 
 [package.metadata]
 requires-dist = [

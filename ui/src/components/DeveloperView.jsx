@@ -327,9 +327,6 @@ func main() {
         <span>
           Test live control plane endpoints, inspect schemas, generate client code, and review cryptographic contracts.
         </span>
-        <small className="evidence-label">
-          Evidence class: authenticated local control-plane data; synthetic/demo records are labeled explicitly.
-        </small>
       </header>
 
       {/* Connection & Auth Banner */}

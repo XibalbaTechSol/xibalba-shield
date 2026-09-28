@@ -144,6 +144,54 @@ def _read_hermes_deliveries(limit: int = 50) -> list[dict[str, Any]]:
 
 
 _RESOURCE_SAMPLES: dict[int, tuple[float, int]] = {}
+_CPU_SAMPLES: dict[str, tuple[int, int]] = {}
+
+
+def _read_cpu_core_usage() -> list[dict[str, Any]]:
+    """Read bounded utilization samples for the first four host CPU cores."""
+    global _CPU_SAMPLES
+    try:
+        lines = Path("/proc/stat").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    current: dict[str, tuple[int, int]] = {}
+    for line in lines:
+        fields = line.split()
+        if not fields or not fields[0].startswith("cpu") or not fields[0][3:].isdigit():
+            continue
+        values = [int(value) for value in fields[1:8]]
+        current[fields[0]] = (sum(values), values[3] + values[4])
+    cores: list[dict[str, Any]] = []
+    for name in sorted(current, key=lambda value: int(value[3:]))[:4]:
+        total, idle = current[name]
+        previous = _CPU_SAMPLES.get(name)
+        utilization = None
+        if previous:
+            total_delta = total - previous[0]
+            idle_delta = idle - previous[1]
+            if total_delta > 0:
+                utilization = round(max(0.0, min(100.0, (total_delta - idle_delta) / total_delta * 100)), 1)
+        cores.append({"id": name, "label": f"Core {int(name[3:]) + 1}", "percent": utilization})
+    _CPU_SAMPLES = current
+    return cores
+
+
+def _read_memory_usage() -> dict[str, Any]:
+    """Read host memory usage from procfs without exposing process contents."""
+    values: dict[str, int] = {}
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            key, _, raw = line.partition(":")
+            if key in {"MemTotal", "MemAvailable"}:
+                values[key] = int(raw.strip().split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        return {"used_bytes": None, "total_bytes": None, "percent": None}
+    total = values.get("MemTotal")
+    available = values.get("MemAvailable")
+    if not total or available is None:
+        return {"used_bytes": None, "total_bytes": total, "percent": None}
+    used = max(0, total - available)
+    return {"used_bytes": used, "total_bytes": total, "percent": round(used / total * 100, 1)}
 
 
 def _read_runtime_resources() -> dict[str, Any]:
@@ -184,6 +232,8 @@ def _read_runtime_resources() -> dict[str, Any]:
         "processes": processes,
         "cpu_percent": round(sum(item["cpu_percent"] or 0 for item in processes), 2),
         "rss_bytes": sum(item["rss_bytes"] for item in processes),
+        "cpu_cores": _read_cpu_core_usage(),
+        "memory": _read_memory_usage(),
     }
     state_path = Path(spool_path) / "state.sqlite3"
     if not state_path.exists():

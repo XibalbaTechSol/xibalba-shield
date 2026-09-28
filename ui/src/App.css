@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@500;600;700;800&display=swap');
 
 :root {
   --bg: #080b0f;
@@ -1019,12 +1019,6 @@ h1, h2, h3, h4, b {
 
 .console .donut::after { background: var(--panel); }
 
-.console:not(.theme-command-center) .side { background: rgba(14, 19, 25, .94); }
-.console:not(.theme-command-center) .side nav button:hover { background: rgba(255, 255, 255, .05); }
-.console:not(.theme-command-center) .side nav button.active { color: var(--text); }
-.console:not(.theme-command-center) .top { background: rgba(8, 11, 15, .88); }
-.console:not(.theme-command-center) .metric,
-.console:not(.theme-command-center) .panel { box-shadow: none; }
 
 /* Sidebar */
 .side {
@@ -1215,6 +1209,55 @@ h1, h2, h3, h4, b {
 }
 
 .telemetry-mode-badge { padding: 5px 8px; border: 1px solid rgba(78,208,138,0.45); border-radius: var(--radius-full); color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+
+.telemetry-context-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evidence-context-copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time-range-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.time-range-controls button {
+  min-width: 42px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.time-range-controls button:first-child { border-left: 1px solid var(--line); }
+.time-range-controls button:hover,
+.time-range-controls button.active {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--text);
+}
 
 .opa-source-backdrop {
   position: fixed;
@@ -1421,14 +1464,14 @@ h1, h2, h3, h4, b {
 .theme-choice small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; }
 .theme-swatch { display: grid; gap: 4px; align-content: center; width: 58px; height: 42px; padding: 7px; border: 1px solid var(--line); border-radius: 6px; }
 .theme-swatch i { display: block; height: 4px; border-radius: 2px; }
-.theme-swatch-legacy { background: #080b0f; border-color: #303b49; }
-.theme-swatch-legacy i:nth-child(1) { width: 70%; background: #4ed08a; }
-.theme-swatch-legacy i:nth-child(2) { width: 88%; background: #26313e; }
-.theme-swatch-legacy i:nth-child(3) { width: 54%; background: #65758a; }
-.theme-swatch-command { background: #f4f7fb; border-color: #dbe4ee; }
-.theme-swatch-command i:nth-child(1) { width: 70%; background: #159b6b; }
-.theme-swatch-command i:nth-child(2) { width: 88%; background: #dbe4ee; }
-.theme-swatch-command i:nth-child(3) { width: 54%; background: #8291a4; }
+.theme-swatch-command { background: #14171a; border-color: #9fc3df; }
+.theme-swatch-command i:nth-child(1) { width: 70%; background: #87b5d0; }
+.theme-swatch-command i:nth-child(2) { width: 88%; background: #283536; }
+.theme-swatch-command i:nth-child(3) { width: 54%; background: #9ca8ab; }
+.theme-swatch-light { background: #f5f7fb; border-color: #b9c9da; }
+.theme-swatch-light i:nth-child(1) { width: 70%; background: #159b6b; }
+.theme-swatch-light i:nth-child(2) { width: 88%; background: #dbe4ee; }
+.theme-swatch-light i:nth-child(3) { width: 54%; background: #8291a4; }
 
 @media (max-width: 640px) {
   .agent-detail-body, .agent-detail-hero { padding-left: 18px; padding-right: 18px; }
@@ -1436,6 +1479,210 @@ h1, h2, h3, h4, b {
   .agent-detail-section-heading { display: grid; }
   .agent-detail-proof { width: fit-content; }
   .theme-choice-grid { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   Command plane theme — reference implementation from Console.dc.html
+   ========================================================================== */
+.command-brand { display: none; }
+.command-nav { display: none; }
+
+.console.theme-command-center {
+  --bg: #14171a;
+  --bg-gradient: #14171a;
+  --panel: #1b1f23;
+  --panel-solid: #1b1f23;
+  --panel-elevated: #262b30;
+  --line: rgba(255, 255, 255, .14);
+  --line-hover: rgba(255, 255, 255, .35);
+  --text: #eef0f1;
+  --muted: #b7bcc1;
+  --dim: #9aa1a8;
+  --green: #9fc3df;
+  --green-hover: #cfe4f3;
+  --green-soft: rgba(159, 195, 223, .16);
+  --green-glow: rgba(159, 195, 223, .2);
+  --cyan: #9fc3df;
+  --amber: #d7aa6c;
+  --amber-soft: rgba(215, 170, 108, .16);
+  --red: #d88383;
+  --red-soft: rgba(216, 131, 131, .16);
+  grid-template-columns: 1fr;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+
+.console.theme-command-center .side { display: none; }
+.console.theme-command-center .main { width: 100%; }
+.console.theme-command-center .top {
+  min-height: 122px;
+  height: auto;
+  padding: 18px clamp(18px, 4vw, 58px) 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  background: #14171a;
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: none;
+}
+.console.theme-command-center .command-brand {
+  display: block;
+  margin-right: auto;
+}
+.console.theme-command-center .command-brand .brand { gap: 9px; }
+.console.theme-command-center .command-brand .brand img {
+  width: 52px;
+  height: 52px;
+  border-radius: 0;
+}
+.console.theme-command-center .command-brand .brand b {
+  font-family: 'Barlow Condensed', var(--font-heading), sans-serif;
+  font-size: 21px;
+  font-weight: 600;
+}
+.console.theme-command-center .command-brand .brand i { color: var(--text); }
+.console.theme-command-center .top-title { display: none; }
+.console.theme-command-center .tools { margin-left: 0; gap: 9px; }
+.console.theme-command-center .shared-agent-picker { display: none; }
+.console.theme-command-center .tools > button,
+.console.theme-command-center .tools > button:hover {
+  width: 38px;
+  height: 38px;
+  border-radius: 0;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+.console.theme-command-center .tools > button[aria-label="View notifications"] { display: none; }
+.console.theme-command-center .connection {
+  order: -1;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  padding: 0 4px;
+}
+.console.theme-command-center .connection i { background: var(--green); }
+.console.theme-command-center .telemetry-mode-badge {
+  border-radius: 0;
+  border-color: var(--green);
+  color: var(--green);
+  font-size: 11px;
+}
+.console.theme-command-center .command-nav {
+  display: flex;
+  width: 100%;
+  gap: 4px;
+  overflow-x: auto;
+  margin-top: 2px;
+  scrollbar-width: none;
+}
+.console.theme-command-center .command-nav button {
+  flex: 1 1 auto;
+  min-width: max-content;
+  padding: 11px 18px 13px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Barlow Condensed', var(--font-heading), sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.console.theme-command-center .command-nav button:hover,
+.console.theme-command-center .command-nav button.active {
+  color: var(--text);
+  border-bottom-color: var(--green);
+}
+.console.theme-command-center .content {
+  max-width: 1440px;
+  padding: 34px clamp(18px, 4vw, 58px) 72px;
+}
+.console.theme-command-center .content > * { max-width: 100%; }
+.console.theme-command-center h1,
+.console.theme-command-center h2,
+.console.theme-command-center h3,
+.console.theme-command-center h4,
+.console.theme-command-center h5,
+.console.theme-command-center h6,
+.console.theme-command-center b {
+  font-family: 'Barlow Condensed', var(--font-heading), sans-serif;
+  color: var(--text);
+  font-weight: 600;
+}
+.console.theme-command-center h1 { font-size: clamp(38px, 4.6vw, 52px); letter-spacing: -.02em; }
+.console.theme-command-center h2 { font-size: 34px; }
+.console.theme-command-center h3 { font-size: 26px; }
+.console.theme-command-center p,
+.console.theme-command-center span,
+.console.theme-command-center label,
+.console.theme-command-center td,
+.console.theme-command-center th { font-family: 'Barlow', var(--font-body), sans-serif; }
+.console.theme-command-center .eyebrow,
+.console.theme-command-center .eyebrow-badge {
+  color: var(--green);
+  letter-spacing: .14em;
+  font-size: 11px;
+  font-weight: 700;
+}
+.console.theme-command-center .metric,
+.console.theme-command-center .panel,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .outbox-status-card {
+  border-radius: 0;
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+}
+.console.theme-command-center .metric { padding: 22px 20px; }
+.console.theme-command-center .metric > b { font-family: 'Barlow Condensed', sans-serif; font-size: 44px; }
+.console.theme-command-center .metric > div > span { border-radius: 0; background: rgba(135,181,208,.13); color: var(--green); }
+.console.theme-command-center .panel { padding: 22px; }
+.console.theme-command-center .panel-title h3 { font-size: 25px; }
+.console.theme-command-center .panel-title { border-bottom: 1px solid var(--line); padding-bottom: 13px; }
+.console.theme-command-center .status-badge,
+.console.theme-command-center .live-status-pill,
+.console.theme-command-center .status-pill,
+.console.theme-command-center .tag,
+.console.theme-command-center .telemetry-mode-badge { border-radius: 0; }
+.console.theme-command-center .api-alert {
+  margin: 16px clamp(18px, 4vw, 58px) 0;
+  border-radius: 0;
+  background: rgba(135,181,208,.12);
+  border-color: var(--green);
+}
+.console.theme-command-center .table,
+.console.theme-command-center table { border-radius: 0; }
+.console.theme-command-center .table th,
+.console.theme-command-center table th {
+  color: var(--muted);
+  letter-spacing: .1em;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+}
+.console.theme-command-center .table td,
+.console.theme-command-center table td { border-color: var(--line); }
+.console.theme-command-center .form-select,
+.console.theme-command-center input,
+.console.theme-command-center select,
+.console.theme-command-center textarea {
+  border-radius: 0;
+  background: var(--panel-elevated);
+  color: var(--text);
+  border-color: var(--line);
+}
+.console.theme-command-center .theme-choice { border-radius: 0; background: var(--panel-elevated); }
+.console.theme-command-center .theme-choice.selected { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+
+@media (max-width: 760px) {
+  .console.theme-command-center .top { padding-inline: 16px; }
+  .console.theme-command-center .command-brand .brand b { display: none; }
+  .console.theme-command-center .connection { display: none; }
+  .console.theme-command-center .command-nav button { padding-inline: 12px; font-size: 16px; }
+  .console.theme-command-center .content { padding-inline: 16px; }
 }
 
 .transaction-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
@@ -1937,6 +2184,46 @@ h1, h2, h3, h4, b {
   margin-bottom: 20px;
 }
 
+.mock-posture-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.mock-posture-grid .panel {
+  min-width: 0;
+}
+
+.responder-copy {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -4px 0 14px;
+}
+
+.responder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.responder-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.responder-item:nth-child(2n) { border-right: 0; }
+.responder-item:nth-last-child(-n + 2) { border-bottom: 0; }
+.responder-item b { font-size: 13px; }
+.responder-item span,
+.responder-item small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.responder-item strong { justify-self: start; padding: 4px 7px; color: var(--amber); background: var(--amber-soft); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.responder-item strong.ready { color: var(--green); background: var(--green-soft); }
+
 .panel {
   padding: 22px;
 }
@@ -2279,7 +2566,7 @@ h1, h2, h3, h4, b {
 
 /* Resources & Cards */
 .workspace-header {
-  margin-bottom: 18px;
+  margin-bottom: 24px;
   max-width: 760px;
 }
 
@@ -2729,7 +3016,7 @@ h1, h2, h3, h4, b {
 
 .audit-event {
   padding: 10px 12px;
-  background: #090d12;
+  background: var(--panel-elevated);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   display: flex;
@@ -2751,6 +3038,12 @@ h1, h2, h3, h4, b {
    RESPONSIVE BREAKPOINTS
 ══════════════════════════════════════════════════════════ */
 @media (max-width: 960px) {
+  .mock-posture-grid { grid-template-columns: 1fr; }
+  .responder-grid { grid-template-columns: 1fr; }
+  .responder-item,
+  .responder-item:nth-child(2n) { border-right: 0; }
+  .responder-item:nth-last-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .responder-item:last-child { border-bottom: 0; }
   .nav-links { display: none; }
   .hero { grid-template-columns: 1fr; padding: 60px 24px; gap: 30px; }
   .proof { grid-template-columns: 1fr 1fr; }
@@ -2765,11 +3058,15 @@ h1, h2, h3, h4, b {
     bottom: 0;
     left: 0;
     width: 260px;
+    visibility: hidden;
+    pointer-events: none;
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.7);
   }
   .side.open {
+    visibility: visible;
+    pointer-events: auto;
     transform: translateX(0);
   }
   .menu-close-btn { display: block; }
@@ -2777,6 +3074,263 @@ h1, h2, h3, h4, b {
   .metrics { grid-template-columns: 1fr 1fr; }
   .panels { grid-template-columns: minmax(0, 1fr); }
   .panels > * { min-width: 0; }
+}
+
+/* Shared mock language for unauthenticated surfaces. The landing and auth views
+   use the same flat industrial system as the Console reference. */
+.landing,
+.auth {
+  --mock-bg: #14171a;
+  --mock-panel: #1b1f23;
+  --mock-elevated: #262b30;
+  --mock-line: rgba(255,255,255,.14);
+  --mock-text: #eef0f1;
+  --mock-muted: #b7bcc1;
+  --mock-accent: #9fc3df;
+  --mock-amber: #d7aa6c;
+  background: var(--mock-bg);
+  color: var(--mock-text);
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+
+.landing h1,
+.landing h2,
+.landing h3,
+.landing b,
+.auth h1,
+.auth h2,
+.auth h3,
+.auth b { font-family: 'Barlow Condensed', var(--font-heading), sans-serif; }
+
+.landing .site-header {
+  background: rgba(20,23,26,.96);
+  border-bottom: 1px solid var(--mock-line);
+  backdrop-filter: none;
+}
+
+.landing .site-nav { max-width: 1240px; height: 72px; border-bottom: 0; }
+.landing .site-nav .brand img { width: 38px; height: 38px; border-radius: 0; }
+.landing .site-nav .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.landing .nav-links a,
+.landing .learn-more-link,
+.landing .checks,
+.landing .landing-section-copy p,
+.landing .landing-assurance > div:first-child p { color: var(--mock-muted); }
+.landing .primary,
+.auth .primary { border-radius: 0; border-color: var(--mock-accent); background: var(--mock-accent); color: #14171a; box-shadow: none; }
+.landing .primary:hover,
+.auth .primary:hover { background: #cfe4f3; }
+.landing .hero { max-width: 1240px; min-height: 600px; padding: 88px 24px; gap: 72px; }
+.landing .hero h1 { max-width: 640px; font-size: clamp(46px, 5vw, 66px); line-height: .98; letter-spacing: -.015em; }
+.landing .hero h1 em,
+.landing .landing-section-copy h2 em { color: var(--mock-accent); }
+.landing .lede { color: var(--mock-muted); }
+.landing .command-preview,
+.landing .feature-card,
+.landing .proof,
+.landing .signal,
+.landing .landing-agent-security article {
+  border-radius: 0;
+  border-color: var(--mock-line);
+  background: var(--mock-panel);
+  box-shadow: none;
+}
+.landing .command-preview { background: var(--mock-bg); }
+.landing .preview-heading h2,
+.landing .preview-actions h3,
+.landing .preview-row b { color: var(--mock-text); }
+.landing .preview-heading p,
+.landing .preview-row em,
+.landing .preview-actions small { color: var(--mock-muted); }
+.landing .preview-dot.green,
+.landing .preview-dot.blue { background: var(--mock-accent); }
+.landing .proof { max-width: 1360px; margin: 0 auto; }
+.landing .proof b,
+.landing .feature-icon,
+.landing .eyebrow,
+.landing .checks svg,
+.landing .preview-footer svg { color: var(--mock-accent); }
+.landing .feature-card,
+.landing .landing-agent-security article { padding: 24px; }
+.landing .feature-card:hover { border-color: var(--mock-accent); transform: none; }
+.landing .landing-architecture,
+.landing .landing-response,
+.landing .landing-assurance,
+.landing .landing-agent-security { border-color: var(--mock-line); }
+.landing .cta { background: var(--mock-panel); border-block: 1px solid var(--mock-line); }
+.landing .cta-btn { border-radius: 0; background: var(--mock-accent); color: #14171a; box-shadow: none; }
+.landing .site-footer { background: var(--mock-bg); border-top-color: var(--mock-line); }
+
+.auth { background: var(--mock-bg); grid-template-columns: minmax(0, 1fr) minmax(420px, 520px); }
+.auth-back { color: var(--mock-muted); }
+.auth-back:hover { color: var(--mock-text); }
+.auth-story { padding: 72px clamp(32px, 7vw, 96px); background: var(--mock-bg); border-right-color: var(--mock-line); }
+.auth-story .brand img { width: 38px; height: 38px; border-radius: 0; }
+.auth-story .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.auth-story-body h1 { max-width: 560px; font-size: clamp(46px, 5vw, 64px); line-height: .98; color: var(--mock-text); }
+.auth-story-body p,
+.auth-story aside small,
+.auth-form form > p { color: var(--mock-muted); }
+.auth-story aside { border-radius: 0; border-color: var(--mock-line); background: var(--mock-panel); backdrop-filter: none; }
+.auth-story aside > svg,
+.lock { color: var(--mock-accent); }
+.auth-form { background: var(--mock-panel); padding: 48px clamp(28px, 5vw, 64px); border-left: 1px solid var(--mock-line); }
+.auth-form form { width: min(440px, 100%); }
+.lock { border-radius: 0; background: rgba(159,195,223,.16); }
+.auth-tabs { border-bottom-color: var(--mock-line); }
+.auth-tabs button { border-radius: 0; color: var(--mock-muted); }
+.auth-tabs button.active { color: var(--mock-accent); border-bottom-color: var(--mock-accent); }
+.auth-form h2 { font-size: 38px; }
+.auth-form label { color: var(--mock-muted); }
+.auth-form input { border-radius: 0; border-color: var(--mock-line); background: var(--mock-elevated); color: var(--mock-text); }
+.auth-form input:focus { border-color: var(--mock-accent); box-shadow: 0 0 0 2px rgba(159,195,223,.16); }
+.local-connect { border-radius: 0; border-color: var(--mock-line); background: transparent; color: var(--mock-accent); }
+.auth-error { border-radius: 0; border-color: rgba(216,131,131,.5); background: rgba(216,131,131,.16); color: #f0b4b4; }
+.session-note { color: var(--mock-muted); }
+
+/* Light operator theme: the same IA and spacing, with the mockup's bright surface treatment. */
+.console.theme-light {
+  --bg: #f2f2f3;
+  --bg-gradient: #f2f2f3;
+  --panel: #e9e9ea;
+  --panel-solid: #e9e9ea;
+  --panel-elevated: #f2f2f3;
+  --line: rgba(29, 31, 32, .16);
+  --line-hover: rgba(29, 31, 32, .45);
+  --text: #1d1f20;
+  --muted: #5d5d60;
+  --dim: #77777b;
+  --green: #416180;
+  --green-hover: #2c455d;
+  --green-soft: rgba(65, 97, 128, .12);
+  --green-glow: rgba(65, 97, 128, .18);
+  --cyan: #416180;
+  --amber: #8a641c;
+  --amber-soft: rgba(138, 100, 28, .12);
+  --red: #9b3b3b;
+  --red-soft: rgba(155, 59, 59, .12);
+  background: var(--bg-gradient);
+  color: var(--text);
+  color-scheme: light;
+}
+.console.theme-light .side { background: rgba(255,255,255,.94); }
+.console.theme-light .top { background: rgba(255,255,255,.88); }
+.console.theme-light .metric,
+.console.theme-light .panel { box-shadow: 0 3px 10px rgba(43, 43, 45, .16); }
+.console.theme-light .resource,
+.console.theme-light .settings-card,
+.console.theme-light .action-form,
+.console.theme-light .policy-bundle-card,
+.console.theme-light .policy-deploy-panel,
+.console.theme-light .approval-panel,
+.console.theme-light .transaction-result,
+.console.theme-light .responder-panel,
+.console.theme-light .integration-card,
+.console.theme-light .integrations-section,
+.console.theme-light .network-card,
+.console.theme-light .opa-card,
+.console.theme-light .code-snippets-section,
+.console.theme-light .dev-auth-card,
+.console.theme-light .contract-card,
+.console.theme-light .hybrid-architecture-card,
+.console.theme-light .outbox-status-card {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: 0 3px 10px rgba(43, 43, 45, .16);
+}
+.console.theme-light .settings-readout,
+.console.theme-light .toggle-item,
+.console.theme-light .avatar-preference-section,
+.console.theme-light .avatar-preview-box,
+.console.theme-light .agent-remediation-panel,
+.console.theme-light .responder-card,
+.console.theme-light .agent-card,
+.console.theme-light .policy-history-row,
+.console.theme-light .event-stream-toolbar,
+.console.theme-light .event-stream-card,
+.console.theme-light .evidence-runtime-strip,
+.console.theme-light .pipeline-row {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+  color: var(--text);
+}
+.console.theme-light .device-detail-backdrop,
+.console.theme-light .agent-detail-backdrop,
+.console.theme-light .event-drawer-backdrop { background: rgba(20, 35, 61, .28); }
+.console.theme-light .device-detail-drawer,
+.console.theme-light .agent-detail-drawer,
+.console.theme-light .event-drawer,
+.console.theme-light .opa-source-modal { background: var(--panel); color: var(--text); }
+.console.theme-light .api-endpoints-nav,
+.console.theme-light .response-pane,
+.console.theme-light .event-inline-json { background: #f7faff; color: var(--text); }
+.console.theme-light .resource,
+.console.theme-light .settings-card,
+.console.theme-light .action-form,
+.console.theme-light .policy-bundle-card,
+.console.theme-light .policy-deploy-panel,
+.console.theme-light .approval-panel,
+.console.theme-light .transaction-result,
+.console.theme-light .responder-panel,
+.console.theme-light .integration-card,
+.console.theme-light .integrations-section,
+.console.theme-light .network-card,
+.console.theme-light .opa-card,
+.console.theme-light .code-snippets-section,
+.console.theme-light .dev-auth-card,
+.console.theme-light .contract-card,
+.console.theme-light .hybrid-architecture-card,
+.console.theme-light .outbox-status-card,
+.console.theme-light .metric,
+.console.theme-light .panel,
+.console.theme-light .telemetry-chart {
+  padding: 20px;
+}
+.console.theme-light .panels,
+.console.theme-light .cards,
+.console.theme-light .command-grid,
+.console.theme-light .settings-grid,
+.console.theme-light .responder-grid,
+.console.theme-light .integration-grid,
+.console.theme-light .policy-grid,
+.console.theme-light .agent-grid,
+.console.theme-light .live-telemetry-grid { gap: 20px; }
+.console.theme-light .tools > button,
+.console.theme-command-center .tools > button {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
+}
+.console.theme-light .tools > button:hover,
+.console.theme-command-center .tools > button:hover {
+  background: var(--panel-elevated);
+  border-color: var(--line-hover);
+  color: var(--text);
+}
+.console.theme-command-center .live-telemetry-grid,
+.console.theme-light .live-telemetry-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.resource-widget { display: grid; gap: 16px; min-width: 0; }
+.resource-widget-section { display: grid; gap: 9px; }
+.resource-widget-label,
+.core-bar-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.resource-widget-label span { display: inline-flex; align-items: center; gap: 6px; }
+.resource-widget-label small,
+.memory-usage > small { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
+.core-bars { display: grid; gap: 8px; }
+.core-bar { display: grid; gap: 4px; }
+.core-bar-heading { font-size: 10px; letter-spacing: .05em; }
+.core-bar-heading b,
+.resource-widget-label b { color: var(--text); font-size: 11px; }
+.core-bar-track,
+.memory-bar-track { height: 6px; overflow: hidden; background: rgba(127, 127, 127, .14); border: 1px solid var(--line); }
+.core-bar-track i,
+.memory-bar-track i { display: block; height: 100%; background: var(--green); transition: width .35s ease; }
+.memory-bar-track i { background: var(--amber); }
+.memory-usage { padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 1180px) {
+  .console.theme-command-center .live-telemetry-grid,
+  .console.theme-light .live-telemetry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -3538,6 +4092,10 @@ h1, h2, h3, h4, b {
   font-size: 13px;
   line-height: 1.5;
   color: #e2e8f0;
+}
+
+.console.theme-light .reasoning-rationale {
+  color: var(--muted);
 }
 
 .reasoning-footer-meta {
@@ -4595,7 +5153,7 @@ h1, h2, h3, h4, b {
   gap: 8px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 20px;
 }
 
 .settings-tab-btn {
@@ -4788,6 +5346,119 @@ h1, h2, h3, h4, b {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+
+.settings-fields-grid > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-fields-grid > label input,
+.settings-fields-grid > label select,
+.settings-fields-grid > label textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.quality-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.quality-coverage-grid > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-elevated);
+}
+
+.quality-coverage-grid b {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.quality-coverage-grid span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evidence-reference-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.evidence-reference-metrics article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 18px;
+  border-right: 1px solid var(--line);
+}
+
+.evidence-reference-metrics article:last-child { border-right: 0; }
+.evidence-reference-metrics span,
+.evidence-reference-metrics small { color: var(--muted); font-size: 11px; }
+.evidence-reference-metrics b { color: var(--text); font-size: 28px; line-height: 1; }
+
+.evidence-reference-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .95fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.evidence-reference-grid > .resource,
+.evidence-reference-grid > .settings-card { min-width: 0; }
+
+.evidence-reference-grid + .settings-card,
+.evidence-reference-grid + .resource {
+  margin-top: 24px;
+}
+
+.audit-packet-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.audit-packet-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .quality-coverage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .evidence-reference-metrics,
+  .evidence-reference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .evidence-reference-metrics article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .evidence-reference-metrics article:last-child { border-bottom: 0; }
+
+  .audit-packet-options { grid-template-columns: 1fr; }
 }
 
 .field-group.span-2 {
@@ -5099,6 +5770,225 @@ h1, h2, h3, h4, b {
   }
 }
 
+/* Agent is a continuous workspace; the former tabs become clearly separated
+   sections so all three operational surfaces remain visible together. */
+.console.theme-command-center .agent-unified-workspace,
+.console.theme-light .agent-unified-workspace {
+  display: grid;
+  gap: 28px;
+}
+
+.console.theme-command-center .agent-unified-section,
+.console.theme-light .agent-unified-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.console.theme-command-center .agent-unified-section:first-child,
+.console.theme-light .agent-unified-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.console.theme-command-center .agent-unified-heading,
+.console.theme-light .agent-unified-heading {
+  display: grid;
+  gap: 5px;
+  max-width: 780px;
+}
+
+.console.theme-command-center .agent-unified-heading .eyebrow,
+.console.theme-light .agent-unified-heading .eyebrow,
+.console.theme-command-center .agent-unified-heading h3,
+.console.theme-light .agent-unified-heading h3,
+.console.theme-command-center .agent-unified-heading p:last-child,
+.console.theme-light .agent-unified-heading p:last-child {
+  margin: 0;
+}
+
+.console.theme-command-center .agent-unified-heading h3,
+.console.theme-light .agent-unified-heading h3 {
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-section);
+  line-height: 1.05;
+}
+
+.console.theme-command-center .agent-unified-heading p:last-child,
+.console.theme-light .agent-unified-heading p:last-child {
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+.console.theme-command-center .agent-unified-section > .agent-workspace,
+.console.theme-light .agent-unified-section > .agent-workspace {
+  margin-top: 0;
+}
+
+/* Evidence keeps both assurance surfaces in one scrollable workspace. */
+.console.theme-command-center .evidence-unified-workspace,
+.console.theme-light .evidence-unified-workspace {
+  display: grid;
+  gap: 28px;
+}
+
+.console.theme-command-center .evidence-unified-section,
+.console.theme-light .evidence-unified-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.console.theme-command-center .evidence-unified-section:first-child,
+.console.theme-light .evidence-unified-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.console.theme-command-center .evidence-unified-heading,
+.console.theme-light .evidence-unified-heading {
+  display: grid;
+  gap: 5px;
+  max-width: 780px;
+}
+
+.console.theme-command-center .evidence-unified-heading .eyebrow,
+.console.theme-light .evidence-unified-heading .eyebrow,
+.console.theme-command-center .evidence-unified-heading h3,
+.console.theme-light .evidence-unified-heading h3,
+.console.theme-command-center .evidence-unified-heading p:last-child,
+.console.theme-light .evidence-unified-heading p:last-child {
+  margin: 0;
+}
+
+.console.theme-command-center .evidence-unified-heading h3,
+.console.theme-light .evidence-unified-heading h3 {
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-section);
+  line-height: 1.05;
+}
+
+.console.theme-command-center .evidence-unified-heading p:last-child,
+.console.theme-light .evidence-unified-heading p:last-child {
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+/* The two approval surfaces share one Decisions tab while remaining visually
+   distinct governance sections. */
+.console.theme-command-center .decisions-approvals-workspace,
+.console.theme-light .decisions-approvals-workspace {
+  display: grid;
+  gap: 28px;
+}
+
+.console.theme-command-center .decisions-approvals-section,
+.console.theme-light .decisions-approvals-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.console.theme-command-center .decisions-approvals-section:first-child,
+.console.theme-light .decisions-approvals-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.console.theme-command-center .decisions-approvals-heading,
+.console.theme-light .decisions-approvals-heading {
+  display: grid;
+  gap: 5px;
+  max-width: 780px;
+}
+
+.console.theme-command-center .decisions-approvals-heading .eyebrow,
+.console.theme-light .decisions-approvals-heading .eyebrow,
+.console.theme-command-center .decisions-approvals-heading h3,
+.console.theme-light .decisions-approvals-heading h3,
+.console.theme-command-center .decisions-approvals-heading p:last-child,
+.console.theme-light .decisions-approvals-heading p:last-child {
+  margin: 0;
+}
+
+.console.theme-command-center .decisions-approvals-heading h3,
+.console.theme-light .decisions-approvals-heading h3 {
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-section);
+  line-height: 1.05;
+}
+
+.console.theme-command-center .decisions-approvals-heading p:last-child,
+.console.theme-light .decisions-approvals-heading p:last-child {
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+/* Policy selection and enforcement stay together in one Decisions workspace. */
+.console.theme-command-center .decisions-policy-workspace,
+.console.theme-light .decisions-policy-workspace {
+  display: grid;
+  gap: 28px;
+}
+
+.console.theme-command-center .decisions-policy-section,
+.console.theme-light .decisions-policy-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.console.theme-command-center .decisions-policy-section:first-child,
+.console.theme-light .decisions-policy-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.console.theme-command-center .decisions-policy-heading,
+.console.theme-light .decisions-policy-heading {
+  display: grid;
+  gap: 5px;
+  max-width: 780px;
+}
+
+.console.theme-command-center .decisions-policy-heading .eyebrow,
+.console.theme-light .decisions-policy-heading .eyebrow,
+.console.theme-command-center .decisions-policy-heading h3,
+.console.theme-light .decisions-policy-heading h3,
+.console.theme-command-center .decisions-policy-heading p:last-child,
+.console.theme-light .decisions-policy-heading p:last-child {
+  margin: 0;
+}
+
+.console.theme-command-center .decisions-policy-heading h3,
+.console.theme-light .decisions-policy-heading h3 {
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-section);
+  line-height: 1.05;
+}
+
+.console.theme-command-center .decisions-policy-heading p:last-child,
+.console.theme-light .decisions-policy-heading p:last-child {
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
 /* Avatar preference in settings */
 .avatar-preference-section {
   background: var(--panel);
@@ -5204,4 +6094,3209 @@ h1, h2, h3, h4, b {
   margin: 0;
   font-size: 13px;
   color: #fff;
+}
+
+/* Final command-center navigation mode: vertical operator rail by default. */
+.console.theme-command-center { grid-template-columns: 248px 1fr; }
+.console.theme-command-center .side {
+  display: flex;
+  background: #1b1f23;
+  border-right-color: var(--line);
+}
+.console.theme-command-center .side .brand img { width: 38px; height: 38px; border-radius: 0; }
+.console.theme-command-center .side .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.console.theme-command-center .side nav button { border-radius: 0; font-family: 'Barlow', sans-serif; }
+.console.theme-command-center .side nav button.active {
+  background: var(--green-soft);
+  color: var(--text);
+  border-left: 2px solid var(--green);
+}
+.console.theme-command-center .side nav button.active svg { color: var(--green); }
+.console.theme-command-center .side nav button i { border-radius: 0; background: var(--green-soft); color: var(--green); }
+.console.theme-command-center .bottom-profile { border-top: 1px solid var(--line); }
+.console.theme-command-center .side > nav:not(.account-nav) { flex: 1 1 auto; }
+.console.theme-command-center .side .account-nav { flex: 0 0 auto; margin: 0; }
+.console.theme-command-center .bottom-profile { flex-shrink: 0; display: flex; flex-direction: column; }
+.console.theme-command-center .bottom-profile .profile-btn { order: -1; }
+.console.theme-command-center .profile-btn,
+.console.theme-command-center .account-nav button { border-radius: 0; color: var(--muted); }
+.console.theme-command-center .profile-btn:hover,
+.console.theme-command-center .account-nav button:hover { background: rgba(135,181,208,.1); color: var(--text); }
+.console.theme-command-center .command-brand,
+.console.theme-command-center .command-nav { display: none; }
+.console.theme-command-center .top {
+  min-height: 70px;
+  height: 70px;
+  padding: 0 28px;
+  flex-wrap: nowrap;
+}
+.console.theme-command-center .top-title { display: block; }
+.console.theme-command-center .top-title h1 { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; letter-spacing: .01em; }
+.console.theme-command-center .top-title p { font-family: 'Barlow', sans-serif; }
+@media (max-width: 960px) {
+  .console.theme-command-center { grid-template-columns: 1fr; }
+  .console.theme-command-center .side {
+    position: fixed;
+    display: flex;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform .25s cubic-bezier(.16,1,.3,1);
+    box-shadow: 10px 0 30px rgba(0,0,0,.7);
+  }
+  .console.theme-command-center .side.open { transform: translateX(0); }
+  .console.theme-command-center .hamb { display: grid; }
+}
+
+/* Command Center component normalization. Keep every workspace surface on the
+   same industrial token set; the mock is the active console system. */
+.console.theme-command-center button,
+.console.theme-command-center input,
+.console.theme-command-center select,
+.console.theme-command-center textarea {
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+.console.theme-command-center button { border-radius: 0; }
+.console.theme-command-center .primary,
+.console.theme-command-center .primary-btn,
+.console.theme-command-center .primary-action-btn,
+.console.theme-command-center .save-btn {
+  border: 1px solid var(--green);
+  border-radius: 0;
+  background: var(--green);
+  color: #102027;
+  box-shadow: none;
+}
+.console.theme-command-center .primary:hover,
+.console.theme-command-center .primary-btn:hover,
+.console.theme-command-center .primary-action-btn:hover,
+.console.theme-command-center .save-btn:hover { background: var(--green-hover); }
+.console.theme-command-center .secondary,
+.console.theme-command-center .secondary-btn,
+.console.theme-command-center .secondary-action,
+.console.theme-command-center .link-button {
+  border-color: var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+.console.theme-command-center .secondary:hover,
+.console.theme-command-center .secondary-btn:hover,
+.console.theme-command-center .secondary-action:hover,
+.console.theme-command-center .link-button:hover {
+  border-color: var(--line-hover);
+  background: var(--green-soft);
+  color: var(--text);
+}
+.console.theme-command-center .danger,
+.console.theme-command-center .danger-action,
+.console.theme-command-center .danger-action-btn {
+  border-color: rgba(216,131,131,.55);
+  border-radius: 0;
+  background: var(--red-soft);
+  color: var(--red);
+}
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .action-form,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .approval-panel,
+.console.theme-command-center .transaction-result,
+.console.theme-command-center .responder-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .integrations-section,
+.console.theme-command-center .network-card,
+.console.theme-command-center .opa-card,
+.console.theme-command-center .code-snippets-section,
+.console.theme-command-center .dev-auth-card,
+.console.theme-command-center .contract-card {
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+  color: var(--text);
+}
+.console.theme-command-center .settings-card-header,
+.console.theme-command-center .settings-card-title,
+.console.theme-command-center .policy-bundle-header,
+.console.theme-command-center .integration-card-header { border-color: var(--line); }
+.console.theme-command-center .settings-card-desc,
+.console.theme-command-center .field-hint,
+.console.theme-command-center .empty-state,
+.console.theme-command-center .transaction-note,
+.console.theme-command-center .agent-footer-note,
+.console.theme-command-center .integration-card p,
+.console.theme-command-center .policy-bundle-desc { color: var(--muted); }
+.console.theme-command-center .settings-readout,
+.console.theme-command-center .toggle-item,
+.console.theme-command-center .avatar-preference-section,
+.console.theme-command-center .avatar-preview-box,
+.console.theme-command-center .agent-remediation-panel,
+.console.theme-command-center .responder-card,
+.console.theme-command-center .agent-card,
+.console.theme-command-center .policy-history-row,
+.console.theme-command-center .event-stream-toolbar,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .evidence-runtime-strip,
+.console.theme-command-center .pipeline-row {
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+.console.theme-command-center .agent-card:hover,
+.console.theme-command-center .policy-history-row:hover,
+.console.theme-command-center .policy-history-row.selected,
+.console.theme-command-center .event-stream-card:hover,
+.console.theme-command-center .pipeline-row:hover { border-color: var(--line-hover); background: var(--green-soft); }
+.console.theme-command-center .agent-card h3,
+.console.theme-command-center .agent-card b,
+.console.theme-command-center .responder-card h4,
+.console.theme-command-center .integration-card h4,
+.console.theme-command-center .policy-bundle-title,
+.console.theme-command-center .pipeline-name b { color: var(--text); }
+.console.theme-command-center .agent-card > p,
+.console.theme-command-center .agent-health-row,
+.console.theme-command-center .responder-card p,
+.console.theme-command-center .pipeline-name small,
+.console.theme-command-center .integration-endpoint,
+.console.theme-command-center .integration-card-footer { color: var(--muted); }
+.console.theme-command-center .agent-icon,
+.console.theme-command-center .responder-icon { border-radius: 0; background: var(--green-soft); color: var(--green); }
+.console.theme-command-center .status-badge,
+.console.theme-command-center .live-status-pill,
+.console.theme-command-center .status-pill,
+.console.theme-command-center .theme-choice,
+.console.theme-command-center .responder-gate,
+.console.theme-command-center .responder-status { border-radius: 0; }
+.console.theme-command-center .status-badge,
+.console.theme-command-center .live-status-pill,
+.console.theme-command-center .status-pill { border-color: var(--line); background: var(--panel-elevated); color: var(--muted); }
+.console.theme-command-center .status-badge.protected,
+.console.theme-command-center .status-pill.protected,
+.console.theme-command-center .live-status-pill { border-color: var(--green); color: var(--green); }
+.console.theme-command-center .status-pill.attention { border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+.console.theme-command-center .form-message { color: var(--green); }
+.console.theme-command-center .form-message.error { color: var(--red); }
+.console.theme-command-center code,
+.console.theme-command-center pre { color: var(--green); }
+
+/* Agent and device drawers previously carried the light redesign palette. */
+.console.theme-command-center .device-detail-backdrop { background: rgba(5, 8, 9, .78); }
+.console.theme-command-center .device-detail-drawer,
+.console.theme-command-center .agent-detail-drawer {
+  border-left-color: var(--line);
+  background: var(--panel-solid);
+  color: var(--text);
+  box-shadow: -24px 0 70px rgba(0,0,0,.45);
+}
+.console.theme-command-center .device-detail-header,
+.console.theme-command-center .agent-detail-hero {
+  border-bottom-color: var(--line);
+  background: var(--panel-elevated);
+}
+.console.theme-command-center .device-detail-header h2,
+.console.theme-command-center .agent-detail-heading h2,
+.console.theme-command-center .agent-detail-section h3,
+.console.theme-command-center .agent-detail-action h3 { color: var(--text); }
+.console.theme-command-center .device-detail-close,
+.console.theme-command-center .agent-detail-close {
+  border-color: var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.console.theme-command-center .agent-detail-icon { border-radius: 0; background: var(--green-soft); color: var(--green); }
+.console.theme-command-center .agent-detail-heading p:last-child,
+.console.theme-command-center .agent-detail-description,
+.console.theme-command-center .agent-detail-action p:not(.agent-detail-kicker),
+.console.theme-command-center .device-detail-meta { color: var(--muted); }
+.console.theme-command-center .agent-detail-kicker { color: var(--green); }
+.console.theme-command-center .agent-detail-status,
+.console.theme-command-center .agent-detail-proof { border-radius: 0; background: var(--green-soft); color: var(--green); }
+.console.theme-command-center .agent-detail-status.status-pending_signature,
+.console.theme-command-center .agent-detail-action.attention { border-color: var(--amber); background: var(--amber-soft); color: var(--amber); }
+.console.theme-command-center .agent-detail-facts,
+.console.theme-command-center .agent-detail-section,
+.console.theme-command-center .agent-detail-action {
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+.console.theme-command-center .agent-fact { background: var(--panel-elevated); }
+.console.theme-command-center .agent-fact.good b { color: var(--green); }
+.console.theme-command-center .agent-fact.warn b { color: var(--amber); }
+.console.theme-command-center .routing-section { background: var(--panel); }
+.console.theme-command-center .routing-node,
+.console.theme-command-center .memory-result {
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--panel-elevated);
+}
+.console.theme-command-center .routing-node.active { border-color: var(--green); background: var(--green-soft); }
+.console.theme-command-center .routing-node.muted { background: var(--panel); }
+.console.theme-command-center .routing-node-icon { border-radius: 0; background: var(--panel); color: var(--muted); }
+.console.theme-command-center .routing-node.active .routing-node-icon,
+.console.theme-command-center .routing-node.configured .routing-node-icon { background: var(--green-soft); color: var(--green); }
+.console.theme-command-center .routing-node b,
+.console.theme-command-center .memory-result b { color: var(--text); }
+.console.theme-command-center .routing-node strong { color: var(--green); }
+.console.theme-command-center .routing-node.muted strong { color: var(--dim); }
+.console.theme-command-center .routing-connector { border-left-color: var(--line); }
+.console.theme-command-center .routing-connector span { background: var(--panel); color: var(--dim); }
+.console.theme-command-center .detail-secondary-action,
+.console.theme-command-center .detail-primary-action { border-radius: 0; }
+.console.theme-command-center .detail-secondary-action { border-color: var(--line); background: transparent; color: var(--text); }
+.console.theme-command-center .detail-primary-action { border-color: var(--green); background: var(--green); color: #102027; }
+.console.theme-command-center .memory-result { border: 1px solid var(--line); }
+.console.theme-command-center .detail-state { border-radius: 0; background: var(--red-soft); color: var(--red); }
+.console.theme-command-center .agent-detail-identity-grid > div { border-top-color: var(--line); }
+.console.theme-command-center .agent-detail-identity-grid code,
+.console.theme-command-center .agent-detail-identity-grid b,
+.console.theme-command-center .agent-fact b { color: var(--text); }
+.console.theme-command-center .agent-detail-identity-grid small,
+.console.theme-command-center .agent-fact small { color: var(--dim); }
+
+/* Event stream and developer console use the same panel, code, and status tokens. */
+.console.theme-command-center .reasoning-hero,
+.console.theme-command-center .reasoning-stat-card,
+.console.theme-command-center .event-drawer,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .api-explorer-layout,
+.console.theme-command-center .api-endpoints-nav,
+.console.theme-command-center .api-console-main,
+.console.theme-command-center .response-pane,
+.console.theme-command-center .developer-view {
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: none;
+}
+.console.theme-command-center .event-drawer { box-shadow: -24px 0 70px rgba(0,0,0,.45); }
+.console.theme-command-center .api-endpoints-nav,
+.console.theme-command-center .response-pane,
+.console.theme-command-center .event-inline-json { background: #0d1213; }
+.console.theme-command-center .api-endpoints-nav button,
+.console.theme-command-center .endpoint-item { border-radius: 0; color: var(--muted); }
+.console.theme-command-center .api-endpoints-nav button.active,
+.console.theme-command-center .endpoint-item.active { background: var(--green-soft); color: var(--text); border-color: var(--green); }
+.console.theme-command-center .method-badge { border-radius: 0; border-color: var(--line); }
+.console.theme-command-center .event-stream-card.action-contain,
+.console.theme-command-center .event-stream-card.action-allow,
+.console.theme-command-center .event-stream-card.action-allowed { border-left-color: var(--green); }
+.console.theme-command-center .event-stream-card.action-deny,
+.console.theme-command-center .event-stream-card.action-blocked { border-left-color: var(--red); }
+.console.theme-command-center .event-stream-card.action-escalate { border-left-color: var(--amber); }
+.console.theme-command-center .dev-auth-card strong,
+.console.theme-command-center .response-pane h3,
+.console.theme-command-center .code-snippets-section h3 { color: var(--text); }
+
+/* Match the Industry mockup's exact frame language and vertical rail geometry. */
+.console.theme-command-center .side {
+  width: 248px;
+  padding: 0;
+  border-right-color: var(--line);
+}
+.console.theme-command-center .side .brand {
+  min-height: 84px;
+  padding: 16px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.console.theme-command-center .side .brand img { width: 52px; height: 52px; }
+.console.theme-command-center .side .brand b { font-size: 19px; letter-spacing: -.01em; }
+.console.theme-command-center .side > nav:not(.account-nav) { padding: 14px 10px; gap: 2px; }
+.console.theme-command-center .side .nav-group { gap: 2px; }
+.console.theme-command-center .side .nav-group > small { margin: 14px 12px 5px; color: var(--dim); font-size: 10px; letter-spacing: .1em; }
+.console.theme-command-center .side nav button { padding: 10px 12px; font-size: 16px; }
+.console.theme-command-center .nav-collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.console.theme-command-center .nav-collapse-btn:hover { border-color: var(--line-hover); color: var(--text); background: var(--green-soft); }
+.console.theme-command-center .nav-collapse-btn svg { width: 16px; height: 16px; }
+.console.theme-command-center .bottom-profile { position: relative; }
+.console.theme-command-center .account-nav { display: none; }
+.console.theme-command-center .profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.console.theme-command-center .profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  background: var(--green);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.console.theme-command-center .profile-name { overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.console.theme-command-center .profile-menu {
+  position: absolute;
+  right: 10px;
+  bottom: calc(100% + 8px);
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  box-shadow: 0 3px 10px rgba(0,0,0,.35);
+}
+.console.theme-command-center .profile-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: 500 14px/1.2 'Barlow', sans-serif;
+}
+.console.theme-command-center .profile-menu button:hover { background: var(--green-soft); color: var(--green); }
+.console.theme-command-center .top {
+  min-height: 84px;
+  height: auto;
+  padding: 14px clamp(16px, 3vw, 40px);
+  border-bottom-color: var(--line);
+}
+.console.theme-command-center .top-title { display: none; }
+.console.theme-command-center .tools { margin-left: auto; }
+.console.theme-command-center .tools > button[aria-label="View notifications"] { display: inline-grid; }
+.console.theme-command-center .content {
+  max-width: 1360px;
+  padding: 28px clamp(16px, 3vw, 40px) 64px;
+}
+.console.theme-command-center h1 { font-size: 42px; }
+.console.theme-command-center h2 { font-size: 32px; }
+.console.theme-command-center h3 { font-size: 25px; }
+
+.console.theme-command-center .metric,
+.console.theme-command-center .panel,
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .outbox-status-card,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .api-explorer-layout,
+.console.theme-command-center .agent-detail-section {
+  background-image:
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted));
+  background-repeat: no-repeat;
+  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
+  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
+}
+
+.console.theme-light .top {
+  flex-wrap: wrap;
+}
+
+.console.theme-light .field-group label,
+.console.theme-light .settings-fields-grid > label {
+  color: var(--text);
+}
+
+.console.theme-command-center,
+.console.theme-light {
+  --frame-line: rgba(92, 100, 106, .28);
+  --frame-tick: rgba(171, 181, 188, .72);
+}
+
+.console.theme-command-center .metric,
+.console.theme-command-center .panel,
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .outbox-status-card,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .api-explorer-layout,
+.console.theme-command-center .agent-detail-section,
+.console.theme-light .metric,
+.console.theme-light .panel,
+.console.theme-light .resource,
+.console.theme-light .settings-card,
+.console.theme-light .hybrid-architecture-card,
+.console.theme-light .outbox-status-card,
+.console.theme-light .policy-bundle-card,
+.console.theme-light .policy-deploy-panel,
+.console.theme-light .integration-card,
+.console.theme-light .event-stream-card,
+.console.theme-light .api-explorer-layout,
+.console.theme-light .agent-detail-section,
+.console.theme-light .evidence-reference-metrics {
+  border-color: var(--frame-line);
+  background-image:
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick));
+  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px;
+}
+
+.agent-workspace {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.agent-workspace > header {
+  margin: 0;
+  max-width: 760px;
+}
+
+.agent-workspace > header h2 {
+  margin: 6px 0 8px;
+  font-size: 28px;
+}
+
+.agent-workspace > header > span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.agent-workspace > .agent-toolbar {
+  margin: 0;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.agent-workspace > .hybrid-architecture-card,
+.agent-workspace > .outbox-status-card,
+.agent-workspace > .responder-panel {
+  margin: 0;
+}
+
+.agent-workspace > .agent-grid {
+  padding: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.agent-workspace > .agent-toolbar,
+.agent-workspace > .agent-grid {
+  border-color: var(--frame-line, var(--line));
+  background-image:
+    linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))),
+    linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))),
+    linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))),
+    linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted)));
+  background-repeat: no-repeat;
+  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px;
+  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
+}
+
+.containment-view {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.containment-view > * {
+  min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.containment-view .settings-fields-grid,
+.containment-view .responder-grid,
+.containment-view .event-table {
+  min-width: 0;
+}
+
+.containment-view .settings-actions-footer {
+  flex-wrap: wrap;
+}
+
+/* Keep the active tenant/agent namespace visible in the header. */
+.console.theme-light .shared-agent-picker,
+.console.theme-command-center .shared-agent-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.shared-agent-picker select {
+  width: clamp(170px, 18vw, 260px);
+  min-width: 0;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--frame-line, var(--line));
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.shared-agent-picker select:focus {
+  outline: 1px solid var(--green);
+  outline-offset: 1px;
+}
+
+@media (max-width: 760px) {
+  .shared-agent-picker span { display: none; }
+  .shared-agent-picker select { width: min(190px, 44vw); }
+}
+.console.theme-command-center .metric { padding: 20px 22px; }
+.console.theme-command-center .metric > b { font-size: 40px; line-height: 1.05; letter-spacing: -.02em; }
+.console.theme-command-center .panel { padding: 20px 22px; }
+.console.theme-command-center .panel-title h3 { font-size: 22px; }
+.console.theme-command-center .panel-title { padding-bottom: 12px; }
+.console.theme-command-center .metrics { gap: 0; margin-bottom: 20px; }
+.console.theme-command-center .metrics .metric + .metric { border-left: 0; }
+.console.theme-command-center .panels,
+.console.theme-command-center .command-grid { gap: 20px; }
+.console.theme-command-center .command-grid { margin-top: 20px; }
+.console.theme-command-center .live-telemetry-grid { gap: 14px; }
+.console.theme-command-center .workspace-header { margin-bottom: 20px; }
+.console.theme-command-center .workspace-tabs { gap: 4px; margin-bottom: 20px; padding-bottom: 10px; }
+.console.theme-command-center .cards { gap: 14px; margin-bottom: 20px; }
+.console.theme-command-center:has(.side.collapsed) { grid-template-columns: 72px 1fr; }
+.console.theme-command-center .side.collapsed { width: 72px; }
+.console.theme-command-center .side.collapsed .brand { justify-content: center; padding-inline: 8px; }
+.console.theme-command-center .side.collapsed .brand img { width: 38px; height: 38px; }
+.console.theme-command-center .side.collapsed .brand b,
+.console.theme-command-center .side.collapsed .nav-group > small,
+.console.theme-command-center .side.collapsed .profile-name,
+.console.theme-command-center .side.collapsed nav button span,
+.console.theme-command-center .side.collapsed nav button i { display: none; }
+.console.theme-command-center .side.collapsed > nav:not(.account-nav) { padding-inline: 8px; }
+.console.theme-command-center .side.collapsed .nav-group button { justify-content: center; padding-inline: 0; }
+.console.theme-command-center .side.collapsed .profile-btn { justify-content: center; padding-inline: 0; }
+.console.theme-command-center .side.collapsed .profile-menu { right: -180px; bottom: 8px; left: 72px; }
+@media (max-width: 960px) {
+  .console.theme-command-center:has(.side.collapsed) { grid-template-columns: 1fr; }
+  .console.theme-command-center .side.collapsed { width: 260px; }
+  .console.theme-command-center .side.collapsed .brand { justify-content: space-between; padding-inline: 14px; }
+  .console.theme-command-center .side.collapsed .brand img { width: 52px; height: 52px; }
+  .console.theme-command-center .side.collapsed .brand b,
+  .console.theme-command-center .side.collapsed .nav-group > small,
+  .console.theme-command-center .side.collapsed .profile-name,
+  .console.theme-command-center .side.collapsed nav button span,
+  .console.theme-command-center .side.collapsed nav button i { display: initial; }
+  .console.theme-command-center .side.collapsed > nav:not(.account-nav) { padding-inline: 10px; }
+  .console.theme-command-center .side.collapsed .nav-group button { justify-content: flex-start; padding-inline: 12px; }
+  .console.theme-command-center .side.collapsed .profile-btn { justify-content: flex-start; padding-inline: 4px; }
+}
+
+/* Command Center spacing scale: shared surface padding and internal rhythm. */
+.console.theme-command-center {
+  --space-surface: 20px;
+  --space-compact: 14px;
+  --space-section: 20px;
+}
+.console.theme-command-center .metric,
+.console.theme-command-center .panel,
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .action-form,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .approval-panel,
+.console.theme-command-center .transaction-result,
+.console.theme-command-center .responder-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .integrations-section,
+.console.theme-command-center .network-card,
+.console.theme-command-center .opa-card,
+.console.theme-command-center .code-snippets-section,
+.console.theme-command-center .dev-auth-card,
+.console.theme-command-center .contract-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .outbox-status-card,
+.console.theme-command-center .reasoning-hero,
+.console.theme-command-center .reasoning-stat-card,
+.console.theme-command-center .api-explorer-layout,
+.console.theme-command-center .developer-view {
+  box-sizing: border-box;
+  padding: var(--space-surface);
+}
+.console.theme-command-center .telemetry-chart,
+.console.theme-command-center .resource-widget {
+  box-sizing: border-box;
+  padding: var(--space-compact);
+}
+.console.theme-command-center .agent-card,
+.console.theme-command-center .responder-card,
+.console.theme-command-center .policy-history-row,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .evidence-runtime-strip,
+.console.theme-command-center .pipeline-row,
+.console.theme-command-center .settings-readout,
+.console.theme-command-center .toggle-item,
+.console.theme-command-center .avatar-preference-section,
+.console.theme-command-center .avatar-preview-box,
+.console.theme-command-center .agent-remediation-panel {
+  box-sizing: border-box;
+  padding: var(--space-compact);
+}
+.console.theme-command-center .panels,
+.console.theme-command-center .cards,
+.console.theme-command-center .command-grid,
+.console.theme-command-center .settings-grid,
+.console.theme-command-center .responder-grid,
+.console.theme-command-center .integration-grid,
+.console.theme-command-center .policy-grid,
+.console.theme-command-center .agent-grid,
+.console.theme-command-center .live-telemetry-grid {
+  gap: var(--space-section);
+}
+.console.theme-command-center .panel-title,
+.console.theme-command-center .settings-card-header,
+.console.theme-command-center .policy-bundle-header,
+.console.theme-command-center .integration-card-header,
+.console.theme-command-center .deploy-panel-header {
+  margin-bottom: var(--space-compact);
+}
+.console.theme-command-center .device-detail-drawer,
+.console.theme-command-center .agent-detail-drawer,
+.console.theme-command-center .event-drawer,
+.console.theme-command-center .opa-source-modal {
+  box-sizing: border-box;
+  padding: 24px;
+}
+@media (max-width: 960px) {
+  .console.theme-command-center .device-detail-drawer,
+  .console.theme-command-center .agent-detail-drawer,
+  .console.theme-command-center .event-drawer,
+  .console.theme-command-center .opa-source-modal { padding: 20px; }
+}
+
+/* Final console calibration against the supplied Console reference. */
+.console.theme-command-center .content {
+  max-width: 1360px;
+  padding: 34px 28px 72px;
+}
+
+.console.theme-command-center .welcome {
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+
+.console.theme-command-center .welcome h2 {
+  max-width: 760px;
+  margin-top: 8px;
+  font-size: clamp(38px, 4.2vw, 52px);
+  line-height: .98;
+}
+
+.console.theme-command-center .welcome span {
+  display: block;
+  max-width: 720px;
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.console.theme-command-center .overview-page .welcome .primary { display: none; }
+
+.console.theme-command-center .metrics {
+  gap: 0;
+  margin-bottom: 28px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.console.theme-command-center .metrics .metric {
+  min-height: 126px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 22px 20px;
+}
+
+.console.theme-command-center .metrics .metric:last-child { border-right: 0; }
+.console.theme-command-center .metric > div { font-size: 12px; }
+.console.theme-command-center .metric > b { margin-top: 16px; font-size: 42px; }
+.console.theme-command-center .mock-posture-grid { gap: 24px; margin-bottom: 24px; }
+.console.theme-command-center .mock-posture-grid .panel { min-height: 360px; padding: 22px; }
+.console.theme-command-center .mock-posture-grid .panel-title h3 { font-size: 24px; }
+.console.theme-command-center .responder-grid { margin-top: 12px; }
+
+.console.theme-command-center .audit-packet-button {
+  order: 5;
+  min-width: 132px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: 600 12px 'Barlow Condensed', sans-serif;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+.console.theme-command-center .audit-packet-button:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.console.theme-command-center .tools > button[aria-label="Refresh data"],
+.console.theme-command-center .tools > button[aria-label="View notifications"] {
+  display: none;
+}
+
+.console.theme-light .audit-packet-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+  font: 600 12px 'Barlow Condensed', sans-serif;
+}
+
+/* Light mode uses the same Console composition as dark mode. Only the
+   surface tokens change; navigation, header density, and content rhythm do
+   not drift between themes. */
+.console.theme-light {
+  --bg: #f2f2f3;
+  --bg-gradient: #f2f2f3;
+  --panel: #e9e9ea;
+  --panel-solid: #e9e9ea;
+  --panel-elevated: #f8f8f8;
+  --line: rgba(29, 31, 32, .15);
+  --line-hover: rgba(29, 31, 32, .32);
+  --text: #1d1f20;
+  --muted: #62676c;
+  --dim: #777d82;
+  --green: #416180;
+  --green-hover: #2f4e6b;
+  --green-soft: rgba(65, 97, 128, .13);
+  --green-glow: rgba(65, 97, 128, .16);
+  --cyan: #416180;
+  --amber: #9b6c2c;
+  --amber-soft: rgba(155, 108, 44, .14);
+  --red: #a84e4e;
+  --red-soft: rgba(168, 78, 78, .14);
+  grid-template-columns: 248px 1fr;
+  background: var(--bg);
+  color: var(--text);
+  color-scheme: light;
+  font-family: 'Barlow', var(--font-body), sans-serif;
+}
+.console.theme-light .side {
+  display: flex;
+  background: var(--panel);
+  border-right-color: var(--line);
+}
+.console.theme-light .side .brand img { width: 38px; height: 38px; border-radius: 0; }
+.console.theme-light .side .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.console.theme-light .side nav button,
+.console.theme-light .profile-btn,
+.console.theme-light .account-nav button { border-radius: 0; font-family: 'Barlow', sans-serif; }
+.console.theme-light .side nav button.active {
+  background: var(--green-soft);
+  color: var(--text);
+  border-left: 2px solid var(--green);
+}
+.console.theme-light .side nav button.active svg { color: var(--green); }
+.console.theme-light .side nav button i { border-radius: 0; background: var(--green-soft); color: var(--green); }
+.console.theme-light .side .brand {
+  min-height: 84px;
+  padding: 16px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.console.theme-light .nav-collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.console.theme-light .nav-collapse-btn:hover { border-color: var(--line-hover); color: var(--text); background: var(--green-soft); }
+.console.theme-light .nav-collapse-btn svg { width: 16px; height: 16px; }
+.console.theme-light .main { width: 100%; }
+.console.theme-light .top {
+  min-height: 84px;
+  height: auto;
+  padding: 14px clamp(16px, 3vw, 40px);
+  background: var(--bg);
+  border-bottom-color: var(--line);
+}
+.console.theme-light .top-title,
+.console.theme-light .shared-agent-picker,
+.console.theme-light .tools > button[aria-label="Refresh data"],
+.console.theme-light .tools > button[aria-label="View notifications"] { display: none; }
+.console.theme-light .tools { margin-left: auto; gap: 9px; }
+.console.theme-light .tools > button,
+.console.theme-light .tools > button:hover { border-radius: 0; }
+.console.theme-light .content { max-width: 1360px; padding: 34px 28px 72px; }
+.console.theme-light .content > * { max-width: 100%; }
+.console.theme-light h1,
+.console.theme-light h2,
+.console.theme-light h3,
+.console.theme-light h4,
+.console.theme-light h5,
+.console.theme-light h6,
+.console.theme-light b { color: var(--text); }
+.console.theme-light h1,
+.console.theme-light h2 { font-family: 'Barlow Condensed', sans-serif; letter-spacing: -.02em; }
+.console.theme-light .welcome h2 { font-size: clamp(38px, 4.2vw, 52px); line-height: .98; }
+.console.theme-light .overview-page .welcome .primary { display: none; }
+.console.theme-light .metrics { gap: 0; border: 1px solid var(--line); background: var(--panel); }
+.console.theme-light .metrics .metric {
+  min-height: 126px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.console.theme-light .metrics .metric:last-child { border-right: 0; }
+.console.theme-light .metric,
+.console.theme-light .panel,
+.console.theme-light .resource,
+.console.theme-light .settings-card,
+.console.theme-light .policy-bundle-card,
+.console.theme-light .integration-card,
+.console.theme-light .event-stream-card { border-radius: 0; }
+.console.theme-light .mock-posture-grid { gap: 24px; margin-bottom: 24px; }
+.console.theme-light .mock-posture-grid .panel { min-height: 360px; padding: 22px; }
+.console.theme-light .audit-packet-button {
+  min-width: 132px;
+  background: transparent;
+  color: var(--text);
+}
+.console.theme-light:has(.side.collapsed) { grid-template-columns: 72px 1fr; }
+.console.theme-light .side.collapsed { width: 72px; }
+
+/* Keep the compact rail behavior identical in both console themes. */
+.console.theme-command-center .side.collapsed .brand {
+  justify-content: center;
+  padding-inline: 8px;
+}
+
+.console.theme-light .side.collapsed .brand {
+  justify-content: center;
+  padding-inline: 8px;
+}
+
+.console.theme-command-center .side.collapsed .brand b,
+.console.theme-command-center .side.collapsed .nav-group > small,
+.console.theme-command-center .side.collapsed .profile-name,
+.console.theme-command-center .side.collapsed nav button span,
+.console.theme-command-center .side.collapsed nav button i,
+.console.theme-light .side.collapsed .brand b,
+.console.theme-light .side.collapsed .nav-group > small,
+.console.theme-light .side.collapsed .profile-name,
+.console.theme-light .side.collapsed nav button span,
+.console.theme-light .side.collapsed nav button i {
+  display: none;
+}
+
+.console.theme-command-center .side.collapsed > nav:not(.account-nav),
+.console.theme-light .side.collapsed > nav:not(.account-nav) {
+  padding-inline: 8px;
+}
+
+.console.theme-command-center .side.collapsed .nav-group button,
+.console.theme-light .side.collapsed .nav-group button {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.console.theme-command-center .side.collapsed .profile-btn,
+.console.theme-light .side.collapsed .profile-btn {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+@media (max-width: 960px) {
+  .console.theme-command-center .nav-collapse-btn,
+  .console.theme-light .nav-collapse-btn {
+    display: none;
+  }
+
+  .console.theme-command-center .side.collapsed,
+  .console.theme-light .side.collapsed {
+    width: 260px;
+  }
+
+  .console.theme-command-center .side.collapsed .brand,
+  .console.theme-light .side.collapsed .brand {
+    justify-content: space-between;
+    padding-inline: 14px;
+  }
+
+  .console.theme-command-center .side.collapsed .brand b,
+  .console.theme-command-center .side.collapsed .nav-group > small,
+  .console.theme-command-center .side.collapsed .profile-name,
+  .console.theme-command-center .side.collapsed nav button span,
+  .console.theme-command-center .side.collapsed nav button i,
+  .console.theme-light .side.collapsed .brand b,
+  .console.theme-light .side.collapsed .nav-group > small,
+  .console.theme-light .side.collapsed .profile-name,
+  .console.theme-light .side.collapsed nav button span,
+  .console.theme-light .side.collapsed nav button i {
+    display: initial;
+  }
+
+  .console.theme-command-center .side.collapsed > nav:not(.account-nav),
+  .console.theme-light .side.collapsed > nav:not(.account-nav) {
+    padding-inline: 10px;
+  }
+
+  .console.theme-command-center .side.collapsed .nav-group button,
+  .console.theme-light .side.collapsed .nav-group button {
+    justify-content: flex-start;
+    padding-inline: 12px;
+  }
+
+  .console.theme-command-center .side.collapsed .profile-btn,
+  .console.theme-light .side.collapsed .profile-btn {
+    justify-content: flex-start;
+    padding-inline: 4px;
+  }
+}
+
+@media (max-width: 760px) {
+  .console.theme-light { grid-template-columns: 1fr; }
+  .console.theme-light .side { position: fixed; width: 260px; transform: translateX(-100%); }
+  .console.theme-light .side.open { transform: translateX(0); }
+  .console.theme-light .content { padding: 26px 16px 56px; }
+  .console.theme-light .metrics { grid-template-columns: 1fr 1fr; }
+  .console.theme-light .metrics .metric:nth-child(2) { border-right: 0; }
+  .console.theme-light .metrics .metric:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .console.theme-light .audit-packet-button { display: none; }
+}
+
+@media (max-width: 760px) {
+  .console.theme-command-center .content { padding: 26px 16px 56px; }
+  .console.theme-command-center .metrics { grid-template-columns: 1fr 1fr; }
+  .console.theme-command-center .metrics .metric:nth-child(2) { border-right: 0; }
+  .console.theme-command-center .metrics .metric:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .console.theme-command-center .audit-packet-button { display: none; }
+}
+
+/* Light theme surface pass: keep every secondary workspace, drawer, modal,
+   table, and diagnostic pane on the same operator palette as the overview. */
+.console.theme-light {
+  --surface-strong: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-muted: #eef2f6;
+  --code-surface: #e7edf3;
+  --accent-soft: rgba(65, 97, 128, .12);
+  --shadow-light: 0 3px 10px rgba(43, 43, 45, .14);
+}
+
+.console.theme-light .modal-backdrop,
+.console.theme-light .device-detail-backdrop,
+.console.theme-light .agent-detail-backdrop,
+.console.theme-light .event-drawer-backdrop,
+.console.theme-light .opa-source-backdrop,
+.console.theme-light .redesigned-agent-detail {
+  background: rgba(20, 35, 61, .28);
+}
+
+.console.theme-light .modal-card,
+.console.theme-light .device-detail-drawer,
+.console.theme-light .agent-detail-drawer,
+.console.theme-light .event-drawer,
+.console.theme-light .opa-source-modal,
+.console.theme-light .device-detail-hero,
+.console.theme-light .agent-detail-hero,
+.console.theme-light .agent-detail-section,
+.console.theme-light .worker-action {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: var(--shadow-light);
+}
+
+.console.theme-light .modal-header,
+.console.theme-light .opa-source-header,
+.console.theme-light .opa-source-footer,
+.console.theme-light .response-status-bar,
+.console.theme-light .snippet-tabs {
+  background: var(--surface-subtle);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.console.theme-light .form-group label,
+.console.theme-light .settings-card-title,
+.console.theme-light .modal-actions,
+.console.theme-light .opa-source-header h3,
+.console.theme-light .modal-title-wrap h3,
+.console.theme-light .deploy-panel-title h3,
+.console.theme-light .reasoning-hero h2,
+.console.theme-light .reasoning-stat-card .stat-val,
+.console.theme-light .event-subject-row .subject-target,
+.console.theme-light .event-card-actions button,
+.console.theme-light .empty-stream-state h4,
+.console.theme-light .policy-bundle-title {
+  color: var(--text);
+}
+
+.console.theme-light .form-group input,
+.console.theme-light .form-group select,
+.console.theme-light .body-editor,
+.console.theme-light .response-pane,
+.console.theme-light .response-json-box,
+.console.theme-light .code-snippets-section,
+.console.theme-light .pipeline-table,
+.console.theme-light .event-inline-json,
+.console.theme-light .agent-reasoning-callout,
+.console.theme-light .report-preview,
+.console.theme-light .opa-source-code,
+.console.theme-light .policy-rules-summary,
+.console.theme-light .stream-search-wrap,
+.console.theme-light .class-select,
+.console.theme-light .audit-event {
+  background: var(--code-surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .pipeline-table-head,
+.console.theme-light .response-status-bar,
+.console.theme-light .event-inline-json,
+.console.theme-light .snippet-tabs {
+  background: var(--surface-muted);
+}
+
+.console.theme-light .pipeline-row,
+.console.theme-light .event-row,
+.console.theme-light .hybrid-pair,
+.console.theme-light .hybrid-detail-panel,
+.console.theme-light .settings-readout,
+.console.theme-light .toggle-item,
+.console.theme-light .hermes-boundary-grid > div,
+.console.theme-light .memory-result,
+.console.theme-light .routing-node,
+.console.theme-light .reasoning-stat-card,
+.console.theme-light .event-stream-toolbar,
+.console.theme-light .event-stream-card,
+.console.theme-light .resource-card,
+.console.theme-light .catalog-card {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .form-select,
+.console.theme-light input:not([type='checkbox']):not([type='radio']),
+.console.theme-light select,
+.console.theme-light textarea {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .form-select:focus,
+.console.theme-light input:not([type='checkbox']):not([type='radio']):focus,
+.console.theme-light select:focus,
+.console.theme-light textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px var(--green-soft);
+  outline: none;
+}
+
+.console.theme-light .hybrid-architecture-card {
+  background: linear-gradient(135deg, #f7fafc, #e9f0f5);
+  border-color: var(--line);
+}
+
+.console.theme-light .hybrid-pair {
+  background: var(--surface-strong);
+}
+
+.console.theme-light .reasoning-hero {
+  background: linear-gradient(135deg, #f7fafc, #e9f0f5);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.console.theme-light .reasoning-stat-card,
+.console.theme-light .stream-search-wrap,
+.console.theme-light .class-select,
+.console.theme-light .event-inline-json,
+.console.theme-light .policy-rules-summary,
+.console.theme-light .agent-reasoning-callout {
+  box-shadow: none;
+}
+
+.console.theme-light .event-drawer,
+.console.theme-light .event-drawer pre,
+.console.theme-light .opa-source-code,
+.console.theme-light .response-json-box pre,
+.console.theme-light .event-inline-json pre,
+.console.theme-light .report-preview,
+.console.theme-light .developer-grid code {
+  color: #29445f;
+}
+
+.console.theme-light .event-drawer pre,
+.console.theme-light .opa-source-code,
+.console.theme-light .report-preview,
+.console.theme-light .response-json-box pre,
+.console.theme-light .event-inline-json pre {
+  background: var(--code-surface);
+}
+
+.console.theme-light .filter-chip,
+.console.theme-light .event-action-pill,
+.console.theme-light .severity-tag,
+.console.theme-light .event-class-tag,
+.console.theme-light .status-code-pill,
+.console.theme-light .action-badge,
+.console.theme-light .live-status-pill,
+.console.theme-light .status-badge {
+  border-color: var(--line);
+}
+
+.console.theme-light .filter-chip {
+  background: var(--surface-subtle);
+  color: var(--muted);
+}
+
+.console.theme-light .filter-chip:hover,
+.console.theme-light .filter-chip.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-color: var(--line-hover);
+}
+
+.console.theme-light .event-stream-card.action-contain,
+.console.theme-light .event-action-pill.contain,
+.console.theme-light .action-badge.contain,
+.console.theme-light .severity-tag.sev-medium {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.console.theme-light .event-stream-card.action-deny,
+.console.theme-light .event-stream-card.action-blocked,
+.console.theme-light .event-action-pill.deny,
+.console.theme-light .event-action-pill.blocked,
+.console.theme-light .action-badge.deny,
+.console.theme-light .severity-tag.sev-high,
+.console.theme-light .severity-tag.sev-critical {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.console.theme-light .event-stream-card.action-escalate,
+.console.theme-light .event-action-pill.escalate,
+.console.theme-light .action-badge.escalate {
+  background: rgba(112, 82, 145, .12);
+  color: #705291;
+  border-color: rgba(112, 82, 145, .3);
+}
+
+.console.theme-light .event-stream-card.action-allow,
+.console.theme-light .event-stream-card.action-allowed,
+.console.theme-light .event-action-pill.allow,
+.console.theme-light .event-action-pill.allowed,
+.console.theme-light .action-badge.allow {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.console.theme-light .empty,
+.console.theme-light .empty-stream-state,
+.console.theme-light .empty-row {
+  background: var(--panel);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.console.theme-light .btn-secondary,
+.console.theme-light .secondary-btn,
+.console.theme-light .detail-secondary-action,
+.console.theme-light .open-drawer-btn,
+.console.theme-light .toggle-raw-btn,
+.console.theme-light .close-modal-btn,
+.console.theme-light .drawer-close,
+.console.theme-light .agent-detail-close {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .primary-btn,
+.console.theme-light .detail-primary-action,
+.console.theme-light .deploy-button,
+.console.theme-light .integrations-view .primary-action-btn {
+  background: var(--green);
+  border-color: var(--green);
+  color: #ffffff;
+}
+
+.console.theme-light .primary-btn:hover,
+.console.theme-light .detail-primary-action:hover,
+.console.theme-light .deploy-button:hover:not(:disabled),
+.console.theme-light .integrations-view .primary-action-btn:hover {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+}
+
+.console.theme-light .api-alert,
+.console.theme-light .deploy-success-alert,
+.console.theme-light .deploy-error-alert,
+.console.theme-light .form-message {
+  border-color: var(--line);
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+.console.theme-light .api-alert svg,
+.console.theme-light .form-message.success { color: var(--green); }
+.console.theme-light .form-message.error,
+.console.theme-light .deploy-error-alert { color: var(--red); }
+
+.configuration-unified {
+  display: grid;
+  gap: 32px;
+}
+
+.configuration-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.configuration-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.configuration-section-heading {
+  display: grid;
+  gap: 5px;
+  max-width: 780px;
+}
+
+.configuration-section-heading .eyebrow {
+  margin: 0;
+}
+
+.configuration-section-heading h3 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.configuration-section-heading p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.console.theme-light .configuration-section-heading h3,
+.console.theme-light .configuration-section-heading p:last-child {
+  color: var(--text);
+}
+
+.console.theme-light .configuration-section-heading p:last-child {
+  color: var(--muted);
+}
+
+.console.theme-light .settings-tab-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.console.theme-light .settings-tab-btn.active {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: var(--line-hover);
+}
+
+.console.theme-light .posture-option-card,
+.console.theme-light .posture-option-card.selected,
+.console.theme-light .active-token-row,
+.console.theme-light .token-reveal-row,
+.console.theme-light .session-props-grid > div,
+.console.theme-light .toggle-list .toggle-item,
+.console.theme-light .form-feedback-alert,
+.console.theme-light .minted-token-alert {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .posture-option-card.selected {
+  background: var(--green-soft);
+  border-color: var(--green);
+}
+
+.console.theme-light .option-title-row b,
+.console.theme-light .settings-tab-btn.active,
+.console.theme-light .token-info h4,
+.console.theme-light .session-props-grid dd,
+.console.theme-light .form-feedback-alert,
+.console.theme-light .minted-token-alert {
+  color: var(--text);
+}
+
+.console.theme-light .json-rows pre,
+.console.theme-light .evidence-runtime-strip span,
+.console.theme-light .signal-routing-map {
+  background: var(--code-surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .json-rows pre {
+  color: #29445f;
+}
+
+.console.theme-light .evidence-runtime-strip b,
+.console.theme-light .signal-stack strong,
+.console.theme-light .signal-center strong {
+  color: var(--text);
+}
+
+.console.theme-light .endpoint-nav-item:hover,
+.console.theme-light .endpoint-nav-item.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-color: var(--line-hover);
+}
+
+/* Keep top-level windows visually distinct when a workspace renders a fragment. */
+.content > .settings-card + .settings-card,
+.content > .resource + .resource,
+.content > .resource + .settings-card,
+.content > .settings-card + .resource,
+.content > .resource + .action-form,
+.content > .action-form + .settings-card,
+.content > .action-form + .resource {
+  margin-top: 24px;
+}
+
+.content > .command-grid + .panel {
+  margin-top: 24px;
+}
+
+@media (max-width: 760px) {
+  .top { min-width: 0; overflow: hidden; }
+
+  .telemetry-context-bar {
+    flex-wrap: wrap;
+    flex-basis: 100%;
+    gap: 8px;
+  }
+
+  .evidence-context-copy {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .time-range-controls {
+    margin-left: auto;
+  }
+}
+
+/* The reference console uses technical window frames rather than rounded cards:
+   a flat 1px rule with short registration marks at each corner. */
+.console.theme-light .metric,
+.console.theme-light .panel,
+.console.theme-light .resource,
+.console.theme-light .settings-card,
+.console.theme-light .hybrid-architecture-card,
+.console.theme-light .outbox-status-card,
+.console.theme-light .policy-bundle-card,
+.console.theme-light .policy-deploy-panel,
+.console.theme-light .integration-card,
+.console.theme-light .event-stream-card,
+.console.theme-light .api-explorer-layout,
+.console.theme-light .agent-detail-section,
+.console.theme-light .evidence-reference-metrics,
+.console.theme-light .evidence-reference-grid > .resource {
+  border-radius: 0;
+  border-color: var(--line);
+  box-shadow: none;
+  background-image:
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
+    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted));
+  background-repeat: no-repeat;
+  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
+  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
+}
+
+.console.theme-light .hermes-boundary-grid > div,
+.console.theme-light .evidence-runtime-strip span,
+.console.theme-light .report-preview,
+.console.theme-light .pipeline-table,
+.console.theme-light .pipeline-table-head,
+.console.theme-light .event-inline-json {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.console.theme-light .settings-card-title {
+  color: var(--text);
+}
+
+/* Final cascade guard: the namespace selector is a required operator control. */
+.console.theme-light .shared-agent-picker,
+.console.theme-command-center .shared-agent-picker {
+  display: flex;
+}
+
+/* Keep policy evaluation details on the same dark console surface as the
+   surrounding window instead of using a separate black inset. */
+.console.theme-command-center .agent-reasoning-callout {
+  background: var(--panel-solid);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.console.theme-command-center .reasoning-rationale {
+  color: var(--muted);
+}
+
+.console.theme-command-center .reasoning-footer-meta {
+  border-top-color: var(--line);
+}
+
+.console.theme-command-center .audit-event {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+}
+
+.console.theme-command-center .policy-rules-summary {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+}
+
+.console.theme-command-center .evidence-runtime-strip span {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.console.theme-command-center .hybrid-architecture-card {
+  background: var(--panel);
+  background-image: none;
+}
+
+.console.theme-command-center .hybrid-pair {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+}
+
+.console.theme-command-center .responder-panel {
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+.console.theme-command-center .responder-card,
+.console.theme-light .responder-card {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+  border-radius: 0;
+}
+
+/* Final typography pass: keep component text on the shared theme scale. */
+.console.theme-command-center,
+.console.theme-light {
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--dim);
+}
+
+.console.theme-command-center h1,
+.console.theme-command-center h2,
+.console.theme-command-center h3,
+.console.theme-command-center h4,
+.console.theme-command-center h5,
+.console.theme-command-center h6,
+.console.theme-light h1,
+.console.theme-light h2,
+.console.theme-light h3,
+.console.theme-light h4,
+.console.theme-light h5,
+.console.theme-light h6 {
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .field-hint,
+.console.theme-command-center .settings-card-desc,
+.console.theme-command-center .panel-title p,
+.console.theme-command-center .resource-header p,
+.console.theme-command-center .empty-state,
+.console.theme-command-center .transaction-note,
+.console.theme-command-center .agent-footer-note,
+.console.theme-command-center .responder-card p,
+.console.theme-command-center .integration-card p,
+.console.theme-command-center .policy-bundle-desc,
+.console.theme-command-center .reasoning-rationale,
+.console.theme-command-center .event-device-tag,
+.console.theme-command-center .event-time-meta time,
+.console.theme-command-center .audit-event small,
+.console.theme-light .field-hint,
+.console.theme-light .settings-card-desc,
+.console.theme-light .panel-title p,
+.console.theme-light .resource-header p,
+.console.theme-light .empty-state,
+.console.theme-light .transaction-note,
+.console.theme-light .agent-footer-note,
+.console.theme-light .responder-card p,
+.console.theme-light .integration-card p,
+.console.theme-light .policy-bundle-desc,
+.console.theme-light .reasoning-rationale,
+.console.theme-light .event-device-tag,
+.console.theme-light .event-time-meta time,
+.console.theme-light .audit-event small {
+  color: var(--text-secondary);
+}
+
+.console.theme-command-center .eyebrow,
+.console.theme-command-center .section-kicker,
+.console.theme-command-center dt,
+.console.theme-command-center .evidence-label,
+.console.theme-command-center .metric > div,
+.console.theme-command-center .evidence-runtime-strip b,
+.console.theme-light .eyebrow,
+.console.theme-light .section-kicker,
+.console.theme-light dt,
+.console.theme-light .evidence-label,
+.console.theme-light .metric > div,
+.console.theme-light .evidence-runtime-strip b {
+  color: var(--text-tertiary);
+}
+
+.console.theme-command-center code,
+.console.theme-command-center pre,
+.console.theme-command-center .subject-target,
+.console.theme-command-center .settings-readout,
+.console.theme-command-center .hybrid-pair dd,
+.console.theme-command-center .hybrid-detail-values code,
+.console.theme-light code,
+.console.theme-light pre,
+.console.theme-light .subject-target,
+.console.theme-light .settings-readout,
+.console.theme-light .hybrid-pair dd,
+.console.theme-light .hybrid-detail-values code {
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .event-id-ref,
+.console.theme-command-center .subject-label,
+.console.theme-command-center .matched-rule-tag,
+.console.theme-command-center .guardrail-tier,
+.console.theme-light .event-id-ref,
+.console.theme-light .subject-label,
+.console.theme-light .matched-rule-tag,
+.console.theme-light .guardrail-tier {
+  color: var(--text-tertiary);
+}
+
+/* Shared surfaces for legacy detail, form, evidence, and policy fragments. */
+.console.theme-command-center .action-form,
+.console.theme-command-center .form-group input,
+.console.theme-command-center .form-group select,
+.console.theme-command-center .form-select,
+.console.theme-command-center .class-select,
+.console.theme-command-center .stream-search-wrap,
+.console.theme-command-center .policy-rules-summary,
+.console.theme-command-center .reasoning-stat-card,
+.console.theme-command-center .event-inline-json,
+.console.theme-command-center .response-json-box,
+.console.theme-command-center .code-snippets-section,
+.console.theme-command-center .pipeline-table,
+.console.theme-command-center .report-preview,
+.console.theme-command-center .modal-card,
+.console.theme-light .action-form,
+.console.theme-light .form-group input,
+.console.theme-light .form-group select,
+.console.theme-light .form-select,
+.console.theme-light .class-select,
+.console.theme-light .stream-search-wrap,
+.console.theme-light .policy-rules-summary,
+.console.theme-light .reasoning-stat-card,
+.console.theme-light .event-inline-json,
+.console.theme-light .response-json-box,
+.console.theme-light .code-snippets-section,
+.console.theme-light .pipeline-table,
+.console.theme-light .report-preview,
+.console.theme-light .modal-card {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .subject-target,
+.console.theme-command-center .agent-reasoning-callout,
+.console.theme-command-center .event-inline-json pre,
+.console.theme-command-center .pipeline-table pre,
+.console.theme-command-center .response-json-box pre,
+.console.theme-light .subject-target,
+.console.theme-light .agent-reasoning-callout,
+.console.theme-light .event-inline-json pre,
+.console.theme-light .pipeline-table pre,
+.console.theme-light .response-json-box pre {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .form-group label,
+.console.theme-command-center .class-select label,
+.console.theme-command-center .config-tag b,
+.console.theme-command-center .response-status-bar,
+.console.theme-command-center .snippet-tabs,
+.console.theme-light .form-group label,
+.console.theme-light .class-select label,
+.console.theme-light .config-tag b,
+.console.theme-light .response-status-bar,
+.console.theme-light .snippet-tabs {
+  color: var(--text-secondary);
+}
+
+.console.theme-command-center .form-group input,
+.console.theme-command-center .form-group select,
+.console.theme-command-center .form-select,
+.console.theme-light .form-group input,
+.console.theme-light .form-group select,
+.console.theme-light .form-select {
+  color: var(--text-primary);
+}
+
+/* Consistent checkmarks and checkbox controls. */
+.console .responder-status svg,
+.console .status-badge svg,
+.console .live-status-pill svg,
+.console .policy-active-pill svg,
+.console .form-message svg,
+.console .save-feedback-pill svg,
+.console .checks svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  stroke-width: 2.4;
+  vertical-align: middle;
+}
+
+.console .responder-status,
+.console .status-badge,
+.console .live-status-pill,
+.console .policy-active-pill,
+.console .form-message,
+.console .save-feedback-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.console input[type='checkbox'] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 2px 0 0;
+  border: 1px solid var(--line-hover);
+  border-radius: 0;
+  background: var(--panel);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+}
+
+.console input[type='checkbox']::before {
+  content: '✓';
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  transform: scale(0);
+  transition: transform .12s ease;
+}
+
+.console input[type='checkbox']:checked {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.console input[type='checkbox']:checked::before {
+  transform: scale(1);
+}
+
+.console input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* Shield console shape system: containers and controls are square or
+   rectangular. Circular dots remain available for status indicators. */
+.console button,
+.console input,
+.console select,
+.console textarea,
+.console .panel,
+.console .resource,
+.console .settings-card,
+.console .action-form,
+.console .metric,
+.console .event-stream-card,
+.console .policy-bundle-card,
+.console .policy-deploy-panel,
+.console .integration-card,
+.console .network-card,
+.console .opa-card,
+.console .developer-view,
+.console .responder-panel,
+.console .responder-card,
+.console .agent-card,
+.console .hybrid-architecture-card,
+.console .hybrid-pair,
+.console .outbox-status-card,
+.console .evidence-reference-metrics,
+.console .evidence-reference-grid > .resource,
+.console .device-detail-drawer,
+.console .agent-detail-drawer,
+.console .event-drawer,
+.console .opa-source-modal,
+.console .modal-card,
+.console .workspace-tabs button,
+.console .settings-tab-btn,
+.console .snippet-tab-btn,
+.console .status-badge,
+.console .live-status-pill,
+.console .policy-active-pill,
+.console .event-action-pill,
+.console .severity-tag,
+.console .event-class-tag,
+.console .filter-chip,
+.console .config-tag,
+.console .responder-status,
+.console .responder-gate,
+.console .theme-choice,
+.console .method-badge {
+  border-radius: 0 !important;
+}
+
+/* Catch nested legacy surfaces that use component-specific class names. */
+.console [class*='card'],
+.console [class*='panel'],
+.console [class*='drawer'],
+.console [class*='modal'],
+.console [class*='toolbar'],
+.console [class*='summary'],
+.console [class*='readout'],
+.console [class*='badge'],
+.console [class*='pill'],
+.console [class*='tag'],
+.console [class*='btn'],
+.console [class*='button'],
+.console [class*='tab'],
+.console [class*='select'],
+.console [class*='input'],
+.console [class*='table'],
+.console [class*='action'],
+.console [class*='state'],
+.console [class*='row'],
+.console [class*='icon'] {
+  border-radius: 0 !important;
+}
+
+/* Mock-aligned console geometry at desktop widths. */
+@media (min-width: 961px) {
+  .console.theme-command-center,
+  .console.theme-light {
+    grid-template-columns: 220px 1fr;
+  }
+
+  .console.theme-command-center .side,
+  .console.theme-light .side {
+    width: 220px;
+  }
+
+  .console.theme-command-center .side .brand img,
+  .console.theme-light .side .brand img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .console.theme-command-center .content,
+  .console.theme-light .content {
+    max-width: 1360px;
+    padding-right: 42px;
+    padding-left: 42px;
+  }
+}
+
+/* Canonical mock tokens. Keep the rendered console tied to the reference
+   implementation even when older component rules appear earlier in this file. */
+.console.theme-command-center {
+  --bg: #14171a;
+  --bg-gradient: #14171a;
+  --panel: #1b1f23;
+  --panel-solid: #1b1f23;
+  --panel-elevated: #262b30;
+  --line: rgba(255, 255, 255, .14);
+  --line-hover: rgba(255, 255, 255, .35);
+  --text: #eef0f1;
+  --muted: #b7bcc1;
+  --dim: #9aa1a8;
+  --green: #9fc3df;
+  --green-hover: #cfe4f3;
+  --green-soft: rgba(159, 195, 223, .16);
+  --green-glow: rgba(159, 195, 223, .2);
+  --cyan: #9fc3df;
+  --amber: #d7aa6c;
+  --amber-soft: rgba(215, 170, 108, .16);
+  --red: #d88383;
+  --red-soft: rgba(216, 131, 131, .16);
+  --font-heading: 'Barlow Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow', sans-serif;
+}
+
+.console.theme-command-center .side {
+  background: var(--bg);
+  border-right-color: var(--line);
+}
+
+.console.theme-command-center .top {
+  min-height: 106px;
+  height: 106px;
+  padding-right: 42px;
+  padding-left: 42px;
+}
+
+.console.theme-command-center .top,
+.console.theme-command-center .content {
+  font-family: 'Barlow', sans-serif;
+}
+
+/* Reimagined command header: identity, scope, and operator controls have a
+   stable two-row hierarchy instead of competing in one toolbar. */
+.console.theme-command-center .top,
+.console.theme-light .top {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-rows: 1fr;
+  align-items: center;
+  column-gap: 24px;
+  row-gap: 0;
+  height: 84px;
+  min-height: 84px;
+  padding: 0 42px;
+  background: var(--bg);
+  border-bottom-color: var(--line);
+  backdrop-filter: none;
+}
+
+.console.theme-command-center .command-brand,
+.console.theme-light .command-brand,
+.console.theme-command-center .top-title,
+.console.theme-light .top-title {
+  display: none !important;
+}
+
+.header-identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  align-content: center;
+}
+
+.header-identity-kicker {
+  overflow: hidden;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-identity strong {
+  overflow: hidden;
+  color: var(--text);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-identity small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console.theme-command-center .tools,
+.console.theme-light .tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: 0;
+  gap: 8px;
+}
+
+.console.theme-command-center .connection,
+.console.theme-light .connection {
+  order: -2;
+  min-height: 34px;
+  padding: 0 10px;
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.console.theme-command-center .shared-agent-picker,
+.console.theme-light .shared-agent-picker {
+  order: -1;
+}
+
+.console.theme-command-center .command-nav,
+.console.theme-light .command-nav {
+  display: none;
+}
+
+/* Navigation typography is shared across themes: condensed, readable labels
+   with a quiet secondary state and a clear active rail. */
+.console.theme-command-center .side nav button,
+.console.theme-light .side nav button,
+.console.theme-command-center .profile-btn,
+.console.theme-light .profile-btn,
+.console.theme-command-center .account-nav button,
+.console.theme-light .account-nav button {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: .015em;
+  color: var(--muted);
+}
+
+.console.theme-command-center .side nav button:hover,
+.console.theme-light .side nav button:hover,
+.console.theme-command-center .profile-btn:hover,
+.console.theme-light .profile-btn:hover,
+.console.theme-command-center .account-nav button:hover,
+.console.theme-light .account-nav button:hover {
+  color: var(--text);
+}
+
+.console.theme-command-center .side nav button.active,
+.console.theme-light .side nav button.active {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.console.theme-command-center .side .nav-group > small,
+.console.theme-light .side .nav-group > small,
+.console.theme-command-center .side nav > small,
+.console.theme-light .side nav > small {
+  color: var(--dim);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.console.theme-command-center .side nav button svg,
+.console.theme-light .side nav button svg {
+  color: var(--muted);
+}
+
+.console.theme-command-center .side nav button.active svg,
+.console.theme-light .side nav button.active svg {
+  color: var(--green);
+}
+
+/* Responder capabilities use the same hierarchy and flat window geometry as
+   the rest of the Agent page. */
+.console.theme-command-center .responder-panel,
+.console.theme-light .responder-panel {
+  display: grid;
+  gap: 20px;
+  margin: 20px 0 24px;
+  padding: var(--window-padding);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  background-image: none;
+}
+
+.console.theme-command-center .responder-panel-heading,
+.console.theme-light .responder-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.console.theme-command-center .responder-panel-heading h3,
+.console.theme-light .responder-panel-heading h3 {
+  margin: 6px 0 8px;
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-panel);
+  line-height: 1.05;
+}
+
+.console.theme-command-center .responder-panel-heading p:not(.eyebrow),
+.console.theme-light .responder-panel-heading p:not(.eyebrow) {
+  max-width: 760px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+.console.theme-command-center .responder-gate,
+.console.theme-light .responder-gate {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel-elevated);
+  color: var(--green);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-label);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.console.theme-command-center .responder-grid,
+.console.theme-light .responder-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 0;
+}
+
+.console.theme-command-center .responder-card,
+.console.theme-light .responder-card {
+  min-height: 170px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel-elevated);
+}
+
+.console.theme-command-center .responder-card h4,
+.console.theme-light .responder-card h4 {
+  margin: 14px 0 6px;
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.console.theme-command-center .responder-card p,
+.console.theme-light .responder-card p {
+  min-height: 58px;
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.45;
+}
+
+.console.theme-command-center .responder-note,
+.console.theme-light .responder-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding-top: 2px;
+  color: var(--text-tertiary);
+  font-size: var(--type-meta);
+}
+
+@media (max-width: 900px) {
+  .console.theme-command-center .responder-grid,
+  .console.theme-light .responder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .console.theme-command-center .responder-panel-heading,
+  .console.theme-light .responder-panel-heading {
+    display: grid;
+    gap: 14px;
+  }
+
+  .console.theme-command-center .responder-grid,
+  .console.theme-light .responder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep the rail toggle anchored to the header instead of letting it drift
+   with the brand text when the rail collapses. */
+.console.theme-command-center .side > header,
+.console.theme-light .side > header {
+  position: relative;
+}
+
+.console.theme-command-center .side > header .nav-collapse-btn,
+.console.theme-light .side > header .nav-collapse-btn {
+  position: absolute;
+  top: 26px;
+  right: 8px;
+  z-index: 1;
+  margin: 0;
+}
+
+.console.theme-command-center .side.collapsed > header,
+.console.theme-light .side.collapsed > header {
+  min-height: 84px;
+  padding: 12px 8px;
+  align-items: flex-start;
+}
+
+.console.theme-command-center .side.collapsed > header .brand,
+.console.theme-light .side.collapsed > header .brand {
+  justify-content: flex-start;
+  width: 28px;
+  padding: 0;
+}
+
+.console.theme-command-center .side.collapsed > header .brand img,
+.console.theme-light .side.collapsed > header .brand img {
+  width: 28px;
+  height: 28px;
+}
+
+.console.theme-command-center .side.collapsed > header .nav-collapse-btn,
+.console.theme-light .side.collapsed > header .nav-collapse-btn {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.console.theme-command-center .side.collapsed > header .nav-collapse-btn svg,
+.console.theme-light .side.collapsed > header .nav-collapse-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.console.theme-command-center .agent-unified-section,
+.console.theme-light .agent-unified-section,
+.console.theme-command-center .evidence-unified-section,
+.console.theme-light .evidence-unified-section,
+.console.theme-command-center .decisions-policy-section,
+.console.theme-light .decisions-policy-section,
+.console.theme-command-center .decisions-approvals-section,
+.console.theme-light .decisions-approvals-section,
+.console.theme-command-center .configuration-section,
+.console.theme-light .configuration-section {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Shared page rhythm: every workspace uses the same heading, copy, label,
+   spacing, and theme-token colors regardless of which route owns the card. */
+.console.theme-command-center .workspace-header,
+.console.theme-light .workspace-header {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 20px;
+}
+
+.console.theme-command-center .workspace-header h2,
+.console.theme-light .workspace-header h2 {
+  margin: 6px 0 8px;
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-page);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.console.theme-command-center .workspace-header > p:last-child,
+.console.theme-light .workspace-header > p:last-child,
+.console.theme-command-center .agent-unified-heading p:last-child,
+.console.theme-light .agent-unified-heading p:last-child,
+.console.theme-command-center .evidence-unified-heading p:last-child,
+.console.theme-light .evidence-unified-heading p:last-child,
+.console.theme-command-center .decisions-policy-heading p:last-child,
+.console.theme-light .decisions-policy-heading p:last-child,
+.console.theme-command-center .decisions-approvals-heading p:last-child,
+.console.theme-light .decisions-approvals-heading p:last-child,
+.console.theme-command-center .configuration-section-heading p:last-child,
+.console.theme-light .configuration-section-heading p:last-child {
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+.console.theme-command-center .workspace-header .eyebrow,
+.console.theme-light .workspace-header .eyebrow,
+.console.theme-command-center .agent-unified-heading .eyebrow,
+.console.theme-light .agent-unified-heading .eyebrow,
+.console.theme-command-center .evidence-unified-heading .eyebrow,
+.console.theme-light .evidence-unified-heading .eyebrow,
+.console.theme-command-center .decisions-policy-heading .eyebrow,
+.console.theme-light .decisions-policy-heading .eyebrow,
+.console.theme-command-center .decisions-approvals-heading .eyebrow,
+.console.theme-light .decisions-approvals-heading .eyebrow,
+.console.theme-command-center .configuration-section-heading .eyebrow,
+.console.theme-light .configuration-section-heading .eyebrow {
+  color: var(--green);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-eyebrow);
+  font-weight: 700;
+  letter-spacing: .14em;
+  line-height: 1.2;
+}
+
+.console.theme-command-center .agent-unified-heading h3,
+.console.theme-light .agent-unified-heading h3,
+.console.theme-command-center .evidence-unified-heading h3,
+.console.theme-light .evidence-unified-heading h3,
+.console.theme-command-center .decisions-policy-heading h3,
+.console.theme-light .decisions-policy-heading h3,
+.console.theme-command-center .decisions-approvals-heading h3,
+.console.theme-light .decisions-approvals-heading h3,
+.console.theme-command-center .configuration-section-heading h3,
+.console.theme-light .configuration-section-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-section);
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.console.theme-command-center .workspace-tabs,
+.console.theme-light .workspace-tabs {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 20px;
+}
+
+.console.theme-command-center .settings-card-header,
+.console.theme-light .settings-card-header,
+.console.theme-command-center .panel-title,
+.console.theme-light .panel-title {
+  min-width: 0;
+  gap: 12px;
+}
+
+.console.theme-command-center .settings-card-title h3,
+.console.theme-light .settings-card-title h3,
+.console.theme-command-center .panel-title h3,
+.console.theme-light .panel-title h3 {
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-panel);
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.console.theme-command-center .settings-card-desc,
+.console.theme-light .settings-card-desc,
+.console.theme-command-center .panel-title p,
+.console.theme-light .panel-title p,
+.console.theme-command-center .field-hint,
+.console.theme-light .field-hint {
+  color: var(--text-secondary);
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+/* Keep editable text windows compact and consistent across Network,
+   Configuration, and Developer surfaces. */
+.console.theme-command-center textarea,
+.console.theme-light textarea {
+  min-height: 96px;
+  max-height: 220px;
+  line-height: 1.45;
+  resize: vertical;
+  overflow: auto;
+}
+
+.console.theme-command-center .body-editor,
+.console.theme-light .body-editor {
+  min-height: 124px;
+  max-height: 220px;
+}
+
+.console.theme-command-center pre,
+.console.theme-light pre {
+  max-height: 360px;
+  overflow: auto;
+}
+
+/* Approval queue: status-first rows with clear action grouping. */
+.console.theme-command-center .change-queue-card,
+.console.theme-light .change-queue-card {
+  display: grid;
+  gap: 18px;
+}
+
+.console.theme-command-center .change-queue-card .settings-card-title,
+.console.theme-light .change-queue-card .settings-card-title {
+  align-items: flex-start;
+}
+
+.console.theme-command-center .change-queue-card .settings-card-title > div,
+.console.theme-light .change-queue-card .settings-card-title > div {
+  display: grid;
+  gap: 5px;
+}
+
+.console.theme-command-center .change-queue-card .settings-card-title .eyebrow,
+.console.theme-light .change-queue-card .settings-card-title .eyebrow {
+  margin: 0;
+}
+
+.console.theme-command-center .change-queue-card .settings-card-title h3,
+.console.theme-light .change-queue-card .settings-card-title h3 {
+  margin: 0;
+}
+
+.console.theme-command-center .change-queue-list,
+.console.theme-light .change-queue-list {
+  display: grid;
+  gap: 8px;
+}
+
+.console.theme-command-center .change-request-row,
+.console.theme-light .change-request-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: var(--panel-elevated);
+}
+
+.console.theme-command-center .change-request-copy,
+.console.theme-light .change-request-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.console.theme-command-center .change-request-title,
+.console.theme-light .change-request-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.console.theme-command-center .change-request-title b,
+.console.theme-light .change-request-title b {
+  color: var(--text-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 17px;
+}
+
+.console.theme-command-center .change-request-copy small,
+.console.theme-light .change-request-copy small {
+  overflow-wrap: anywhere;
+  color: var(--text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.console.theme-command-center .change-request-status,
+.console.theme-light .change-request-status {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  color: var(--text-secondary);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--type-meta);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.console.theme-command-center .change-request-status.pending,
+.console.theme-light .change-request-status.pending {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.console.theme-command-center .change-request-status.approved,
+.console.theme-light .change-request-status.approved {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.console.theme-command-center .change-request-status.rejected,
+.console.theme-light .change-request-status.rejected {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.console.theme-command-center .change-request-actions,
+.console.theme-light .change-request-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .console.theme-command-center .change-request-row,
+  .console.theme-light .change-request-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .console.theme-command-center .change-request-actions,
+  .console.theme-light .change-request-actions {
+    width: 100%;
+  }
+}
+
+.console.theme-command-center .telemetry-context-bar,
+.console.theme-light .telemetry-context-bar {
+  display: none;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: stretch;
+  padding: 8px 0 10px;
+}
+
+@media (max-width: 760px) {
+  .console.theme-command-center .top,
+  .console.theme-light .top {
+    grid-template-columns: 1fr auto;
+    height: auto;
+    min-height: 106px;
+    padding: 12px 16px 0;
+  }
+
+  .header-identity strong { font-size: 21px; }
+  .console.theme-command-center .tools,
+  .console.theme-light .tools { gap: 6px; }
+  .console.theme-command-center .connection,
+  .console.theme-light .connection { display: none; }
+}
+
+.console.theme-command-center h1,
+.console.theme-command-center h2,
+.console.theme-command-center h3,
+.console.theme-command-center h4,
+.console.theme-command-center h5,
+.console.theme-command-center h6,
+.console.theme-command-center b {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+/* Canonical cross-page type and window rhythm. */
+.console.theme-command-center,
+.console.theme-light {
+  --type-display: 52px;
+  --type-page: 34px;
+  --type-section: 26px;
+  --type-panel: 22px;
+  --type-body: 14px;
+  --type-copy: 13px;
+  --type-label: 12px;
+  --type-meta: 11px;
+  --type-eyebrow: 10px;
+  --window-padding: 20px;
+  --window-gap: 20px;
+}
+
+.console .content {
+  font-size: var(--type-body);
+}
+
+.console .welcome h2 {
+  font-size: var(--type-display);
+  line-height: .98;
+}
+
+.console .workspace-header h2 {
+  margin: 6px 0 8px;
+  font-size: var(--type-page);
+  line-height: 1;
+}
+
+.console .workspace-header > p:last-child,
+.console .configuration-section-heading p:last-child {
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+.console .panel-title h3,
+.console .settings-card-title h3,
+.console .policy-deploy-panel h3,
+.console .configuration-section-heading h3 {
+  font-size: var(--type-panel);
+  line-height: 1.05;
+}
+
+.console .settings-card-desc,
+.console .field-hint,
+.console .panel-title p,
+.console .resource-header p,
+.console .responder-card p,
+.console .policy-bundle-desc,
+.console .integration-card p {
+  font-size: var(--type-copy);
+  line-height: 1.5;
+}
+
+.console .eyebrow,
+.console .section-kicker,
+.console .event-ledger-intro .eyebrow {
+  font-size: var(--type-eyebrow);
+  line-height: 1.2;
+}
+
+.console .live-status-pill,
+.console .status-badge,
+.console .policy-active-pill,
+.console .event-action-pill,
+.console .filter-chip,
+.console .workspace-tabs button,
+.console .settings-tab-btn {
+  font-size: var(--type-label);
+  line-height: 1;
+}
+
+.console .event-device-tag,
+.console .event-time-meta time,
+.console .audit-event small,
+.console .field-group label,
+.console .metric > div,
+.console .evidence-runtime-strip b {
+  font-size: var(--type-meta);
+}
+
+.console .panel,
+.console .resource,
+.console .settings-card,
+.console .action-form,
+.console .policy-bundle-card,
+.console .policy-deploy-panel,
+.console .integration-card,
+.console .network-card,
+.console .opa-card,
+.console .responder-panel,
+.console .hybrid-architecture-card,
+.console .outbox-status-card,
+.console .developer-view {
+  padding: var(--window-padding);
+}
+
+.console .panels,
+.console .cards,
+.console .command-grid,
+.console .settings-grid,
+.console .responder-grid,
+.console .integration-grid,
+.console .policy-grid,
+.console .agent-grid,
+.console .live-telemetry-grid {
+  gap: var(--window-gap);
+}
+
+/* Unified tab language across every workspace and settings surface. */
+.console.theme-command-center .workspace-tabs,
+.console.theme-light .workspace-tabs,
+.console.theme-command-center .settings-tabs-bar,
+.console.theme-light .settings-tabs-bar {
+  gap: 0;
+  margin-bottom: 20px;
+  padding-bottom: 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.console.theme-command-center .workspace-tabs button,
+.console.theme-light .workspace-tabs button,
+.console.theme-command-center .settings-tab-btn,
+.console.theme-light .settings-tab-btn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.console.theme-command-center .workspace-tabs button:hover,
+.console.theme-light .workspace-tabs button:hover,
+.console.theme-command-center .settings-tab-btn:hover,
+.console.theme-light .settings-tab-btn:hover {
+  border-bottom-color: var(--line-hover);
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+
+.console.theme-command-center .workspace-tabs button.active,
+.console.theme-light .workspace-tabs button.active,
+.console.theme-command-center .settings-tab-btn.active,
+.console.theme-light .settings-tab-btn.active {
+  border-color: transparent;
+  border-bottom-color: var(--green);
+  border-radius: 0;
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+
+.console.theme-command-center .workspace-tabs button span,
+.console.theme-light .workspace-tabs button span {
+  color: var(--green);
+}
+
+.console.theme-command-center .snippet-tabs,
+.console.theme-light .snippet-tabs {
+  gap: 0;
+  padding: 0;
+  background: var(--panel-elevated);
+  border-bottom-color: var(--line);
+}
+
+.console.theme-command-center .snippet-tab-btn,
+.console.theme-light .snippet-tab-btn {
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+}
+
+.console.theme-command-center .snippet-tab-btn:hover,
+.console.theme-light .snippet-tab-btn:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.console.theme-command-center .snippet-tab-btn.active,
+.console.theme-light .snippet-tab-btn.active {
+  border-bottom-color: var(--green);
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* Decisions summary window: flat shared surface, consistent metric cards. */
+.console.theme-command-center .reasoning-hero,
+.console.theme-light .reasoning-hero {
+  background: var(--panel);
+  background-image: none;
+  border-color: var(--line);
+  border-radius: 0;
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .reasoning-hero h2,
+.console.theme-light .reasoning-hero h2 {
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .reasoning-stat-card,
+.console.theme-light .reasoning-stat-card {
+  background: var(--panel-elevated);
+  border-color: var(--line);
+  border-radius: 0;
+}
+
+.console.theme-command-center .reasoning-stat-card .stat-val,
+.console.theme-light .reasoning-stat-card .stat-val {
+  color: var(--text-primary);
+}
+
+.console.theme-command-center .reasoning-stat-card .stat-val.text-green,
+.console.theme-light .reasoning-stat-card .stat-val.text-green { color: var(--green); }
+.console.theme-command-center .reasoning-stat-card .stat-val.text-amber,
+.console.theme-light .reasoning-stat-card .stat-val.text-amber { color: var(--amber); }
+.console.theme-command-center .reasoning-stat-card .stat-val.text-red,
+.console.theme-light .reasoning-stat-card .stat-val.text-red { color: var(--red); }
+
+/* Decisions event stream: one compact observation, with detail kept on demand. */
+.event-observation-summary {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-elevated);
+}
+
+.event-observation-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+}
+
+.event-observation-title b {
+  font-size: 13px;
+}
+
+.event-observation-rule {
+  overflow: hidden;
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-observation-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.event-observation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.console.theme-command-center .event-observation-summary,
+.console.theme-light .event-observation-summary {
+  border-color: var(--line);
+  background: var(--panel-elevated);
+}
+
+@media (max-width: 640px) {
+  .event-observation-title {
+    display: grid;
+    gap: 3px;
+  }
+}
+
+/* Reimagined Decisions ledger: dense, calm, and scan-first. */
+.event-ledger-intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.event-ledger-intro > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.event-ledger-intro b {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.event-ledger-intro small {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.event-cards-stream {
+  gap: 8px;
+  border: 0;
+}
+
+.event-stream-card.event-ledger-row {
+  position: relative;
+  gap: 10px;
+  padding: 14px 16px 14px 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.event-stream-card.event-ledger-row:hover {
+  background: var(--panel-elevated);
+}
+
+.event-stream-card.event-ledger-row::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--line-hover);
+  content: '';
+}
+
+.event-stream-card.event-ledger-row.action-contain::before { background: var(--amber); }
+.event-stream-card.event-ledger-row.action-deny::before,
+.event-stream-card.event-ledger-row.action-blocked::before { background: var(--red); }
+.event-stream-card.event-ledger-row.action-escalate::before { background: var(--amber); }
+.event-stream-card.event-ledger-row.action-allow::before,
+.event-stream-card.event-ledger-row.action-allowed::before { background: var(--green); }
+
+.event-ledger-row .event-card-top {
+  align-items: center;
+}
+
+.event-ledger-row .event-badges-row {
+  min-width: 0;
+}
+
+.event-ledger-row .event-device-tag {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-ledger-row .event-subject-row {
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.event-ledger-row .subject-target {
+  max-width: min(620px, 60vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-ledger-row .event-observation-summary {
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.event-ledger-row .event-observation-summary p {
+  max-width: 900px;
+}
+
+.event-ledger-row .event-card-actions {
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+
+.event-detail-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.event-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.event-detail-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--panel-elevated);
+}
+
+.event-detail-grid dt {
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.event-detail-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.event-detail-panel .event-inline-json {
+  margin: 0;
+  padding: 0;
+  background: var(--panel);
+}
+
+.event-detail-panel .event-inline-json summary {
+  padding: 9px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.event-detail-panel .event-inline-json pre {
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* Enforcement outcomes: compact status ledger with readable failure context. */
+.outcome-ledger {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.outcome-ledger > header,
+.outcome-ledger .outcome-row {
+  min-width: 0;
+  grid-template-columns: minmax(150px, .7fr) minmax(220px, 1fr) minmax(240px, 1.2fr) 150px;
+  gap: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.outcome-ledger > header {
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+}
+
+.outcome-ledger .outcome-row {
+  min-height: 64px;
+  padding: 12px 14px;
+  border-radius: 0;
+}
+
+.outcome-ledger .outcome-row:hover {
+  background: var(--panel-elevated);
+}
+
+.outcome-status-cell,
+.outcome-target-cell,
+.outcome-detail-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.outcome-status-cell > span,
+.outcome-target-cell,
+.outcome-detail-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.outcome-status-cell b,
+.outcome-target-cell b {
+  color: var(--text);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.outcome-status-cell small,
+.outcome-target-cell small,
+.outcome-detail-cell small {
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outcome-detail-cell code {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outcome-ledger .outcome-row > small {
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .outcome-ledger > header { display: none; }
+  .outcome-ledger .outcome-row {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+}
+
+@media (max-width: 700px) {
+  .event-ledger-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .event-ledger-row .event-card-top,
+  .event-ledger-row .event-subject-row {
+    align-items: flex-start;
+  }
+
+  .event-ledger-row .event-time-meta {
+    width: 100%;
+  }
+
+  .event-ledger-row .subject-target {
+    max-width: 100%;
+  }
+
+  .event-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Final cross-page fit corrections from the visual audit. */
+.console.theme-command-center .side > header .brand,
+.console.theme-light .side > header .brand {
+  min-width: 0;
+  max-width: calc(100% - 42px);
+  overflow: hidden;
+}
+
+.console.theme-command-center .side > header .brand b,
+.console.theme-light .side > header .brand b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console.theme-command-center .side.collapsed > header .brand,
+.console.theme-light .side.collapsed > header .brand {
+  max-width: 28px;
+}
+
+.console.theme-command-center .side > header .brand img,
+.console.theme-light .side > header .brand img {
+  width: 38px;
+  height: 38px;
+}
+
+.console.theme-command-center .side > header .brand b,
+.console.theme-light .side > header .brand b {
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+.console.theme-command-center .overview-page .responder-grid,
+.console.theme-light .overview-page .responder-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.console.theme-command-center .overview-page .responder-card,
+.console.theme-light .overview-page .responder-card {
+  min-height: 150px;
+}
+
+.console.theme-command-center .agent-unified-section > .agent-workspace > header,
+.console.theme-light .agent-unified-section > .agent-workspace > header {
+  display: none;
+}
+
+.console.theme-command-center .agent-unified-workspace,
+.console.theme-light .agent-unified-workspace,
+.console.theme-command-center .evidence-unified-workspace,
+.console.theme-light .evidence-unified-workspace,
+.console.theme-command-center .decisions-policy-workspace,
+.console.theme-light .decisions-policy-workspace,
+.console.theme-command-center .decisions-approvals-workspace,
+.console.theme-light .decisions-approvals-workspace,
+.console.theme-command-center .configuration-unified,
+.console.theme-light .configuration-unified {
+  gap: 22px;
+}
+
+.console.theme-command-center .agent-unified-section,
+.console.theme-light .agent-unified-section,
+.console.theme-command-center .evidence-unified-section,
+.console.theme-light .evidence-unified-section,
+.console.theme-command-center .decisions-policy-section,
+.console.theme-light .decisions-policy-section,
+.console.theme-command-center .decisions-approvals-section,
+.console.theme-light .decisions-approvals-section,
+.console.theme-command-center .configuration-section,
+.console.theme-light .configuration-section {
+  gap: 12px;
+  padding-top: 18px;
+}
+
+.console.theme-command-center .empty-stream-state,
+.console.theme-light .empty-stream-state {
+  min-height: 0;
+  padding: 32px 20px;
+}
+
+.console.theme-command-center .evidence-reference-metrics article,
+.console.theme-light .evidence-reference-metrics article {
+  padding: 14px;
+}
+
+.console.theme-command-center .evidence-reference-metrics span,
+.console.theme-light .evidence-reference-metrics span,
+.console.theme-command-center .evidence-reference-metrics small,
+.console.theme-light .evidence-reference-metrics small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

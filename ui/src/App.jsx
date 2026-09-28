@@ -16,7 +16,7 @@ export default function App() {
   const [connection, setConnection] = useState(() =>
     JSON.parse(readSession('shield-connection', '{}'))
   )
-  const [consoleTheme, setConsoleTheme] = useState(() => readSession('shield-console-theme', 'legacy'))
+  const [consoleTheme, setConsoleTheme] = useState(() => readSession('shield-console-theme', 'command-center'))
 
   const connect = (conn) => {
     setConnection(conn)

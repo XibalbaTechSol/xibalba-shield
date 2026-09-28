@@ -71,10 +71,10 @@ export function NetworkView({ api }) {
   return <>
     <article className="settings-card">
       <div className="settings-card-header">
-        <div className="settings-card-title"><Network size={18} /><h3>Network control plane</h3></div>
+        <div className="settings-card-title"><Network size={18} /><h3>Blast-radius limits</h3></div>
         <span className="live-status-pill">Preview and approval gated</span>
       </div>
-      <p className="settings-card-desc">Configure protected zones and blast-radius limits. Hermes remains analysis-only; production adapters are not enabled by this view.</p>
+      <p className="settings-card-desc">Protected zones and blast-radius limits for network containment. Changes are proposed only; no adapter action executes until approved below.</p>
       <form className="settings-fields-grid" onSubmit={save}>
         <label>Maximum affected devices<input type="number" min="1" max="1000" value={config.max_affected_devices} onChange={(event) => update('max_affected_devices', event.target.value)} /></label>
         <label>Maximum affected segments<input type="number" min="1" max="100" value={config.max_affected_segments} onChange={(event) => update('max_affected_segments', event.target.value)} /></label>
