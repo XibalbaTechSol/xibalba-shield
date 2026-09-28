@@ -7141,10 +7141,12 @@ h1, h2, h3, h4, b {
 /* Light theme surface pass: keep every secondary workspace, drawer, modal,
    table, and diagnostic pane on the same operator palette as the overview. */
 .console.theme-light {
-  --surface-strong: #ffffff;
-  --surface-subtle: #f8fafc;
-  --surface-muted: #eef2f6;
-  --code-surface: #e7edf3;
+  /* Light inversion of the mock graphite hierarchy: page, panel, and
+     nested surfaces stay close in value instead of introducing white wells. */
+  --surface-strong: #e9e9ea;
+  --surface-subtle: #f2f2f3;
+  --surface-muted: #e3e3e4;
+  --code-surface: #e9e9ea;
   --accent-soft: rgba(65, 97, 128, .12);
   --shadow-light: 0 3px 10px rgba(43, 43, 45, .14);
 }
@@ -9601,6 +9603,59 @@ h1, h2, h3, h4, b {
 .console.theme-light .event-row {
   background: var(--bg) !important;
   color: var(--muted);
+}
+
+/* Mock registration crosses: every visible window/card gets the same four
+   corner markers without introducing extra DOM or changing layout. */
+.console.theme-command-center :is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box, .code-snippets-section,
+  .opa-source-code, .report-preview, .body-editor, .policy-rules-summary,
+  .agent-reasoning-callout, .settings-readout, .toggle-item,
+  .hybrid-architecture-card, .hybrid-pair, .hybrid-detail-panel,
+  .outbox-status-card, .routing-node, .memory-result, .agent-fact,
+  .device-detail-summary, .theme-choice, .snippet-body, .endpoint-item,
+  .readiness-row, .sensor, .contract-card, .catalog-card,
+  .evidence-runtime-strip, .telemetry-chart, .evidence-reference-metrics,
+  .evidence-reference-grid > .resource
+),
+.console.theme-light :is(
+  .metric, .panel, .resource, .settings-card, .action-form,
+  .resource-card, .agent-card, .responder-card, .responder-panel,
+  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
+  .transaction-result, .integration-card, .network-card, .opa-card,
+  .developer-view, .api-explorer-layout, .event-stream-toolbar,
+  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
+  .pipeline-row, .response-pane, .response-json-box, .code-snippets-section,
+  .opa-source-code, .report-preview, .body-editor, .policy-rules-summary,
+  .agent-reasoning-callout, .settings-readout, .toggle-item,
+  .hybrid-architecture-card, .hybrid-pair, .hybrid-detail-panel,
+  .outbox-status-card, .routing-node, .memory-result, .agent-fact,
+  .device-detail-summary, .theme-choice, .snippet-body, .endpoint-item,
+  .readiness-row, .sensor, .contract-card, .catalog-card,
+  .evidence-runtime-strip, .telemetry-chart, .evidence-reference-metrics,
+  .evidence-reference-grid > .resource
+) {
+  border-radius: 0 !important;
+  background-repeat: no-repeat !important;
+  background-image:
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)) !important;
+  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px,
+    8px 1px, 1px 8px, 8px 1px, 1px 8px !important;
+  background-position: top left, top left, top right, top right,
+    bottom left, bottom left, bottom right, bottom right !important;
 }
 
 /* Every real window/card gets a complete frame. The mock uses corner ticks as
