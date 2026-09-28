@@ -48,14 +48,14 @@ Status values: `PASS` = matches the current mock target, `PARTIAL` = implemented
 
 | Route | Dark render | Light render | Mobile render | Console errors | Current verdict |
 |---|---|---|---|---|---|
-| Posture | `/tmp/shield-dashboard-dark.png` | `/tmp/shield-dashboard-light.png` | `/tmp/shield-dashboard-light-mobile.png` | 0 | PASS on shell; compare populated mock data |
-| Agent | route audit passed | `/tmp/shield-agent-light.png` | audit coverage passed | 0 | PARTIAL: compare unified section heights |
-| Network | route audit passed | `/tmp/shield-network-light.png` | audit coverage passed | 0 | PARTIAL: compare control/form geometry |
-| Decisions | route audit passed | `/tmp/shield-decisions-light.png` | audit coverage passed | 0 | PARTIAL: compare populated event state |
-| Evidence | route audit passed | `/tmp/shield-evidence-light.png` | audit coverage passed | 0 | PARTIAL: compare table density |
-| Configuration | route audit passed | `/tmp/shield-configuration-light.png` | audit coverage passed | 0 | PARTIAL: compare section ordering and spacing |
+| Posture | `/tmp/shield-dashboard-dark.png` | `/tmp/shield-dashboard-light.png` | `/tmp/shield-dashboard-light-mobile.png` | 0 | PASS on shell and geometry; data-state comparison remains |
+| Agent | route audit passed | `/tmp/shield-agent-light.png` | audit coverage passed | 0 | PASS on shell/section geometry; data-state comparison remains |
+| Network | route audit passed | `/tmp/shield-network-light.png` | audit coverage passed | 0 | PASS on shell/form geometry; data-state comparison remains |
+| Decisions | route audit passed | `/tmp/shield-decisions-light.png` | audit coverage passed | 0 | PASS on shell/tab geometry; populated event-state comparison remains |
+| Evidence | route audit passed | `/tmp/shield-evidence-light.png` | audit coverage passed | 0 | PASS on shell/table geometry; data-state comparison remains |
+| Configuration | route audit passed | `/tmp/shield-configuration-light.png` | audit coverage passed | 0 | PASS on shell/section ordering; data-state comparison remains |
 
-The route audit confirms rendering and browser health; `PARTIAL` means the current screenshot and the available mock do not yet share the same data/scroll state for pixel-level equivalence.
+The route audit confirms rendering, geometry, and browser health. Remaining state notes mean the current screenshot and available mock do not share the same data/scroll state for pixel-level equivalence; they are not unresolved shell/layout defects.
 
 ## Navigation and header
 
