@@ -86,6 +86,7 @@ class RemediationWorker:
                     device_id=self._config.device_id,
                     audience=self._config.backend_url.rstrip("/"),
                     device_token=self._config.device_token,
+                    device_key_path=self._config.device_key_path,
                 ),
                 "Content-Type": "application/json",
             },

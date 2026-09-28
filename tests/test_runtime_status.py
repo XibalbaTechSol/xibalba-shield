@@ -39,6 +39,22 @@ def test_runtime_status_falls_back_to_device_token_without_a_key(mock_urlopen, t
 
 
 @patch("shield.runtime_status.urlopen", return_value=_Response())
+def test_runtime_status_does_not_reuse_agent_did_key_for_device_auth(mock_urlopen, tmp_path, monkeypatch):
+    from integrity_sdk.did import Keypair
+
+    monkeypatch.setenv("INTEGRITY_DID_HOME", str(tmp_path))
+    agent_dir = tmp_path / "xibalba-shield"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "private_key.pem").write_bytes(Keypair.generate().private_pem())
+    config = DeviceConfig(
+        device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend"
+    )
+
+    assert publish_runtime_status(device_config=config, policy_status={}, opa_status={}) is True
+    assert mock_urlopen.call_args.args[0].get_header("Authorization") == "Bearer secret"
+
+
+@patch("shield.runtime_status.urlopen", return_value=_Response())
 def test_runtime_status_signs_an_assertion_when_a_key_is_present(mock_urlopen, tmp_path, monkeypatch):
     """With a device key on disk, the long-lived token must not be sent at all."""
     from integrity_sdk.did import Keypair
@@ -48,12 +64,12 @@ def test_runtime_status_signs_an_assertion_when_a_key_is_present(mock_urlopen, t
 
     monkeypatch.setenv("INTEGRITY_DID_HOME", str(tmp_path))
     keypair = Keypair.generate()
-    key_dir = tmp_path / "xibalba-shield"
-    key_dir.mkdir(parents=True)
-    (key_dir / "private_key.pem").write_bytes(keypair.private_pem())
+    device_key_path = tmp_path / "device-auth.pem"
+    device_key_path.write_bytes(keypair.private_pem())
 
     config = DeviceConfig(
-        device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend"
+        device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend",
+        device_key_path=str(device_key_path),
     )
     assert publish_runtime_status(device_config=config, policy_status={}, opa_status={}) is True
 
