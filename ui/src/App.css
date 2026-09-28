@@ -9238,6 +9238,40 @@ h1, h2, h3, h4, b {
   letter-spacing: 0;
 }
 
+/* The reference mock uses one continuous graphite field inside and outside
+   technical window rules. Keep the frames visible while removing the lighter
+   interior fill. */
+.console.theme-command-center .panel,
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .action-form,
+.console.theme-command-center .metric,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .network-card,
+.console.theme-command-center .opa-card,
+.console.theme-command-center .responder-panel,
+.console.theme-command-center .responder-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .hybrid-pair,
+.console.theme-command-center .outbox-status-card,
+.console.theme-command-center .developer-view,
+.console.theme-command-center .evidence-reference-metrics,
+.console.theme-command-center .evidence-reference-grid > .resource,
+.console.theme-command-center .change-request-row,
+.console.theme-command-center .event-detail-grid > div,
+.console.theme-command-center .outcome-ledger .outcome-row {
+  background-color: var(--bg);
+}
+
+.console.theme-command-center .metrics,
+.console.theme-command-center .evidence-reference-metrics,
+.console.theme-command-center .event-detail-grid {
+  background-color: var(--bg);
+}
+
 .console.theme-command-center .overview-page .responder-grid,
 .console.theme-light .overview-page .responder-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
