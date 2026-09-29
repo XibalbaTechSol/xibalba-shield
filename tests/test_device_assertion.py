@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from integrity_sdk.did import Keypair, fingerprint_for_pubkey
+from integrity_sdk.did import Keypair, fingerprint_for_pubkey, load_or_create_did
 
-from shield.device_assertion import ReplayGuard, build_assertion, verify_assertion
+from shield.device_assertion import ReplayGuard, build_assertion, load_device_keypair, verify_assertion
 
 AUDIENCE = "https://shield.example"
 TENANT = "tenant-a"
@@ -96,3 +96,40 @@ def test_bearer_header_is_not_mistaken_for_an_assertion(keypair, lookup):
 def test_malformed_assertion_is_rejected(lookup):
     for value in ("Assertion", "Assertion !!!not-base64!!!", "Assertion " + "eyJhIjoxfQ", ""):
         assert verify_assertion(value, expected_audience=AUDIENCE, lookup_enrolled_agent_id=lookup) is None
+
+
+def test_load_device_keypair_returns_none_without_a_configured_path(monkeypatch):
+    """No fallback: an unconfigured device key must not silently resolve to something else."""
+    monkeypatch.delenv("SHIELD_DEVICE_KEY_PATH", raising=False)
+    assert load_device_keypair() is None
+
+
+def test_load_device_keypair_reads_the_key_at_the_configured_path(tmp_path):
+    keypair = Keypair.generate()
+    key_path = tmp_path / "device_private_key.pem"
+    key_path.write_bytes(keypair.private_pem())
+
+    loaded = load_device_keypair(key_path=key_path)
+
+    assert loaded is not None
+    assert loaded.public_bytes() == keypair.public_bytes()
+
+
+def test_device_key_is_cryptographically_distinct_from_the_agent_identity_key(tmp_path, monkeypatch):
+    """Gate A: the device key and the agent DID key must be two different keys, not one
+    key wearing two hats -- `load_device_keypair` must never resolve to whatever
+    `load_or_create_did` mints for the agent identity in the same harness root."""
+    harness_root = tmp_path / "harness"
+    harness_root.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(harness_root))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    _agent_did, agent_keypair, _doc = load_or_create_did("shield-agent")
+
+    device_keypair = Keypair.generate()
+    device_key_path = tmp_path / "device_private_key.pem"
+    device_key_path.write_bytes(device_keypair.private_pem())
+    loaded_device_keypair = load_device_keypair(key_path=device_key_path)
+
+    assert loaded_device_keypair is not None
+    assert loaded_device_keypair.public_bytes() != agent_keypair.public_bytes()
