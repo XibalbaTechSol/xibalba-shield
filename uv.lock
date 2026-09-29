@@ -970,20 +970,10 @@ version = "0.1.0"
 source = { editable = "../integrity-core/integrity-sdk" }
 dependencies = [
     { name = "base58" },
-    { name = "cbor2" },
     { name = "cryptography" },
-    { name = "eth-account" },
-    { name = "eth-utils" },
-    { name = "httpx" },
     { name = "jcs" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-sdk" },
-    { name = "psutil" },
     { name = "pycryptodome" },
     { name = "pyyaml" },
-    { name = "requests" },
-    { name = "web3" },
 ]
 
 [package.optional-dependencies]
@@ -996,42 +986,35 @@ connector = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
     { name = "psutil" },
+    { name = "requests" },
+    { name = "web3" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40.0" },
     { name = "base58", specifier = ">=2.1.0" },
-    { name = "cbor2", specifier = ">=5.6.0" },
     { name = "cbor2", marker = "extra == 'connector'", specifier = ">=5.6.0" },
     { name = "cryptography", specifier = ">=42.0.0" },
-    { name = "eth-account", specifier = ">=0.13.0" },
     { name = "eth-account", marker = "extra == 'connector'", specifier = ">=0.13.0" },
-    { name = "eth-utils", specifier = ">=5.1.0" },
     { name = "eth-utils", marker = "extra == 'connector'", specifier = ">=5.1.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'connector'", specifier = ">=0.27.0" },
     { name = "jcs", specifier = ">=0.2.1" },
     { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=0.3.0" },
     { name = "mlflow-skinny", marker = "extra == 'autolog'", specifier = ">=3.0.0" },
     { name = "mlflow-skinny", marker = "extra == 'mlflow'", specifier = ">=3.0.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0.0" },
-    { name = "opentelemetry-api", specifier = ">=1.42.1" },
     { name = "opentelemetry-api", marker = "extra == 'connector'", specifier = ">=1.42.1" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.42.1" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'connector'", specifier = ">=1.42.1" },
-    { name = "opentelemetry-sdk", specifier = ">=1.42.1" },
     { name = "opentelemetry-sdk", marker = "extra == 'connector'", specifier = ">=1.42.1" },
     { name = "pandas", marker = "extra == 'anthropic'", specifier = ">=2.0.0" },
     { name = "pandas", marker = "extra == 'autolog'", specifier = ">=2.0.0" },
     { name = "pandas", marker = "extra == 'langchain'", specifier = ">=2.0.0" },
     { name = "pandas", marker = "extra == 'openai'", specifier = ">=2.0.0" },
-    { name = "psutil", specifier = ">=5.9.0" },
     { name = "psutil", marker = "extra == 'connector'", specifier = ">=5.9.0" },
     { name = "pycryptodome", specifier = ">=3.20.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "requests", specifier = ">=2.31.0" },
     { name = "requests", marker = "extra == 'connector'", specifier = ">=2.31.0" },
-    { name = "web3", specifier = ">=7.4.0" },
     { name = "web3", marker = "extra == 'connector'", specifier = ">=7.4.0" },
 ]
 provides-extras = ["connector", "mlflow", "autolog", "openai", "anthropic", "langchain"]
