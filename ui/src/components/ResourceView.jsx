@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { HardDrive, X, ShieldCheck, Activity, Database, Save, FileCheck2 } from 'lucide-react'
+import { HardDrive, X, ShieldCheck, Activity, Database, Save, FileCheck2, CheckCircle2, CircleAlert, CircleDashed, Link2 } from 'lucide-react'
 import { ActionForm, JsonRows, Resource } from './Common'
 import { ContainmentView } from './ContainmentView'
 import { OpaPoliciesView } from './OpaPoliciesView';
@@ -130,6 +130,42 @@ function EvidenceControls({ api, rows }) {
   }
   const verified = live.backend_evidence?.verified === true
   return <form className="settings-card evidence-controls" onSubmit={save}><div className="settings-card-header"><div className="settings-card-title"><Database size={18} /><h3>Export, queue, and verification</h3></div><span className="live-status-pill"><span className={`status-dot ${verified ? 'green' : 'yellow'}`} /> {verified ? 'Receipt verified' : 'Verification unverified'}</span></div><p className="settings-card-desc">Configure where decisions are sent and how the endpoint recovers from transient delivery failures. Queue depth, spool state, and receipt verification are separate signals.</p><div className="settings-fields-grid"><div className="field-group"><label htmlFor="evidence-destination">Evidence destination</label><select id="evidence-destination" value={destination} onChange={(event) => setDestination(event.target.value)}><option value="integrity">Integrity Protocol</option><option value="siem">SIEM webhook</option><option value="both">Integrity + SIEM</option></select></div><div className="field-group"><label htmlFor="evidence-retention">Local retention</label><select id="evidence-retention" value={retention} onChange={(event) => setRetention(event.target.value)}><option value="30">30 days</option><option value="90">90 days</option><option value="365">365 days</option></select></div></div><label className="toggle-item"><input type="checkbox" checked={autoRetry} onChange={(event) => setAutoRetry(event.target.checked)} /><div><b>Retry transient delivery failures</b><p>Use the bounded worker queue; never bypass authentication or TLS verification.</p></div></label><div className="evidence-runtime-strip"><span><b>Queue depth</b>{live.queue_depth ?? '—'}</span><span><b>Spool pending</b>{live.spool_pending ?? '—'}</span><span><b>Failures</b>{live.export_failures ?? '—'}</span><span><b>Verification</b>{verified ? (live.backend_evidence.receipt_id || 'verified') : 'unverified'}</span></div><div className="settings-actions-footer"><button type="submit" className="primary-btn"><Save size={14} /> Save evidence controls</button>{message && <span className="form-message" aria-live="polite"><X size={14} /> {message}</span>}</div></form>
+}
+
+function EvidenceChainStatus({ data }) {
+  const live = (data.exporter || []).find((row) => row.status?.exporter)?.status?.exporter || {}
+  const evidence = live.backend_evidence || {}
+  const state = (value) => value === true ? 'verified' : value === false ? 'failed' : 'unverified'
+  const statusCopy = { verified: 'Verified', failed: 'Failed', unverified: 'Unverified' }
+  const statusIcon = { verified: CheckCircle2, failed: CircleAlert, unverified: CircleDashed }
+  const checks = [
+    ['Signature', evidence.signature_verified ?? evidence.signature_valid, 'Ed25519 receipt signature'],
+    ['Chain', evidence.chain_verified ?? evidence.chain_valid, 'Sequence and predecessor hash'],
+    ['Checkpoint', evidence.checkpoint_verified ?? evidence.checkpoint_valid, 'Signed checkpoint root'],
+    ['Inclusion', evidence.inclusion_verified ?? evidence.inclusion_valid, 'Receipt belongs to checkpoint'],
+    ['Anchor', evidence.anchor_verified ?? evidence.anchor_valid, 'Anchor read-back matches root'],
+  ]
+  const aggregate = state(evidence.verified)
+  return <section className="settings-card evidence-chain-card" aria-labelledby="evidence-chain-title">
+    <div className="settings-card-header">
+      <div className="settings-card-title"><Link2 size={18} /><h3 id="evidence-chain-title">Evidence chain</h3></div>
+      <span className={`status-pill ${aggregate === 'verified' ? 'protected' : aggregate === 'failed' ? 'danger' : 'attention'}`}>
+        {aggregate === 'verified' ? 'Receipt verified' : aggregate === 'failed' ? 'Verification failed' : 'Verification unverified'}
+      </span>
+    </div>
+    <p className="settings-card-desc">Verification is shown as separate evidence steps. Missing backend fields remain unverified; the console never infers a checkpoint or anchor from an aggregate receipt flag.</p>
+    <div className="evidence-chain-grid">
+      {checks.map(([label, value, detail]) => {
+        const current = state(value)
+        const Icon = statusIcon[current]
+        return <article className={`evidence-chain-step ${current}`} key={label}>
+          <Icon size={17} aria-hidden="true" />
+          <div><b>{label}</b><span>{statusCopy[current]}</span><small>{detail}</small></div>
+        </article>
+      })}
+    </div>
+    <div className="evidence-chain-footnote"><span>Source</span><b>{evidence.source || 'backend evidence status'}</b>{evidence.verified_at && <><span>Last checked</span><b>{evidence.verified_at}</b></>}</div>
+  </section>
 }
 
 function WorkspaceTabs({ tabs, active, onChange }) {
@@ -286,6 +322,7 @@ function EvidenceWorkspace({ data, api }) {
           <p>Review signed decisions, exporter state, receipt verification, and remediation controls.</p>
         </div>
         <EvidenceMetricStrip data={data} />
+        <EvidenceChainStatus data={data} />
         <div className="evidence-reference-grid"><Resource title="Exporter status by device" copy="DID preflight, queue, and receipt publication"><JsonRows rows={data.exporter} /></Resource><AuditPacketBuilder data={data} /></div>
         <EvidenceControls api={api} rows={data.exporter || []} />
         <RemediationForm api={api} />
