@@ -25,6 +25,39 @@ def test_settings_validation_and_version_are_deterministic():
     settings = {"containmentMode": "approval", "approvalThreshold": 75, "guardrailToolCalls": True}
     assert validate_settings(settings) == settings
     assert settings_version(settings) == settings_version({"guardrailToolCalls": True, "approvalThreshold": 75, "containmentMode": "approval"})
+
+
+def test_inference_settings_are_bounded_and_secret_refs_are_not_credentials():
+    settings = validate_settings({
+        "inferenceEnabled": True,
+        "inferenceProvider": "llm",
+        "inferenceMode": "shadow",
+        "inferenceModel": "local-model",
+        "inferenceEndpoint": "http://127.0.0.1:11434/v1/chat/completions",
+        "inferencePromptProfile": "shield-risk-v1",
+        "inferenceSecretRef": "secret://shield/providers/local",
+        "inferenceTimeoutMs": 750,
+        "inferenceMaxTokens": 256,
+        "inferenceTemperature": 0.1,
+        "inferenceRedactionMode": "strict",
+        "inferenceFailureMode": "continue_with_policy",
+        "inferenceEventClasses": ["agent_event", "process_activity"],
+    })
+    assert settings["inferenceProvider"] == "llm"
+    for invalid in (
+        {"inferenceProvider": "unknown"},
+        {"inferenceSecretRef": "raw-api-key"},
+        {"inferenceTimeoutMs": 10},
+        {"inferenceEventClasses": [1]},
+        {"inferenceEndpoint": "ftp://inference.example.test/model"},
+        {"inferenceEndpoint": "http://inference.example.test/model"},
+    ):
+        try:
+            validate_settings(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid inference settings accepted: {invalid}")
     try:
         validate_settings({"unknown": True})
     except ValueError as exc:

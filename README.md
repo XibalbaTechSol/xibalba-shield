@@ -252,6 +252,23 @@ Operational settings are validated server-side and assigned a deterministic `sha
 
 Enrolled agents fetch `/api/shield/device-settings` with their device token over the configured control-plane transport. The watchdog reports the delivered settings, configuration version, source URL, and synchronization health in runtime status. This makes distribution observable; endpoint-specific enforcement remains gated by the corresponding helper/runtime capability.
 
+### Configurable advisory inference
+
+The dedicated Settings → Inference & Analysis panel configures post-policy advisory analysis. The
+available providers are deterministic Jev fixture mode, the bounded local classifier, a Lila-style
+JSON adapter, and an OpenAI-compatible LLM adapter. Each provider receives only a redacted
+DecisionEnvelope after local policy has already produced its result.
+
+Provider settings include model, endpoint, versioned prompt profile, timeout, token and temperature
+budgets, event-class scope, failure mode, and a `secret://` reference. Raw credentials remain
+host-managed; `SHIELD_INFERENCE_API_KEY` is read only by the optional HTTP adapter. Non-loopback
+HTTP endpoints are rejected and must use HTTPS.
+
+Inference is shadow-only. Jev or another provider can classify risk, estimate transitions, or
+recommend escalation, but cannot authorize, deny, contain, sign evidence, or delay the deterministic
+Shield/OPA/BCC path. The resulting redacted advisory is linked to the observed event hash and
+surfaced through the authenticated DecisionTrace endpoint with `causal_claim: false`.
+
 Legend: real and tested means there is code and a test or live verification path. Partial means real code exists but a named dependency or environment requirement remains.
 
 | Area | Status | Evidence |

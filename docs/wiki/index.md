@@ -38,6 +38,7 @@ flowchart TD
 ## Pages by category
 
 ### Concepts
+- [Configurable Advisory Inference](concepts/advisory-inference.md)
 - [Event Router](concepts/event-router.md)
 - [Policy Engine](concepts/policy-engine.md)
 - [Action Broker](concepts/action-broker.md)

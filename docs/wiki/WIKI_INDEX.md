@@ -4,7 +4,7 @@
 > now — see the schema's "no aspirational content" rule. This is a focused core set covering
 > Shield's actual architecture, not an exhaustive catalog — contributions adding more pages are
 > welcome.
-> Last updated: 2026-09-08 | Total pages: 14 (9 concepts, 2 entities, 2 architecture, 1 query)
+> Last updated: 2026-10-04 | Total pages: 15 (10 concepts, 2 entities, 2 architecture, 1 query)
 
 ## Acronym glossary
 
@@ -18,6 +18,7 @@
 
 ## Concepts
 
+- [Configurable Advisory Inference](concepts/advisory-inference.md) — tenant-configurable Jev, local classifier, Lila JSON, and OpenAI-compatible advisory providers with deterministic enforcement authority preserved
 - [Event Router](concepts/event-router.md) — `EventRouter.handle()`'s exact step ordering: Tier 1 → optional Tier 2 → containment (before any network call) → guardrail hooks → two independent export paths → event log
 - [Policy Engine](concepts/policy-engine.md) — Tier 1; delegates evaluation to a local OPA sidecar with packaged, explicitly selected profile bundles
 - [Action Broker](concepts/action-broker.md) — real SIGSTOP/SIGCONT/cgroup-v2 containment, SIGKILL only via explicit timeout escalation, wired into `shield run`'s live loop by default
