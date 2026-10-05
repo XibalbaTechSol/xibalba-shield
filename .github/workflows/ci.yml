@@ -17,10 +17,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XibalbaTechSol/integrity-core
-          # integrity-core main after #109 merged (2026-09-28) -- bumped because this PR's
-          # policy_engine/engine.py imports integrity_sdk.core.decision, added by A2/A1's
-          # restructure (integrity-core#101), which postdates the previous pin (#99).
-          ref: d1848cde107e1370d6015295ef33a8fa8233e986
+          # integrity-core main after #160 merged (2026-10-05) -- bumped because this PR's
+          # shield/policy_engine/jev_shadow.py and inference.py import
+          # integrity_sdk.core.decision_trace, added by integrity-core#160's A7 SDK work,
+          # which postdates the previous pin (integrity-core#109).
+          ref: e5f301b2804595160d1e51fbe3cebe40ae910584
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
