@@ -353,6 +353,23 @@ Current v1 implementation supports local JSON files for policy rules and device 
 
 Policy hot reload is mtime-polled and intentionally simple. Future file watchers may replace polling only if they preserve last-known-good semantics.
 
+### 10.1 Advisory inference settings
+
+Shield's inference settings are advisory-only tenant controls. `inferenceMode` is currently limited
+to `shadow`; deterministic local policy remains authoritative. `inferenceProvider` accepts
+`disabled`, `jev`, `local_classifier`, `lila`, or `llm`. Lila uses a bounded JSON adapter, while
+`llm` uses an OpenAI-compatible JSON chat-completions request. Both require a validated endpoint.
+
+The backend bounds timeout (50–5000 ms), maximum tokens (32–4096), temperature (0–1), prompt/model
+field lengths, and event-class list size. Redaction mode is strict, failure mode is either
+`continue_with_policy` or `mark_unavailable`, and credentials are never tenant data: settings may
+contain only a `secret://` reference while the optional `SHIELD_INFERENCE_API_KEY` remains
+host-managed. Non-loopback HTTP endpoints must use HTTPS.
+
+After policy evaluation, the provider receives a redacted DecisionEnvelope and returns a bounded
+JevAnalysis-shaped advisory. The analyzer writes a parent-linked DecisionTrace projection and never
+changes the PolicyDecision, Action Broker, receipt signer, or enforcement mode.
+
 Tenant policy distribution is implemented as a client-side HTTP(S) fetch, validate, trusted-hash check, and atomic local replace. The hosted policy service contract is outside this repository. Code auto-update requires verified downloads, signature checking, staged rollout, rollback, and explicit operator recovery design before implementation.
 
 ## 11. CLI And Operator Surface

@@ -25,6 +25,8 @@ from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_
 from .config.hot_reload import PolicyHotReloader
 from .pack_loading import PackLoadError, resolve_pack
 from .policy_engine import PolicyEngine
+from .policy_engine.jev_shadow import JevShadowAnalyzer, JsonlDecisionTraceSink
+from .policy_engine.inference import build_inference_provider
 
 from integrity_sdk.core.opa import OpaError
 
@@ -482,6 +484,26 @@ def _run(args: argparse.Namespace) -> int:
             print(f"shield run: Hermes publication disabled; invalid transport configuration: {exc}", file=sys.stderr)
             hermes_publisher = None
 
+    try:
+        inference_config, inference_provider = build_inference_provider(hermes_settings)
+    except (RuntimeError, ValueError) as exc:
+        print(f"shield run: configured inference unavailable; continuing with deterministic policy: {exc}", file=sys.stderr)
+        inference_config, inference_provider = None, None
+    jev_analyzer = None
+    if inference_provider is not None and inference_config is not None:
+        jev_sink = JsonlDecisionTraceSink(os.environ.get("SHIELD_DECISION_TRACE_PATH", "~/.xibalba-shield/decision-trace.jsonl"))
+        jev_analyzer = JevShadowAnalyzer(
+            tenant_id=device_config.tenant_id,
+            agent_id=device_config.device_id,
+            provider=inference_provider,
+            sink=jev_sink,
+            event_classes=inference_config.event_classes,
+            provider_metadata={
+                "inference_mode": inference_config.mode,
+                "prompt_profile": inference_config.prompt_profile,
+                "redaction_mode": inference_config.redaction_mode,
+            },
+        )
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
@@ -489,7 +511,8 @@ def _run(args: argparse.Namespace) -> int:
                          enforcement_mode=getattr(args, "enforcement_mode", "enforce"),
                          decision_sink=evidence_publisher.publish_decision,
                          enforcement_outcome_sink=evidence_publisher.publish_outcome,
-                         memory_provider=memory_provider, hermes_publisher=hermes_publisher)
+                         memory_provider=memory_provider, hermes_publisher=hermes_publisher,
+                         jev_analyzer=jev_analyzer)
 
     try:
         sensor = _make_sensor(

@@ -80,6 +80,7 @@ class EventRouter:
         decision_sink: Callable[[PolicyDecision], None] | None = None,
         memory_provider: MemoryProviderLike | None = None,
         hermes_publisher: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
+        jev_analyzer: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
         enforcement_mode: Literal["observe", "enforce"] = "enforce",
     ) -> None:
         if enforcement_mode not in {"observe", "enforce"}:
@@ -101,6 +102,10 @@ class EventRouter:
         self.decision_sink = decision_sink
         self.memory_provider = memory_provider
         self.hermes_publisher = hermes_publisher
+        # Jev is strictly observational. The analyzer is invoked after local enforcement has
+        # already happened and before downstream evidence export; its failure cannot change the
+        # PolicyDecision or block the router.
+        self.jev_analyzer = jev_analyzer
         # Compatibility default remains enforcement for existing Shield callers.
         # The policy-pack rollout can pass observe explicitly, then change the
         # deployment default only after its signed-bundle path is enabled.
@@ -253,6 +258,12 @@ class EventRouter:
                         action="contain", completed=False, error="no pid to act on", agent_id=agent_id,
                     )
                 )
+
+        if self.jev_analyzer is not None:
+            try:
+                self.jev_analyzer(event, decision)
+            except Exception:  # noqa: BLE001 -- shadow analysis is downstream of enforcement
+                logger.exception("Jev shadow analysis failed for %s", decision.event_ref.event_id)
 
         if isinstance(event, AgentEvent):
             for hook in self.guardrail_hooks:

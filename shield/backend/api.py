@@ -143,6 +143,47 @@ def _read_hermes_deliveries(limit: int = 50) -> list[dict[str, Any]]:
         return []
 
 
+def _read_decision_trace(tenant_id: str, limit: int = 50) -> dict[str, Any]:
+    path = Path(os.environ.get("SHIELD_DECISION_TRACE_PATH", "~/.xibalba-shield/decision-trace.jsonl")).expanduser()
+    if not path.is_file():
+        return {"trace_id": None, "events": [], "root": None, "valid": True, "disclaimer": "Observational correlation only; probabilities do not prove causality or execution."}
+    rows: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines()[-limit:]:
+            item = json.loads(line)
+            if item.get("tenant_id") == tenant_id:
+                rows.append(item)
+    except (OSError, ValueError, TypeError):
+        return {"trace_id": None, "events": [], "root": None, "valid": False, "disclaimer": "DecisionTrace projection could not be read locally."}
+    trace_id = rows[-1].get("trace_id") if rows else None
+    events = [item for item in rows if item.get("trace_id") == trace_id] if trace_id else []
+    previous = "0x" + "00" * 32
+    valid = True
+    for index, item in enumerate(events):
+        if item.get("parent_event_hash") != previous:
+            valid = False
+        item["sequence_number"] = index
+        previous = str(item.get("event_hash") or previous)
+    root = None
+    proofs: dict[str, list[str]] = {}
+    if events:
+        try:
+            from integrity_sdk.core.decision_trace import DecisionEnvelope, DecisionTrace
+            trace = DecisionTrace(trace_id, str(events[0]["tenant_id"]), str(events[0]["agent_id"]))
+            for item in events:
+                body = dict(item["envelope"])
+                body.pop("envelope_version", None)
+                trace = trace.append(DecisionEnvelope(**body))
+            valid = valid and trace.verify()
+            root = trace.root
+            proofs = {str(index): trace.proof(index) for index in range(len(trace.events))}
+        except (ImportError, KeyError, TypeError, ValueError):
+            valid = False
+    return {"trace_id": trace_id, "session_id": trace_id, "events": events, "root": root,
+            "proofs": proofs, "valid": valid,
+            "disclaimer": "Observational correlation only; probabilities do not prove causality or execution."}
+
+
 _RESOURCE_SAMPLES: dict[int, tuple[float, int]] = {}
 _CPU_SAMPLES: dict[str, tuple[int, int]] = {}
 
@@ -780,6 +821,12 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                 if not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json({"exporter_status": store.list_exporter_status(tenant_id=tenant_id)})
+                return
+            if parsed.path == "/api/shield/decision-trace":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                self._send_json(_read_decision_trace(tenant_id))
                 return
             if parsed.path == "/api/shield/exporter-remediation/next":
                 tenant_id = query.get("tenant_id", [""])[0]

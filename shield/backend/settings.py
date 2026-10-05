@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from urllib.parse import urlparse
 from typing import Any
 
 
@@ -48,6 +49,21 @@ SETTING_RULES: dict[str, tuple[type, set[Any] | None]] = {
     "hermesMaxBatch": (int, None),
     "hermesSpoolMaxBytes": (int, None),
     "hermesAutoRetry": (bool, None),
+    # Configurable advisory inference. Provider credentials remain host-managed; only a
+    # non-secret reference may be stored in tenant settings.
+    "inferenceEnabled": (bool, None),
+    "inferenceProvider": (str, {"disabled", "jev", "lila", "local_classifier", "llm"}),
+    "inferenceMode": (str, {"shadow"}),
+    "inferenceModel": (str, None),
+    "inferenceEndpoint": (str, None),
+    "inferencePromptProfile": (str, None),
+    "inferenceSecretRef": (str, None),
+    "inferenceTimeoutMs": (int, None),
+    "inferenceMaxTokens": (int, None),
+    "inferenceTemperature": (float, None),
+    "inferenceRedactionMode": (str, {"strict"}),
+    "inferenceFailureMode": (str, {"continue_with_policy", "mark_unavailable"}),
+    "inferenceEventClasses": (list, None),
 }
 
 
@@ -80,6 +96,31 @@ def validate_settings(settings: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("hermesMaxBatch must be between 1 and 10")
         if key == "hermesSpoolMaxBytes" and not 65536 <= value <= 16 * 1024 * 1024:
             raise ValueError("hermesSpoolMaxBytes must be between 65536 and 16777216")
+        if key == "inferenceSecretRef" and (len(value) > 256 or (value and not value.startswith("secret://"))):
+            raise ValueError("inferenceSecretRef must be a secret:// reference")
+        if key == "inferenceEndpoint" and len(value) > 512:
+            raise ValueError("inferenceEndpoint must be at most 512 characters")
+        if key == "inferenceEndpoint" and value:
+            parsed = urlparse(value)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("inferenceEndpoint must be an http(s) URL")
+            if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+                raise ValueError("non-local inferenceEndpoint must use HTTPS")
+        if key == "inferencePromptProfile" and len(value) > 128:
+            raise ValueError("inferencePromptProfile must be at most 128 characters")
+        if key == "inferenceModel" and len(value) > 128:
+            raise ValueError("inferenceModel must be at most 128 characters")
+        if key == "inferenceTimeoutMs" and not 50 <= value <= 5000:
+            raise ValueError("inferenceTimeoutMs must be between 50 and 5000")
+        if key == "inferenceMaxTokens" and not 32 <= value <= 4096:
+            raise ValueError("inferenceMaxTokens must be between 32 and 4096")
+        if key == "inferenceTemperature" and not 0 <= value <= 1:
+            raise ValueError("inferenceTemperature must be between 0 and 1")
+        if key == "inferenceEventClasses":
+            if not all(isinstance(item, str) and 1 <= len(item) <= 64 for item in value):
+                raise ValueError("inferenceEventClasses must contain bounded strings")
+            if len(value) > 32:
+                raise ValueError("inferenceEventClasses must contain at most 32 classes")
         result[key] = value
     return result
 

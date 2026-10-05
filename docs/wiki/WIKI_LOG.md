@@ -196,3 +196,12 @@
   binding section was added out of heading order.
 - `python3 scripts/wiki_toc.py --check` now reports all 14 canonical article TOCs current,
   closing the deterministic pre-publication check that blocked the GitHub Wiki sync workflow.
+
+## [2026-10-04] update | Configurable advisory inference
+
+- Added `concepts/advisory-inference.md`, documenting the implemented Jev, local-classifier, Lila
+  JSON, and OpenAI-compatible provider adapters, validated settings, evidence sink, and failure
+  boundary.
+- Updated `WIKI_INDEX.md` and `index.md` to expose the new page.
+- Source review covers `shield/policy_engine/inference.py`, `shield/policy_engine/jev_shadow.py`,
+  `shield/backend/settings.py`, and `shield/cli.py` in the isolated implementation worktree.
