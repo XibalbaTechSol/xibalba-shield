@@ -100,7 +100,14 @@ class HttpInferenceProvider:
             content = payload.get("choices", [{}])[0].get("message", {}).get("content", "")
             payload = json.loads(content) if isinstance(content, str) else content
         probabilities = payload.get("transition_probabilities") or {"continue": 1 - float(payload.get("confidence", 0.5)), "escalate": float(payload.get("confidence", 0.5))}
-        return JevAnalysis(self.provider_id, "available", str(payload.get("risk_category") or "unknown"), {str(k): float(v) for k, v in probabilities.items()}, bool(payload.get("recommended_escalation", False)), event.event_hash)
+        escalate = payload.get("recommended_escalation", False)
+        if not isinstance(escalate, bool):
+            # `bool("false")` is True, so a model that quotes its JSON booleans used to turn
+            # "do not escalate" into "escalate" with status `available` and no sign of trouble.
+            # An ill-typed field is a malformed response, not advice. (Type only in the message:
+            # the value is provider-returned content.)
+            raise ValueError(f"recommended_escalation must be a boolean, got {type(escalate).__name__}")
+        return JevAnalysis(self.provider_id, "available", str(payload.get("risk_category") or "unknown"), {str(k): float(v) for k, v in probabilities.items()}, escalate, event.event_hash)
 
 
 def build_inference_provider(settings: Mapping[str, Any]) -> tuple[InferenceConfig, JevProvider | None]:

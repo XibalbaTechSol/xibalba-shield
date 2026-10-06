@@ -221,3 +221,22 @@
 - Source review covers `shield/gate_daemon.py` and `shield/cli.py`. Verified against a real signed
   pack, real OPA and a real socket, not only stubs; the live run found and fixed two defects the
   in-process tests could not see (decisions were not being logged; SIGTERM left a stale socket).
+
+## [2026-10-06] update | Advisory failure modes: reason codes, and a trace reader that detects tamper
+
+- Closed integrity-core A7's second open item: a provider outage, malformed response, tenant mismatch
+  and tamper no longer change enforcement **and say why**. `tests/test_jev_failure_modes.py` (81
+  tests) proves the first differentially against a real OPA and signed pack, for a genuine deny and
+  a `log_only` baseline, with the HTTP providers driven against a real local HTTP server.
+- Added stable `reason_code`s to failed advisories (`ADVISORY_*`, in the log line and the stored row)
+  and to the trace reader (`TRACE_*`). Documented in `concepts/advisory-inference.md`.
+- Found and fixed four real defects while writing the tests, each confirmed by a probe against the
+  actual code before any fix: (1) a provider's advice about a *different* event was stored as
+  `available`; (2) `recommended_escalation: "false"` became `True`; (3) the trace reader trusted stored
+  hashes, so rewriting only the **last** event went undetected; (4) any trace past 50 events was
+  reported `valid: false` forever, because the 50-line window starts mid-chain.
+- Tenant isolation in the reader was already correct; now pinned.
+- Not done: the Settings UI (so A7's first open item stays open), a dashboard display of
+  `reason_code`/`truncated`, and bounding the length of provider-returned `risk_category`, which is
+  stored verbatim and is B5 territory. Tail/head truncation of a trace is undetectable from the file
+  alone and needs an external anchor.
