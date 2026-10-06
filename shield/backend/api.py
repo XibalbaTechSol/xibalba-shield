@@ -143,45 +143,105 @@ def _read_hermes_deliveries(limit: int = 50) -> list[dict[str, Any]]:
         return []
 
 
+_TRACE_DISCLAIMER = "Observational correlation only; probabilities do not prove causality or execution."
+_TRACE_GENESIS = "0x" + "00" * 32
+
+
 def _read_decision_trace(tenant_id: str, limit: int = 50) -> dict[str, Any]:
+    """One tenant's most recent DecisionTrace, verified, with a reason code when it is not intact.
+
+    `valid` is False for any integrity problem and `reason_code` names the FIRST one found, so an
+    operator learns what kind of problem it is rather than only that there is one:
+
+    - `TRACE_UNREADABLE`: the file could not be read or parsed.
+    - `TRACE_LINK_BROKEN`: an event's parent is not the event before it (a row was removed, or a
+      parent pointer edited).
+    - `TRACE_NAMESPACE_MISMATCH`: an event belongs to a different tenant, agent or trace than the
+      trace it sits in (a splice).
+    - `TRACE_HASH_MISMATCH`: an event's stored hash is not the hash of its own envelope, i.e. the
+      envelope was rewritten.
+    - `TRACE_INVALID`: a row is structurally malformed.
+
+    Hashes are RECOMPUTED from each envelope and compared with the stored ones. Trusting the stored
+    hashes (as this once did) meant that rewriting only the final event left nothing after it to
+    disagree with, so the most recent decision could be flipped and the trace still read as valid.
+
+    Only the last `limit` lines are read, so a long-running device's trace is a *window* that starts
+    mid-chain. That is not damage: a window is verified as a segment (hashes, links and namespaces
+    among its own events) and reported with `truncated: true`, and its `root`/`proofs` are omitted
+    because a Merkle root over part of a chain would not be the trace's root. Previously any trace
+    past `limit` events was reported invalid forever, which would have made every reason code here
+    a false alarm.
+
+    Known limit, stated rather than implied: removing events from either END of a trace (or from a
+    window's edge) leaves a shorter chain that is still internally consistent, so it cannot be
+    detected from this file alone. Pinning the root externally is what closes that (B4's anchor).
+    """
     path = Path(os.environ.get("SHIELD_DECISION_TRACE_PATH", "~/.xibalba-shield/decision-trace.jsonl")).expanduser()
     if not path.is_file():
-        return {"trace_id": None, "events": [], "root": None, "valid": True, "disclaimer": "Observational correlation only; probabilities do not prove causality or execution."}
+        return {"trace_id": None, "events": [], "root": None, "valid": True, "reason_code": None,
+                "truncated": False, "disclaimer": _TRACE_DISCLAIMER}
     rows: list[dict[str, Any]] = []
     try:
         for line in path.read_text(encoding="utf-8").splitlines()[-limit:]:
             item = json.loads(line)
             if item.get("tenant_id") == tenant_id:
                 rows.append(item)
-    except (OSError, ValueError, TypeError):
-        return {"trace_id": None, "events": [], "root": None, "valid": False, "disclaimer": "DecisionTrace projection could not be read locally."}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {"trace_id": None, "events": [], "root": None, "valid": False,
+                "reason_code": "TRACE_UNREADABLE", "truncated": False,
+                "disclaimer": "DecisionTrace projection could not be read locally."}
     trace_id = rows[-1].get("trace_id") if rows else None
     events = [item for item in rows if item.get("trace_id") == trace_id] if trace_id else []
-    previous = "0x" + "00" * 32
-    valid = True
+
+    problems: list[str] = []  # in the order found; the first is the one reported
+    # A window whose first event does not point at genesis starts mid-chain. It is verified as a
+    # segment: its first event has no predecessor in the window to be checked against.
+    windowed = bool(events) and events[0].get("parent_event_hash") != _TRACE_GENESIS
+    previous: str | None = None if windowed else _TRACE_GENESIS
     for index, item in enumerate(events):
-        if item.get("parent_event_hash") != previous:
-            valid = False
+        if previous is not None and item.get("parent_event_hash") != previous:
+            problems.append("TRACE_LINK_BROKEN")
         item["sequence_number"] = index
-        previous = str(item.get("event_hash") or previous)
+        previous = str(item.get("event_hash") or previous or _TRACE_GENESIS)
+
     root = None
     proofs: dict[str, list[str]] = {}
     if events:
         try:
             from integrity_sdk.core.decision_trace import DecisionEnvelope, DecisionTrace
             trace = DecisionTrace(trace_id, str(events[0]["tenant_id"]), str(events[0]["agent_id"]))
+            envelopes: list[Any] = []
             for item in events:
                 body = dict(item["envelope"])
                 body.pop("envelope_version", None)
-                trace = trace.append(DecisionEnvelope(**body))
-            valid = valid and trace.verify()
-            root = trace.root
-            proofs = {str(index): trace.proof(index) for index in range(len(trace.events))}
+                envelope = DecisionEnvelope(**body)
+                if (envelope.tenant_id, envelope.agent_id, envelope.trace_id) != (
+                    trace.tenant_id, trace.agent_id, trace.trace_id,
+                ):
+                    problems.append("TRACE_NAMESPACE_MISMATCH")
+                    break
+                if envelope.event_hash != item.get("event_hash"):
+                    problems.append("TRACE_HASH_MISMATCH")
+                    break
+                if envelopes and envelope.parent_event_hash != envelopes[-1].event_hash:
+                    problems.append("TRACE_LINK_BROKEN")
+                    break
+                envelopes.append(envelope)
+            else:
+                if not windowed and not problems:
+                    for envelope in envelopes:
+                        trace = trace.append(envelope)
+                    if trace.verify():
+                        root = trace.root
+                        proofs = {str(index): trace.proof(index) for index in range(len(trace.events))}
+                    else:
+                        problems.append("TRACE_INVALID")
         except (ImportError, KeyError, TypeError, ValueError):
-            valid = False
+            problems.append("TRACE_INVALID")
     return {"trace_id": trace_id, "session_id": trace_id, "events": events, "root": root,
-            "proofs": proofs, "valid": valid,
-            "disclaimer": "Observational correlation only; probabilities do not prove causality or execution."}
+            "proofs": proofs, "valid": not problems, "reason_code": problems[0] if problems else None,
+            "truncated": windowed, "disclaimer": _TRACE_DISCLAIMER}
 
 
 _RESOURCE_SAMPLES: dict[int, tuple[float, int]] = {}
