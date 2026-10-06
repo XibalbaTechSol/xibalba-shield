@@ -28,6 +28,7 @@ from shield.gate_daemon import (
     GateProtocolError,
     GateRequest,
     GateServer,
+    default_socket_path,
     remove_stale_socket,
 )
 from shield.opa_local import supervised_opa
@@ -158,6 +159,36 @@ def test_a_stray_raw_tool_input_field_is_ignored_not_read_into_the_request():
     )
     assert not hasattr(request, "tool_input"), "the daemon must never hold raw tool content"
     assert "shadow" not in repr(request)
+
+
+def test_default_socket_path_follows_the_documented_rule(tmp_path, monkeypatch):
+    """integrity-core's `integrity_sdk.hook_runner.default_shield_socket_path` is the client's
+    copy of this rule and pins the same three cases (docs/INTERFACE_CONTRACT.md 15.5 there). If
+    the two ever disagree, a harness hook dials a socket this daemon is not listening on and
+    nothing else notices -- the hook just fails open."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("XIBALBA_SHIELD_GATE_SOCKET", raising=False)
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    assert default_socket_path() == tmp_path / "home" / ".xibalba-shield" / "gate.sock"
+
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
+    assert default_socket_path() == tmp_path / "run" / "xibalba-shield" / "gate.sock"
+
+    monkeypatch.setenv("XIBALBA_SHIELD_GATE_SOCKET", str(tmp_path / "custom.sock"))
+    assert default_socket_path() == tmp_path / "custom.sock"
+
+
+def test_response_has_exactly_the_documented_v1_keys(tmp_path):
+    """integrity-core's client reads these keys and its test double emits them. Pinning the set
+    here is the daemon-side half of that contract: a renamed or dropped key fails this suite
+    instead of failing open, silently, in someone's harness."""
+    with _RunningServer(tmp_path, _stub_evaluator("allow")) as server:
+        response = server.ask(_request())
+    assert set(response) == {
+        "v", "decision", "checked", "action", "enforced", "reason", "rule_id",
+        "policy_version", "policy_hash", "invocation_id",
+    }
+    assert response["v"] == 1
 
 
 # ------------------------------------------------------------------- socket mechanics
