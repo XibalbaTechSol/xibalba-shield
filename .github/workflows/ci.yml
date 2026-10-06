@@ -17,13 +17,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XibalbaTechSol/integrity-core
-          # integrity-core main after #160 merged (2026-10-05) -- bumped because #43's
-          # shield/policy_engine/jev_shadow.py and inference.py import
-          # integrity_sdk.core.decision_trace, added by integrity-core#160's A7 SDK work,
-          # which postdates the previous pin (integrity-core#109). #43 merged via this
-          # repo's auto-merge before this bump landed, so main's CI has been broken since;
-          # this is the immediate fix, not new feature work.
-          ref: e5f301b2804595160d1e51fbe3cebe40ae910584
+          # integrity-core main after #162 merged (2026-10-06). Bumped off the previous
+          # #160 pin because that pin predates integrity-core#161, an integrity_sdk.did
+          # migration fix (state-only identity destinations) that this repo's identity
+          # resolution depends on; the bump also carries #162's additive
+          # integrity_sdk.hook_runner module. Bump this ref deliberately, in the SAME PR
+          # as any code that imports a newly added SDK symbol -- never in a follow-up.
+          # Landing the two out of order is what broke main's CI on 2026-10-05 in both
+          # this repo and its sibling; see the A0 precondition in integrity-core's
+          # docs/EXECUTION_PLAN.md.
+          ref: 4ddaae1965635224958e147f6eaaead06e3cdc41
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
