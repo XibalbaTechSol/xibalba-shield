@@ -178,8 +178,9 @@ def _gate_daemon(args: argparse.Namespace) -> int:
     verified pack, an OPA to query and an evaluation context. It does not build a sensor,
     exporter, action broker, SLM or Jev analyzer, because none of those participate in
     deciding whether one pending tool call may proceed -- and `ActionBroker.contain()`'s
-    real SIGSTOP is the wrong response to a call that has not run yet. See
-    `shield/gate_daemon.py` for the [PLANNED] note on signed receipts, B2's other half.
+    real SIGSTOP is the wrong response to a call that has not run yet. With `--receipt-dir` it
+    also writes a signed, chained receipt per decision (`shield/gate_receipts.py`); the signing
+    and HMAC keys are required then, and a log that does not verify stops the daemon starting.
 
     Agents must be registered explicitly with `--register-agent`. `AgentRegistry` is
     in-memory, and every shipped pack carries a rule denying tool activity from an agent
@@ -205,18 +206,53 @@ def _gate_daemon(args: argparse.Namespace) -> int:
             device_role=args.device_role or "",
         )
 
+    receipts = None
+    if args.receipt_dir is None:
+        if args.strict_receipts:
+            print("shield gate-daemon: --strict-receipts needs --receipt-dir", file=sys.stderr)
+            return 2
+    else:
+        from .gate_receipts import (
+            GateReceiptWriter, ReceiptSetupError, default_log_id, load_hmac_key, load_signer,
+        )
+
+        key_path = args.receipt_key or os.environ.get("SHIELD_DEVICE_KEY_PATH")
+        if not key_path or args.receipt_hmac_key_file is None:
+            print("shield gate-daemon: --receipt-dir needs a signing key (--receipt-key or "
+                  "SHIELD_DEVICE_KEY_PATH) and --receipt-hmac-key-file", file=sys.stderr)
+            return 2
+        try:
+            hmac_key = load_hmac_key(args.receipt_hmac_key_file)
+            receipts = GateReceiptWriter(
+                args.receipt_dir,
+                signer=load_signer(key_path),
+                hmac_key=hmac_key,
+                log_id=default_log_id(hmac_key, device_config.device_id),
+                checkpoint_every=args.receipt_checkpoint_every,
+            )
+        except ReceiptSetupError as exc:
+            print(f"shield gate-daemon: {exc}", file=sys.stderr)
+            return 1
+        print(f"shield gate-daemon: receipts in {args.receipt_dir} (log {receipts.log_id}, "
+              f"{receipts.receipt_count} existing, signer {receipts.signer_key}, "
+              f"{'strict' if args.strict_receipts else 'non-strict'})", file=sys.stderr)
+
     try:
         pack = resolve_pack(
             device_config, pack_dir=args.pack_dir, trusted_pack_signers=args.trusted_pack_signers,
         )
     except PackLoadError as exc:
         print(f"shield gate-daemon: {exc}", file=sys.stderr)
+        if receipts is not None:
+            receipts.close()
         return 1
 
     try:
         policy_engine = PolicyEngine(opa_url=args.opa_url, pack=pack)
     except OpaError as exc:
         print(f"shield gate-daemon: unable to install policy pack into OPA: {exc}", file=sys.stderr)
+        if receipts is not None:
+            receipts.close()
         return 1
 
     # Shield configures logging nowhere else, so without this the daemon's per-decision lines
@@ -255,9 +291,12 @@ def _gate_daemon(args: argparse.Namespace) -> int:
         serve_forever(
             socket_path, engine=policy_engine, ctx=ctx,
             device_id=device_config.device_id, enforcement_mode=args.enforcement_mode,
+            receipts=receipts, strict_receipts=args.strict_receipts,
         )
     except OSError as exc:
         print(f"shield gate-daemon: {exc}", file=sys.stderr)
+        if receipts is not None:
+            receipts.close()
         return 1
     except KeyboardInterrupt:
         print("shield gate-daemon: stopped", file=sys.stderr)
@@ -1028,6 +1067,21 @@ def main(argv: list[str] | None = None) -> int:
     p_gate.add_argument("--enforcement-mode", choices=("observe", "enforce"), default="enforce",
                         help="observe answers allow for everything while reporting the verdict it "
                              "would have enforced; enforce (default) denies")
+    p_gate.add_argument("--receipt-dir", type=Path, default=None,
+                        help="write a signed, chained receipt per decision into this directory "
+                             "(receipts.jsonl + checkpoints.jsonl). Off by default; the response "
+                             "then says receipt_status=disabled")
+    p_gate.add_argument("--receipt-key", type=Path, default=None,
+                        help="Ed25519 PEM that signs receipts (mode 0600); default SHIELD_DEVICE_KEY_PATH. "
+                             "Never created if missing")
+    p_gate.add_argument("--receipt-hmac-key-file", type=Path, default=None,
+                        help="organization-held HMAC key (>=32 bytes, mode 0600) that hides the device "
+                             "id and tool name in receipts")
+    p_gate.add_argument("--receipt-checkpoint-every", type=int, default=100,
+                        help="receipts between signed checkpoints (a clean stop also writes one)")
+    p_gate.add_argument("--strict-receipts", action="store_true",
+                        help="in enforce mode, deny a call whose receipt could not be recorded "
+                             "(default: the decision stands and the response says receipt_status=failed)")
     p_gate.set_defaults(func=_gate_daemon)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")

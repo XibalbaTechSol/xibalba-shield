@@ -2,7 +2,7 @@
 title: Guardrail Hooks
 acronyms: []
 created: 2026-08-12
-updated: 2026-10-06
+updated: 2026-10-07
 type: concept
 tags: [enforcement, compliance]
 confidence: high
@@ -14,6 +14,7 @@ source_files:
   - shield/guardrail_hooks/tool_execution.py
   - shield/guardrail_hooks/post_action_verification.py
   - shield/gate_daemon.py
+  - shield/gate_receipts.py
   - shield/agent_core/router.py
   - shield/cli.py
 ---
@@ -104,8 +105,10 @@ stays visible in the response's `action` field.
 **Wire contract (v1).** One newline-terminated JSON object per connection, one response, then
 close: request `{"v":1,"event":"pre_tool_use","agent_id","tool_name","tool_input_sha256"}`, response
 `{"v","decision":"allow"|"deny","checked","action","enforced","reason","rule_id",
-"policy_version","policy_hash","invocation_id"}`. `policy_hash` is the enforced pack's hash, so a
-caller can record *which* policy ruled. Requests are capped at 4 MiB.
+"policy_version","policy_hash","invocation_id","receipt","receipt_status"}`. `policy_hash` is the
+enforced pack's hash, so a caller can record *which* policy ruled. `receipt` and `receipt_status`
+are the receipt fields described below; both are present on every response. Requests are capped
+at 4 MiB.
 
 **Fail-closed, and where fail-open actually lives.** The daemon fails closed: an OPA outage, a
 missing pack, a malformed request or an unexpected evaluator error all deny in enforce mode.
@@ -131,11 +134,50 @@ authorized one. `--enforcement-mode observe` always answers `allow` while report
 - **SIGTERM stops it cleanly** and removes the socket; a stale socket from a crash is detected
   and replaced at the next start, while a *live* one is refused rather than taken over.
 
-**`[PLANNED]` — not built.** The daemon does not yet emit a signed, chained receipt per decision;
-that is the remaining half of B2's "signed chained receipts with checkpoints." The evaluator is a
-parameter of `evaluate_pre_tool_use` so a receipt-emitting one can be substituted without
-rewriting the module. Nor does `integrity_sdk.hook_runner` yet speak to this socket — its
-`SUPPORTED_GATES` still names only `bcc`.
+### Signed, chained receipts (`--receipt-dir`)
+
+With `--receipt-dir` the daemon writes one **signed, chained receipt per decision** before it
+answers (`shield/gate_receipts.py`; the format, signing domain, chain and checkpoint rules are
+`integrity_sdk.core.receipts`, shared with BCC and with `integrity-cli`'s independent verifier —
+Shield invents no receipt field). It is opt-in: without the flag the response says
+`receipt_status: "disabled"`, never silence.
+
+- **Files.** `receipts.jsonl` and `checkpoints.jsonl` in the directory, created `0600` (directory
+  `0700`), each line `fsync`-ed before the harness is answered. A checkpoint commits to the Merkle
+  root over the first `tree_size` receipts, every `--receipt-checkpoint-every` receipts (default
+  100) and once more on a clean stop. A hard crash writes no final checkpoint; the periodic ones
+  and the next start's verification cover that.
+- **Keys.** `--receipt-key` (Ed25519 PEM, default `SHIELD_DEVICE_KEY_PATH`, never created if
+  missing) signs; `--receipt-hmac-key-file` (at least 32 bytes) hides the device and the tool.
+  Both must be mode `0600` or the daemon refuses to start. The tool *name* and the device id never
+  appear in the file in the clear; the agent DID does. `log_id` is derived from the same HMAC
+  (`default_log_id`) rather than from the device id — the first version embedded the raw device
+  id there, which only a live run against the real file showed.
+- **What a receipt records.** The *final* verdict: `PolicyEngine.evaluate_with_basis` returns a
+  `DecisionBasis` (decision, reason code, controls, pack hash, event class) alongside the
+  `PolicyDecision`, which carries no reason code. If the local risk gate hardens a verdict after
+  the pack answered, the receipt says `deny` with `INTEGRITY_LOCAL_RISK_CONTAIN`/`_ESCALATE`, not
+  the pack's `permit`. `contain` and `escalate` record as `deny`. Observe mode records `shadow`
+  with the verdict it *would* have enforced. A request the daemon refused to parse gets
+  `receipt_status: "skipped"` and no receipt, since there is no decision to record.
+- **Failure posture.** *Starting* fails closed: a log that does not verify with the configured key
+  (bad signature, gap, broken link, missing tail after a checkpoint, another device's log id, a
+  rotated key) stops the daemon rather than being extended or replaced. The one exception is a
+  torn final line — a crash mid-write — which was never acknowledged and is discarded with a
+  warning. *Recording* fails open to the caller, loudly: if a receipt cannot be written the
+  decision stands, `receipt_status` is `"failed"` and an ERROR is logged; `--strict-receipts`
+  makes enforce mode deny instead. A failed write never advances the chain, and a partial write
+  is truncated away (if even that fails the writer disables itself).
+- **Limits.** Deleting `checkpoints.jsonl`, or truncating both files consistently, is not
+  detectable from the files alone — that is what anchoring a checkpoint (B4) closes. The log is
+  held in memory and re-verified at start; rotation and incremental trees are `[PLANNED]`.
+  Rotating either key starts a new log.
+
+Verification is `integrity verify --receipts bundle.json --trusted-signer <key>` from
+`integrity-cli`; the daemon prints its signer key at start. Not built: BCC's side of B2 (the same
+receipts from `bcc_middleware`) and the shared conformance vectors.
+
+`integrity_sdk.hook_runner --gate shield` speaks to this socket (integrity-core #166).
 
 ## Related pages
 

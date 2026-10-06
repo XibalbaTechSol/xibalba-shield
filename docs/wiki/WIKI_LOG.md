@@ -240,3 +240,25 @@
   `reason_code`/`truncated`, and bounding the length of provider-returned `risk_category`, which is
   stored verbatim and is B5 territory. Tail/head truncation of a trace is undetectable from the file
   alone and needs an external anchor.
+
+## [2026-10-07] update | Gate daemon emits signed, chained receipts (integrity-core B2)
+
+- Added `shield/gate_receipts.py` (`GateReceiptWriter`) and `shield gate-daemon --receipt-dir`:
+  one signed, chained receipt per decision, written and `fsync`-ed before the answer, with signed
+  checkpoints every N receipts and on a clean stop. The format is `integrity_sdk.core.receipts`;
+  Shield adds only the emitting side. Documented in `concepts/guardrail-hooks.md`.
+- `PolicyEngine.evaluate_with_basis` returns the final `DecisionBasis` (reason code, controls, pack
+  hash) a receipt needs; `evaluate` is unchanged. The response gains `receipt` and
+  `receipt_status` (`recorded|disabled|failed|skipped`).
+- Failure posture: starting fails closed on any log that does not verify (a torn final line, never
+  acknowledged, is the one discarded exception); recording fails open to the caller and says so,
+  unless `--strict-receipts`.
+- Found by the live run, not the unit tests: `log_id` was derived from the raw device id and so put
+  it in the file in the clear. Now `default_log_id` derives it from the HMAC.
+- Verified live against the real CLI daemon, real OPA and a real signed pack with `integrity-cli`'s
+  independent verifier: intact passes; a flipped decision is BAD_SIGNATURE; a removed tail is
+  TRUNCATED; the wrong key is UNTRUSTED_SIGNER.
+- Corrected stale text: `hook_runner` has spoken to this socket since integrity-core #166.
+- Not done: BCC emitting the same receipts, shared conformance vectors, log rotation, anchoring
+  (B4). Source review covers `shield/gate_receipts.py`, `shield/gate_daemon.py`,
+  `shield/policy_engine/engine.py` and `shield/cli.py`.

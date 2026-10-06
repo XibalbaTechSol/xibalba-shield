@@ -37,6 +37,15 @@ today, which is **not** what the repository's own README.md and CLAUDE.md still 
 was the reason
 this page's confidence is `medium` rather than `high`.
 
+`PolicyEngine.evaluate_with_basis(event, ctx) -> (PolicyDecision, DecisionBasis)` runs the same
+evaluation and also returns what a gate *receipt* must record in the SDK's decision vocabulary:
+`decision` (permit/deny/log_only), `reason_code`, `controls`, `pack_hash` and `event_class`.
+`evaluate()` is a thin wrapper that returns the first element, so its contract is unchanged. The
+basis is the **final** verdict: when the local risk gate hardens a result after the pack answered,
+it records `deny` with `INTEGRITY_LOCAL_RISK_CONTAIN`/`INTEGRITY_LOCAL_RISK_ESCALATE` (the
+`INTEGRITY_` prefix is reserved for gate-level outcomes, so a pack cannot forge it). Used by
+`shield gate-daemon --receipt-dir`; see [Guardrail Hooks](guardrail-hooks.md).
+
 ## What `evaluate()` actually does
 
 ```python
