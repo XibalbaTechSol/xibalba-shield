@@ -102,7 +102,7 @@ to a denial of the one pending call, the same choice `guard_tool_call` makes; th
 stays visible in the response's `action` field.
 
 **Wire contract (v1).** One newline-terminated JSON object per connection, one response, then
-close: request `{"v":1,"event":"pre_tool_use","agent_id","tool_name","tool_input"}`, response
+close: request `{"v":1,"event":"pre_tool_use","agent_id","tool_name","tool_input_sha256"}`, response
 `{"v","decision":"allow"|"deny","checked","action","enforced","reason","rule_id",
 "policy_version","policy_hash","invocation_id"}`. `policy_hash` is the enforced pack's hash, so a
 caller can record *which* policy ruled. Requests are capped at 4 MiB.
@@ -121,8 +121,11 @@ authorized one. `--enforcement-mode observe` always answers `allow` while report
   With no `--register-agent`, denying every call is the daemon working as designed.
 - **The socket is created `0600`**, with the umask set before bind so there is no window in which
   another local user can connect.
-- **`tool_input` is never logged or persisted.** Log lines carry `tool_name` and a JCS-canonical
-  SHA-256 of the input only.
+- **The tool's input never crosses the socket.** The request carries `tool_input_sha256` (64
+  lowercase hex, or `uncanonicalizable`), because nothing in evaluation reads tool content — the
+  event carries only the tool *name*. A stray raw `tool_input` field is ignored and never logged.
+  The digest is validated with `fullmatch`, since it lands in an audit log line and Python's `$`
+  would otherwise accept a trailing newline, letting a client forge a second log entry.
 - **Path length.** AF_UNIX paths are limited to roughly 100 bytes; an over-long path fails with a
   message naming the length. Set `--socket` or `XIBALBA_SHIELD_GATE_SOCKET` to a shorter one.
 - **SIGTERM stops it cleanly** and removes the socket; a stale socket from a crash is detected

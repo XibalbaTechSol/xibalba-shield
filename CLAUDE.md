@@ -69,7 +69,7 @@ shield/
 │                        # signing; not yet wired into the live systemd ExecStart path
 ├── gate_daemon.py       # `shield gate-daemon`: Unix-socket PreToolUse allow/deny from a warm
 │                        # PolicyEngine (Tier 1 only, deliberately not EventRouter). Fails closed;
-│                        # socket 0600; tool_input never logged. [PLANNED]: signed receipts, and
+│                        # socket 0600; carries a tool-input digest, never the input. [PLANNED]: signed receipts, and
 │                        # integrity_sdk.hook_runner speaking to it (B2 in integrity-core)
 ├── hermes_contract.py   # Redacted Shield->Hermes event contract (JSON Schema in schemas/)
 ├── hermes_transport.py  # HermesSpool: HMAC-authenticated, bounded file spool; group_shared

@@ -53,18 +53,23 @@ mirrors `EventRouter`'s own observe posture rather than inventing a second one.
 
 Privacy
 -------
-`tool_input` is evaluated in-process and never logged, never written to disk, and
-never exported. Only `tool_name` and a JCS-canonical SHA-256 of the input appear in
-log lines, consistent with A3's rule that Shield's exports carry labels and
-HMAC-protected references rather than raw command content.
+The request carries `tool_input_sha256`, a digest of the tool's input, and **not the input
+itself**. Nothing in the evaluation path reads tool content -- `AgentEvent` carries only the
+tool *name* -- so a daemon that accepted raw commands and file contents would be receiving
+data it has no use for, which is exactly what `integrity_sdk.hook_runner` already refuses to
+send to `bcc_middleware`. If a future policy needs content, that is a deliberate protocol
+change (a new version), not something to have been quietly accepting all along. Any `tool_input`
+field a client sends anyway is ignored and never logged. Log lines carry `tool_name` and the
+digest only, consistent with A3's rule that Shield's exports carry labels and HMAC-protected
+references rather than raw command content.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import socketserver
@@ -73,7 +78,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
-from .canonical import canonical_bytes
 from .policy_engine.engine import EvaluationContext, PolicyEngine
 from .schemas.events import AgentActivity, AgentContext, AgentEvent, AgentInfo, PolicyDecision
 
@@ -98,13 +102,22 @@ class GateProtocolError(ValueError):
     """A request this daemon cannot parse or does not support."""
 
 
+#: A request's digest is a lowercase SHA-256 hex string, or this marker when the client could not
+#: canonicalize the input (an input that cannot be hashed must not become a failed tool call).
+#:
+#: Matched with `fullmatch`, and unanchored on purpose: Python's `$` also matches just before a
+#: trailing newline, so `re.match(r"^...$", digest + "\n")` succeeds -- which would let a client
+#: smuggle a newline into an audit log line and forge a second entry.
+_DIGEST_RE = re.compile(r"[0-9a-f]{64}|uncanonicalizable")
+
+
 @dataclass(frozen=True)
 class GateRequest:
-    """One PreToolUse question. `tool_input` stays in memory only."""
+    """One PreToolUse question. Carries a digest of the tool input, never the input."""
 
     agent_id: str
     tool_name: str
-    tool_input: Mapping[str, Any]
+    tool_input_sha256: Optional[str] = None
     event: str = "pre_tool_use"
 
     @classmethod
@@ -129,35 +142,19 @@ class GateRequest:
         if not isinstance(tool_name, str) or not tool_name:
             raise GateProtocolError("tool_name is required and must be a non-empty string")
 
-        tool_input = payload.get("tool_input") or {}
-        if not isinstance(tool_input, Mapping):
-            # Not fatal to the decision: a policy can still rule on the tool name. Coerced
-            # rather than rejected so a harness quirk cannot turn into a denied tool call.
-            logger.warning("tool_input for %s was %s, not an object; treated as empty",
-                           tool_name, type(tool_input).__name__)
-            tool_input = {}
-
         agent_id = payload.get("agent_id")
         if not isinstance(agent_id, str) or not agent_id:
             raise GateProtocolError("agent_id is required and must be a non-empty string")
 
-        return cls(agent_id=agent_id, tool_name=tool_name, tool_input=tool_input, event=event)
+        digest = payload.get("tool_input_sha256")
+        if digest is not None and not (isinstance(digest, str) and _DIGEST_RE.fullmatch(digest)):
+            # Rejected rather than coerced: this value ends up in an audit log line, and a
+            # free-form string there is a log-injection vector (embedded newlines, ANSI codes).
+            raise GateProtocolError("tool_input_sha256 must be 64 lowercase hex characters")
 
-
-def tool_input_digest(tool_input: Mapping[str, Any]) -> str:
-    """JCS-canonical SHA-256 of `tool_input`, for log lines that must not carry content.
-
-    Uses the same canonicalization as every other hashed Shield artifact
-    (`shield/canonical.py`, which wraps the SDK's RFC 8785 implementation), so a digest
-    logged here is comparable with one computed anywhere else in the ecosystem. Falls
-    back to a marker rather than raising: a value that cannot be canonicalized must not
-    turn into a failed tool call, and the digest is observability, not evidence.
-    """
-    try:
-        return hashlib.sha256(canonical_bytes(dict(tool_input))).hexdigest()
-    except (TypeError, ValueError) as exc:
-        logger.debug("tool_input not canonicalizable (%s); digest omitted", exc)
-        return "uncanonicalizable"
+        # Unknown fields -- including a raw `tool_input` -- are deliberately ignored, and are
+        # never read into the request, so they cannot reach a log line.
+        return cls(agent_id=agent_id, tool_name=tool_name, tool_input_sha256=digest, event=event)
 
 
 Evaluator = Callable[[AgentEvent, EvaluationContext], PolicyDecision]
@@ -307,11 +304,11 @@ class _GateHandler(socketserver.StreamRequestHandler):
             device_id=server.device_id,
             enforcement_mode=server.enforcement_mode,
         )
-        # tool_name and a digest only -- never tool_input. See this module's Privacy note.
+        # tool_name and the client-supplied digest only; tool_input is never read. See Privacy.
         logger.info(
             "gate %s tool=%s input_sha256=%s action=%s rule=%s",
             response["decision"], request.tool_name,
-            tool_input_digest(request.tool_input), response["action"], response["rule_id"],
+            request.tool_input_sha256 or "-", response["action"], response["rule_id"],
         )
         self._write(response)
 

@@ -214,8 +214,8 @@
   exception.
 - Evaluates Tier 1 only and does not use `EventRouter`, since `handle()` runs a real SIGSTOP for
   `contain` and requires the full exporter/SLM/Jev stack. Fails closed; observe mode reports the
-  verdict it would have enforced. Socket created `0600`; `tool_input` never logged, only a JCS
-  digest.
+  verdict it would have enforced. Socket created `0600`. The wire contract carries a
+  `tool_input_sha256` digest, never the tool input, which no part of evaluation reads.
 - `[PLANNED]`: signed chained per-decision receipts (the other half of integrity-core B2), and
   `integrity_sdk.hook_runner` speaking to this socket — its `SUPPORTED_GATES` still names only `bcc`.
 - Source review covers `shield/gate_daemon.py` and `shield/cli.py`. Verified against a real signed
