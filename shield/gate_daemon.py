@@ -26,12 +26,20 @@ decision, which is the wrong response to a tool call that has not run yet and wh
 event-log, SLM, Jev and memory stack that `shield run` wires up, none of which a
 gate needs to answer allow/deny.
 
-[PLANNED] The consequence, stated rather than implied: this daemon does not yet emit
-a signed, chained receipt per decision. That is the remaining half of
-`docs/EXECUTION_PLAN.md` B2's second bullet ("signed chained receipts with
-checkpoints"), and it is why `evaluate_pre_tool_use` takes its evaluator as a
-parameter -- wiring a receipt-emitting evaluator in later is an argument change, not
-a rewrite of this module.
+Receipts
+--------
+With `--receipt-dir` the daemon writes one signed, chained receipt per decision
+(`shield.gate_receipts`, format `integrity_sdk.core.receipts`) *before* it answers, and the
+response says so in `receipt` / `receipt_status`. Without it the daemon runs exactly as
+before and says `receipt_status: "disabled"` -- receipts are opt-in, never silently absent.
+The receipt records the *final* verdict (after the local risk gate), so it asks the engine for
+a `DecisionBasis` rather than reconstructing one from the 5-way `PolicyDecision`, which
+carries no reason code. A malformed request gets no receipt: there is no decision to record.
+
+If a receipt cannot be written the decision stands and the response says
+`receipt_status: "failed"` (logged at ERROR) -- unless `strict_receipts` is set, in which case
+enforce mode denies, because some deployments prefer no decision to an unrecorded one. Observe
+mode never blocks either way.
 
 Fail-closed, and where the fail-open boundary actually is
 --------------------------------------------------------
@@ -78,7 +86,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
-from .policy_engine.engine import EvaluationContext, PolicyEngine
+from .gate_receipts import GateReceiptWriter, ReceiptWriteError
+from .policy_engine.engine import NO_PACK_HASH, DecisionBasis, EvaluationContext, PolicyEngine
 from .schemas.events import AgentActivity, AgentContext, AgentEvent, AgentInfo, PolicyDecision
 
 logger = logging.getLogger(__name__)
@@ -158,6 +167,13 @@ class GateRequest:
 
 
 Evaluator = Callable[[AgentEvent, EvaluationContext], PolicyDecision]
+#: `PolicyEngine.evaluate_with_basis`: the verdict plus what a receipt must record.
+BasisEvaluator = Callable[[AgentEvent, EvaluationContext], "tuple[PolicyDecision, DecisionBasis]"]
+
+#: Reason code recorded when the evaluator itself raised -- out of contract, since
+#: `PolicyEngine.evaluate` converts its own failures into a deny. `INTEGRITY_` is the prefix the
+#: decision contract reserves for the gate's own outcomes.
+REASON_GATE_EVALUATOR_ERROR = "INTEGRITY_EVALUATOR_ERROR"
 
 
 def evaluate_pre_tool_use(
@@ -167,13 +183,20 @@ def evaluate_pre_tool_use(
     ctx: EvaluationContext,
     device_id: str,
     enforcement_mode: str = "enforce",
+    basis_evaluator: Optional[BasisEvaluator] = None,
+    receipts: Optional[GateReceiptWriter] = None,
+    strict_receipts: bool = False,
 ) -> dict[str, Any]:
     """Answer one PreToolUse question. Never raises; fails closed in enforce mode.
 
-    `evaluator` is normally a bound `PolicyEngine.evaluate`. It is a parameter so the
-    [PLANNED] receipt-emitting evaluator (B2's signed-chained-receipts half) can be
-    substituted without changing this function.
+    `evaluator` is normally a bound `PolicyEngine.evaluate`. With `receipts`, the answer comes
+    from `basis_evaluator` (a bound `PolicyEngine.evaluate_with_basis`) instead, because a
+    receipt needs the reason code and the final decision, which `PolicyDecision` does not carry.
+    Asking for receipts without a way to build them is a configuration bug, not a runtime
+    condition, so it raises rather than quietly emitting nothing.
     """
+    if receipts is not None and basis_evaluator is None:
+        raise ValueError("receipts require a basis_evaluator (PolicyEngine.evaluate_with_basis)")
     event = AgentEvent(
         device_id=device_id,
         agent=AgentInfo(agent_id=request.agent_id, name=request.agent_id, type="llm_tool"),
@@ -181,15 +204,19 @@ def evaluate_pre_tool_use(
         activity=AgentActivity(type="tool_execution", risk_level="low"),
     )
 
+    basis: Optional[DecisionBasis] = None
     try:
-        decision = evaluator(event, ctx)
+        if receipts is not None:
+            decision, basis = basis_evaluator(event, ctx)  # type: ignore[misc]
+        else:
+            decision = evaluator(event, ctx)
     except Exception as exc:  # noqa: BLE001 -- fail closed on ANY evaluator failure
         # PolicyEngine.evaluate already converts OPA outages and a missing pack into a
         # fail-closed deny internally, so reaching here means something further out of
         # contract. Denying is still the right answer in enforce mode: an unexplained
         # evaluator failure is not evidence that the call is safe.
         logger.error("evaluator raised for %s (%s); failing closed", request.tool_name, exc)
-        return _response(
+        response = _response(
             action="deny",
             reason=f"shield gate evaluator error, failing closed: {exc!r}",
             rule_id="_evaluator_error",
@@ -198,16 +225,70 @@ def evaluate_pre_tool_use(
             invocation_id="",
             enforcement_mode=enforcement_mode,
         )
+        # The pack that was in force is unknown on this out-of-contract path, so the receipt says
+        # "no pack" rather than guessing a hash.
+        basis = DecisionBasis("deny", REASON_GATE_EVALUATOR_ERROR, (), NO_PACK_HASH, event.klass)
+    else:
+        response = _response(
+            action=decision.decision.action,
+            reason=decision.decision.reason,
+            rule_id=decision.rule.rule_id,
+            policy_version=decision.policy.version,
+            policy_hash=decision.policy.hash,
+            invocation_id=decision.invocation_id,
+            enforcement_mode=enforcement_mode,
+        )
 
-    return _response(
-        action=decision.decision.action,
-        reason=decision.decision.reason,
-        rule_id=decision.rule.rule_id,
-        policy_version=decision.policy.version,
-        policy_hash=decision.policy.hash,
-        invocation_id=decision.invocation_id,
-        enforcement_mode=enforcement_mode,
-    )
+    if receipts is not None and basis is not None:
+        _record_receipt(
+            response, receipts=receipts, request=request, device_id=device_id,
+            basis=basis, enforcement_mode=enforcement_mode, strict=strict_receipts,
+        )
+    return response
+
+
+def _record_receipt(
+    response: dict[str, Any],
+    *,
+    receipts: GateReceiptWriter,
+    request: GateRequest,
+    device_id: str,
+    basis: DecisionBasis,
+    enforcement_mode: str,
+    strict: bool,
+) -> None:
+    """Write the receipt for `response` and fold the outcome into it (mutates `response`).
+
+    Observe mode records as the SDK's `shadow` mode: the receipt holds the verdict the gate
+    *would* have enforced, which is what lets a pack be replayed before it is enforced.
+    """
+    observing = enforcement_mode == "observe"
+    try:
+        ref = receipts.record(
+            agent_did=request.agent_id,
+            device_id=device_id,
+            tool_name=request.tool_name,
+            tool_input_sha256=request.tool_input_sha256,
+            event_class=basis.event_class,
+            pack_hash=basis.pack_hash,
+            decision=basis.decision,
+            reason_code=basis.reason_code,
+            mode="shadow" if observing else "enforce",
+            controls=basis.controls,
+        )
+    except ReceiptWriteError as exc:
+        # The text is fixed strings and an OS error; no request content reaches it.
+        logger.error("receipt NOT recorded for %s: %s", request.tool_name, exc)
+        response["receipt"] = None
+        response["receipt_status"] = "failed"
+        if strict and not observing:
+            response.update(
+                decision="deny", action="deny", enforced=True, rule_id="_receipt_unavailable",
+                reason="shield gate could not record a receipt, failing closed (strict receipts)",
+            )
+        return
+    response["receipt"] = {"seq": ref.seq, "hash": ref.hash}
+    response["receipt_status"] = "recorded"
 
 
 def _response(
@@ -240,6 +321,9 @@ def _response(
         "policy_version": policy_version,
         "policy_hash": policy_hash,
         "invocation_id": invocation_id,
+        # Overwritten by `_record_receipt` when receipts are configured.
+        "receipt": None,
+        "receipt_status": "disabled",
     }
 
 
@@ -261,6 +345,10 @@ def _error_response(message: str, *, enforcement_mode: str) -> dict[str, Any]:
         "policy_version": "",
         "policy_hash": "",
         "invocation_id": "",
+        "receipt": None,
+        # Distinct from "disabled": receipts may be on, but a request we refused to parse is
+        # not a decision, so there is nothing to record.
+        "receipt_status": "skipped",
     }
 
 
@@ -303,12 +391,16 @@ class _GateHandler(socketserver.StreamRequestHandler):
             ctx=server.ctx,
             device_id=server.device_id,
             enforcement_mode=server.enforcement_mode,
+            basis_evaluator=server.basis_evaluator,
+            receipts=server.receipts,
+            strict_receipts=server.strict_receipts,
         )
         # tool_name and the client-supplied digest only; tool_input is never read. See Privacy.
         logger.info(
-            "gate %s tool=%s input_sha256=%s action=%s rule=%s",
+            "gate %s tool=%s input_sha256=%s action=%s rule=%s receipt=%s",
             response["decision"], request.tool_name,
             request.tool_input_sha256 or "-", response["action"], response["rule_id"],
+            response["receipt"]["seq"] if response["receipt"] else response["receipt_status"],
         )
         self._write(response)
 
@@ -341,8 +433,16 @@ class GateServer(socketserver.ThreadingUnixStreamServer):
         ctx: EvaluationContext,
         device_id: str,
         enforcement_mode: str = "enforce",
+        basis_evaluator: Optional[BasisEvaluator] = None,
+        receipts: Optional[GateReceiptWriter] = None,
+        strict_receipts: bool = False,
     ) -> None:
+        if receipts is not None and basis_evaluator is None:
+            raise ValueError("receipts require a basis_evaluator (PolicyEngine.evaluate_with_basis)")
         self.evaluator = evaluator
+        self.basis_evaluator = basis_evaluator
+        self.receipts = receipts
+        self.strict_receipts = strict_receipts
         self.ctx = ctx
         self.device_id = device_id
         self.enforcement_mode = enforcement_mode
@@ -363,6 +463,11 @@ class GateServer(socketserver.ThreadingUnixStreamServer):
 
     def server_close(self) -> None:
         super().server_close()
+        # After the listener stops: close() writes the final checkpoint, so a clean stop leaves a
+        # signed commitment to everything recorded. A crash skips this, and the periodic
+        # checkpoints (and resume's verification) are what cover that case.
+        if self.receipts is not None:
+            self.receipts.close()
         # A stale socket file left behind makes the next start fail with EADDRINUSE on a
         # path nothing is listening to, which reads as a mysterious bind error.
         try:
@@ -438,6 +543,8 @@ def serve_forever(
     device_id: str,
     enforcement_mode: str = "enforce",
     ready: Optional[threading.Event] = None,
+    receipts: Optional[GateReceiptWriter] = None,
+    strict_receipts: bool = False,
 ) -> GateServer:
     """Bind `socket_path` and serve until shut down. Returns the server for the caller to close.
 
@@ -449,6 +556,8 @@ def serve_forever(
     server = GateServer(
         Path(socket_path), evaluator=engine.evaluate, ctx=ctx,
         device_id=device_id, enforcement_mode=enforcement_mode,
+        basis_evaluator=engine.evaluate_with_basis if receipts is not None else None,
+        receipts=receipts, strict_receipts=strict_receipts,
     )
     if ready is not None:
         ready.set()

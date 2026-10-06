@@ -22,7 +22,7 @@ from typing import Mapping, Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from integrity_sdk.core.decision import ENFORCE, LOG_ONLY, PERMIT, resolve as resolve_decision
+from integrity_sdk.core.decision import DENY, ENFORCE, LOG_ONLY, PERMIT, resolve as resolve_decision
 from integrity_sdk.core.opa import OpaClient, OpaError
 from integrity_sdk.core.packs import LoadedPack
 
@@ -74,6 +74,33 @@ def _event_severity(event: NormalizedEvent) -> str:
     if activity is None:
         return "low"
     return getattr(activity, "severity", None) or getattr(activity, "risk_level", None) or "low"
+
+
+#: `pack_hash` recorded when no verified pack is installed. Same shape as a real pack hash
+#: (`sha256:<64 hex>`) so a receipt stays schema-valid, and unmistakably not one.
+NO_PACK_HASH = "sha256:" + "00" * 32
+
+#: Reason codes for a verdict the *gate itself* hardened after the pack answered. `INTEGRITY_` is
+#: the prefix `core.decision` reserves for gate-level outcomes, so a pack cannot forge these.
+REASON_LOCAL_RISK_CONTAIN = "INTEGRITY_LOCAL_RISK_CONTAIN"
+REASON_LOCAL_RISK_ESCALATE = "INTEGRITY_LOCAL_RISK_ESCALATE"
+
+
+@dataclass(frozen=True)
+class DecisionBasis:
+    """What a decision receipt must record, in the SDK's C3 vocabulary (permit/deny/log_only).
+
+    `PolicyDecision` is Shield's frozen 5-way output shape and deliberately carries no
+    `reason_code` or `controls`, so a receipt cannot be built from it alone. This is the final
+    verdict -- after the local risk gate has had its say -- not the pack's raw answer: a receipt
+    that recorded `permit` for a call the gate then contained would be a false statement.
+    """
+
+    decision: str
+    reason_code: str
+    controls: tuple[str, ...]
+    pack_hash: str
+    event_class: str
 
 
 @dataclass
@@ -176,6 +203,13 @@ class PolicyEngine:
         return self.health_status()
 
     def evaluate(self, event: NormalizedEvent, ctx: EvaluationContext) -> PolicyDecision:
+        """Shield's verdict for `event`. Unchanged contract; see `evaluate_with_basis`."""
+        return self.evaluate_with_basis(event, ctx)[0]
+
+    def evaluate_with_basis(
+        self, event: NormalizedEvent, ctx: EvaluationContext
+    ) -> tuple[PolicyDecision, DecisionBasis]:
+        """Shield's verdict plus the `DecisionBasis` a receipt needs, from one evaluation."""
         event_id = f"evt-{uuid.uuid4().hex[:12]}"
         
         # Build OPA input
@@ -255,6 +289,7 @@ class PolicyEngine:
                 reason = f"no policy pack installed; failing closed for {event.klass}"
                 rule_id, name, version = "_no_pack", "No policy pack installed", "0"
 
+            basis_reason_code, basis_controls = resolved.reason_code, tuple(resolved.controls)
             assessment = assess_event(event)
             # OPA remains authoritative for explicit deny/contain decisions.  The
             # local assessment may only harden an otherwise permissive result when
@@ -265,11 +300,13 @@ class PolicyEngine:
                 rule_id = "_local-risk-containment"
                 name = "High-confidence local risk evidence"
                 version = "1.0.0"
+                basis_reason_code, basis_controls = REASON_LOCAL_RISK_CONTAIN, ()
             elif action in {"allow", "log_only"} and assessment.suggested_action == "escalate":
                 action = "escalate"
                 reason = "local risk gate requires review: " + "; ".join(signal.reason for signal in assessment.signals)
                 rule_id = "_local-risk-review"
                 name = "Local risk evidence requires review"
+                basis_reason_code, basis_controls = REASON_LOCAL_RISK_ESCALATE, ()
 
             # An explicit OPA enforcement verdict is itself high-quality evidence,
             # even when the normalized event has no optional risk fields populated.
@@ -289,7 +326,17 @@ class PolicyEngine:
             elif action == "escalate":
                 decision_confidence = max(decision_confidence, 0.75)
                 decision_evidence.append(f"OPA escalation rule: {rule_id}")
-            return PolicyDecision(
+            # contain and escalate are deny-shaped under the 3-way contract (see
+            # `_translate_decision`), so they record as `deny`.
+            basis_decision = PERMIT if action == "allow" else LOG_ONLY if action == "log_only" else DENY
+            basis = DecisionBasis(
+                decision=basis_decision,
+                reason_code=basis_reason_code,
+                controls=basis_controls,
+                pack_hash=policy_hash or NO_PACK_HASH,
+                event_class=event.klass,
+            )
+            policy_decision = PolicyDecision(
                 device_id=ctx.device_id,
                 invocation_id=getattr(event, "invocation_id", None) or str(uuid.uuid4()),
                 event_ref=EventRef(klass=event.klass, event_id=event_id),
@@ -305,3 +352,4 @@ class PolicyEngine:
                     evidence=decision_evidence,
                 ),
             )
+            return policy_decision, basis

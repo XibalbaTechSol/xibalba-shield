@@ -186,9 +186,12 @@ def test_response_has_exactly_the_documented_v1_keys(tmp_path):
         response = server.ask(_request())
     assert set(response) == {
         "v", "decision", "checked", "action", "enforced", "reason", "rule_id",
-        "policy_version", "policy_hash", "invocation_id",
+        "policy_version", "policy_hash", "invocation_id", "receipt", "receipt_status",
     }
     assert response["v"] == 1
+    # Receipts are opt-in, so a daemon started without them says so rather than omitting the keys.
+    assert response["receipt"] is None
+    assert response["receipt_status"] == "disabled"
 
 
 # ------------------------------------------------------------------- socket mechanics
@@ -434,6 +437,8 @@ def test_cli_configures_logging_so_gate_decisions_are_actually_visible():
             device_config=None, device_id="dev-1", tenant_id="t", device_role="r",
             pack_dir=None, trusted_pack_signers=None, opa_url="http://unused",
             register_agents=["agent-1"], enforcement_mode="enforce", socket=None,
+            receipt_dir=None, receipt_key=None, receipt_hmac_key_file=None,
+            receipt_checkpoint_every=100, strict_receipts=False,
         )
         sys.exit(cli._gate_daemon(args))
         """
