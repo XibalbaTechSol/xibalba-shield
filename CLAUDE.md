@@ -67,6 +67,10 @@ shield/
 ├── release/             # Package signing + versioned-release/symlink rollback (2026-09-06)
 │                        # -- separate key/trust domain from config/signing.py's policy
 │                        # signing; not yet wired into the live systemd ExecStart path
+├── gate_daemon.py       # `shield gate-daemon`: Unix-socket PreToolUse allow/deny from a warm
+│                        # PolicyEngine (Tier 1 only, deliberately not EventRouter). Fails closed;
+│                        # socket 0600; tool_input never logged. [PLANNED]: signed receipts, and
+│                        # integrity_sdk.hook_runner speaking to it (B2 in integrity-core)
 ├── hermes_contract.py   # Redacted Shield->Hermes event contract (JSON Schema in schemas/)
 ├── hermes_transport.py  # HermesSpool: HMAC-authenticated, bounded file spool; group_shared
 │                        # mode for the sensor->analyst account split (never world-readable)
@@ -74,7 +78,7 @@ shield/
 │                        # material event, ledger + one Cortex `shield_advisory` memory.
 │                        # Runbook: docs/runbooks/hermes-analyst.md
 └── cli.py               # `shield status/events/validate/run/fetch-policy/verify-log/
-                         #  siem-export/local-run` — spec §4.6. `run --enforcement-mode
+                         #  siem-export/local-run/gate-daemon` — spec §4.6. `run --enforcement-mode
                          #  observe|enforce` (default enforce); Hermes config errors disable
                          #  publication with a warning, never stop the sensor
 

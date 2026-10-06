@@ -11,6 +11,7 @@ was built to eventually be part of.
 from __future__ import annotations
 
 import argparse
+import logging
 import hashlib
 import json
 import os
@@ -24,7 +25,9 @@ from .agent_core.router import EventRouter
 from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_config, load_policy_bundle
 from .config.hot_reload import PolicyHotReloader
 from .pack_loading import PackLoadError, resolve_pack
+from .gate_daemon import default_socket_path, serve_forever
 from .policy_engine import PolicyEngine
+from .policy_engine.engine import EvaluationContext
 from .policy_engine.jev_shadow import JevShadowAnalyzer, JsonlDecisionTraceSink
 from .policy_engine.inference import build_inference_provider
 
@@ -166,6 +169,99 @@ def _validate(args: argparse.Namespace) -> int:
         print("nothing to validate -- pass --rules and/or --device-config")
         return 2
     return 0 if ok else 1
+
+
+def _gate_daemon(args: argparse.Namespace) -> int:
+    """Serve PreToolUse decisions on a Unix socket (docs/EXECUTION_PLAN.md B2).
+
+    Deliberately a much smaller wiring than `_run`: a gate answers allow/deny and needs a
+    verified pack, an OPA to query and an evaluation context. It does not build a sensor,
+    exporter, action broker, SLM or Jev analyzer, because none of those participate in
+    deciding whether one pending tool call may proceed -- and `ActionBroker.contain()`'s
+    real SIGSTOP is the wrong response to a call that has not run yet. See
+    `shield/gate_daemon.py` for the [PLANNED] note on signed receipts, B2's other half.
+
+    Agents must be registered explicitly with `--register-agent`. `AgentRegistry` is
+    in-memory, and every shipped pack carries a rule denying tool activity from an agent
+    that is not in the endpoint's registry (smb's `smb-deny-unregistered-agent-tools` and
+    each profile's equivalent). Without at least one `--register-agent`, this daemon is
+    therefore working as designed when it denies every call -- stated here because
+    "correct but denies everything" is otherwise an unpleasant thing to discover from a
+    harness that has stopped running tools.
+    """
+    if args.device_config is not None:
+        try:
+            device_config = load_device_config(args.device_config)
+        except ConfigError as exc:
+            print(f"shield gate-daemon: {exc}", file=sys.stderr)
+            return 1
+    else:
+        if not args.device_id:
+            print("shield gate-daemon: --device-id is required unless --device-config is given",
+                  file=sys.stderr)
+            return 2
+        device_config = DeviceConfig(
+            device_id=args.device_id, tenant_id=args.tenant_id or "",
+            device_role=args.device_role or "",
+        )
+
+    try:
+        pack = resolve_pack(
+            device_config, pack_dir=args.pack_dir, trusted_pack_signers=args.trusted_pack_signers,
+        )
+    except PackLoadError as exc:
+        print(f"shield gate-daemon: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        policy_engine = PolicyEngine(opa_url=args.opa_url, pack=pack)
+    except OpaError as exc:
+        print(f"shield gate-daemon: unable to install policy pack into OPA: {exc}", file=sys.stderr)
+        return 1
+
+    # Shield configures logging nowhere else, so without this the daemon's per-decision lines
+    # (INFO) never reach stderr and a gate would allow and deny silently. Those lines carry
+    # tool_name and a JCS digest of the input, never the input itself; see gate_daemon's
+    # Privacy note. Left alone if the embedding process has already configured logging.
+    if not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=logging.INFO, stream=sys.stderr,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
+
+    registry = AgentRegistry()
+    for agent_id in args.register_agents or []:
+        registry.register(agent_id, name=agent_id, purpose="pre_tool_use gate client")
+    if not registry.registered_ids():
+        print("shield gate-daemon: warning: no --register-agent given; every shipped pack denies "
+              "tool activity from an unregistered agent, so all calls will be denied",
+              file=sys.stderr)
+
+    ctx = EvaluationContext(
+        tenant_id=device_config.tenant_id,
+        device_role=device_config.device_role,
+        device_id=device_config.device_id,
+        registered_agent_ids=registry.registered_ids(),
+    )
+
+    socket_path = args.socket or default_socket_path()
+    # "starting", not "listening": the bind happens inside serve_forever, and a failure there
+    # (path over the AF_UNIX limit, a live daemon already on the path) must not follow a line
+    # claiming the socket is already accepting connections.
+    print(f"shield gate-daemon: starting with pack {pack.manifest['name']} {pack.manifest['version']} "
+          f"(hash {pack.pack_hash[:12]}), mode {args.enforcement_mode}, socket {socket_path}",
+          file=sys.stderr)
+    try:
+        serve_forever(
+            socket_path, engine=policy_engine, ctx=ctx,
+            device_id=device_config.device_id, enforcement_mode=args.enforcement_mode,
+        )
+    except OSError as exc:
+        print(f"shield gate-daemon: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("shield gate-daemon: stopped", file=sys.stderr)
+    return 0
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -908,6 +1004,31 @@ def main(argv: list[str] | None = None) -> int:
                             "independent of event traffic, so an idle or stalled sensor "
                             "stream no longer freezes health reporting")
     p_run.set_defaults(func=_run)
+
+    p_gate = sub.add_parser(
+        "gate-daemon",
+        help="serve PreToolUse allow/deny decisions on a Unix socket (for integrity hooks --gate shield)",
+    )
+    p_gate.add_argument("--socket", type=Path, default=None,
+                        help="socket path; default XIBALBA_SHIELD_GATE_SOCKET or a per-user runtime path")
+    p_gate.add_argument("--device-config", type=Path, default=None, help="device/tenant config file")
+    p_gate.add_argument("--device-id", default=None, help="required if --device-config is not given")
+    p_gate.add_argument("--tenant-id", default=None)
+    p_gate.add_argument("--device-role", default=None)
+    p_gate.add_argument("--pack-dir", type=Path, default=None,
+                        help="explicit signed pack directory; otherwise resolved from the device config's policy_profile")
+    p_gate.add_argument("--trusted-pack-signer", action="append", default=None, dest="trusted_pack_signers",
+                        help="trusted pack signing public key; repeatable")
+    p_gate.add_argument("--opa-url", default="http://localhost:8181",
+                        help="OPA sidecar this gate queries")
+    p_gate.add_argument("--register-agent", action="append", default=None, dest="register_agents",
+                        help="agent_id permitted to use this gate; repeatable. Every shipped pack "
+                             "denies an unregistered agent's tool activity, so at least one is "
+                             "normally required for any call to be allowed")
+    p_gate.add_argument("--enforcement-mode", choices=("observe", "enforce"), default="enforce",
+                        help="observe answers allow for everything while reporting the verdict it "
+                             "would have enforced; enforce (default) denies")
+    p_gate.set_defaults(func=_gate_daemon)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")
     p_local.add_argument("--profile", choices=("smb", "professional-services", "regulated"), required=True)
