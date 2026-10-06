@@ -205,3 +205,19 @@
 - Updated `WIKI_INDEX.md` and `index.md` to expose the new page.
 - Source review covers `shield/policy_engine/inference.py`, `shield/policy_engine/jev_shadow.py`,
   `shield/backend/settings.py`, and `shield/cli.py` in the isolated implementation worktree.
+
+## [2026-10-06] update | PreToolUse gate daemon (integrity-core B2)
+
+- Added `shield gate-daemon` (`shield/gate_daemon.py`): a Unix-socket service answering a harness's
+  `PreToolUse` question from a warm `PolicyEngine`. Documented in `concepts/guardrail-hooks.md`,
+  whose "library calls, not a background process" section is now qualified by this one deliberate
+  exception.
+- Evaluates Tier 1 only and does not use `EventRouter`, since `handle()` runs a real SIGSTOP for
+  `contain` and requires the full exporter/SLM/Jev stack. Fails closed; observe mode reports the
+  verdict it would have enforced. Socket created `0600`. The wire contract carries a
+  `tool_input_sha256` digest, never the tool input, which no part of evaluation reads.
+- `[PLANNED]`: signed chained per-decision receipts (the other half of integrity-core B2), and
+  `integrity_sdk.hook_runner` speaking to this socket — its `SUPPORTED_GATES` still names only `bcc`.
+- Source review covers `shield/gate_daemon.py` and `shield/cli.py`. Verified against a real signed
+  pack, real OPA and a real socket, not only stubs; the live run found and fixed two defects the
+  in-process tests could not see (decisions were not being logged; SIGTERM left a stale socket).
