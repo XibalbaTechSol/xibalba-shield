@@ -438,7 +438,7 @@ def test_cli_configures_logging_so_gate_decisions_are_actually_visible():
             pack_dir=None, trusted_pack_signers=None, opa_url="http://unused",
             register_agents=["agent-1"], enforcement_mode="enforce", socket=None,
             receipt_dir=None, receipt_key=None, receipt_hmac_key_file=None,
-            receipt_checkpoint_every=100, strict_receipts=False,
+            receipt_checkpoint_every=100, lenient_receipts=False,
         )
         sys.exit(cli._gate_daemon(args))
         """

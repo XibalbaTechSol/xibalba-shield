@@ -164,10 +164,12 @@ Shield invents no receipt field). It is opt-in: without the flag the response sa
   (bad signature, gap, broken link, missing tail after a checkpoint, another device's log id, a
   rotated key) stops the daemon rather than being extended or replaced. The one exception is a
   torn final line — a crash mid-write — which was never acknowledged and is discarded with a
-  warning. *Recording* fails open to the caller, loudly: if a receipt cannot be written the
-  decision stands, `receipt_status` is `"failed"` and an ERROR is logged; `--strict-receipts`
-  makes enforce mode deny instead. A failed write never advances the chain, and a partial write
-  is truncated away (if even that fails the writer disables itself).
+  warning. *Recording* is **strict by default**: if a receipt cannot be written, enforce mode
+  denies the call, `receipt_status` is `"failed"` and an ERROR is logged, so an unrecorded decision
+  never lets a tool call through. The cost is stated: a full disk or failing volume makes every
+  call deny until the log is writable. `--lenient-receipts` lets the decision stand instead.
+  Observe mode never blocks either way. A failed write never advances the chain, and a partial
+  write is truncated away (if even that fails the writer disables itself).
 - **Limits.** Deleting `checkpoints.jsonl`, or truncating both files consistently, is not
   detectable from the files alone — that is what anchoring a checkpoint (B4) closes. The log is
   held in memory and re-verified at start; rotation and incremental trees are `[PLANNED]`.
