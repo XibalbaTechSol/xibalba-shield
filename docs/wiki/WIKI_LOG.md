@@ -262,3 +262,14 @@
 - Not done: BCC emitting the same receipts, shared conformance vectors, log rotation, anchoring
   (B4). Source review covers `shield/gate_receipts.py`, `shield/gate_daemon.py`,
   `shield/policy_engine/engine.py` and `shield/cli.py`.
+
+## [2026-10-07] update | Gate receipts are strict by default
+
+- A call whose receipt cannot be recorded is now **denied** in enforce mode by default
+  (`strict_receipts=True` in `evaluate_pre_tool_use`, `GateServer` and `serve_forever`). Opt out
+  with `shield gate-daemon --lenient-receipts`; `--strict-receipts` is removed because it is the
+  default. Observe mode never blocks. Updated `concepts/guardrail-hooks.md`.
+- Stated cost: a full disk or failing volume stops the gate answering `allow` until the receipt
+  log is writable, so a strict gate trades availability for a complete record.
+- Tests pin the default at the library signature, behaviourally, and at the CLI wiring
+  (mutation-checked: inverting the CLI flag, or reverting either library default, fails a test).
