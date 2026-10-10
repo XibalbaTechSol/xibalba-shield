@@ -429,7 +429,7 @@ def _ctx(**kwargs) -> EvaluationContext:
 class _Running:
     """A GateServer on a real socket, with receipts, in a background thread."""
 
-    def __init__(self, tmp_path: Path, *, basis_evaluator, writer, mode="enforce", strict=False, ctx=None):
+    def __init__(self, tmp_path: Path, *, basis_evaluator, writer, mode="enforce", strict=True, ctx=None):
         self.path = tmp_path / "gate.sock"
         self.server = GateServer(
             self.path, evaluator=lambda e, c: basis_evaluator(e, c)[0], ctx=ctx or _ctx(),
@@ -556,25 +556,42 @@ def _break_writes(monkeypatch, writer):
     monkeypatch.setattr(gate_receipts.os, "write", write)
 
 
-def test_a_receipt_that_cannot_be_written_leaves_the_decision_standing_and_says_so(tmp_path, keys, monkeypatch, caplog):
+def test_lenient_mode_lets_the_decision_stand_when_a_receipt_cannot_be_written(tmp_path, keys, monkeypatch, caplog):
     writer = _writer(tmp_path, keys)
     _break_writes(monkeypatch, writer)
     with caplog.at_level(logging.ERROR, logger="shield.gate_daemon"):
-        with _Running(tmp_path, basis_evaluator=_basis_evaluator(), writer=writer) as server:
+        with _Running(tmp_path, basis_evaluator=_basis_evaluator(), writer=writer, strict=False) as server:
             response = server.ask(_req())
-    assert response["decision"] == "allow", "an audit failure must not become a policy decision by default"
+    assert response["decision"] == "allow", "--lenient-receipts: an audit failure is not a policy decision"
     assert response["receipt"] is None and response["receipt_status"] == "failed"
     assert "receipt NOT recorded" in caplog.text
 
 
-def test_strict_mode_denies_a_call_whose_receipt_cannot_be_written(tmp_path, keys, monkeypatch):
+def test_strict_is_the_default_and_denies_a_call_whose_receipt_cannot_be_written(tmp_path, keys, monkeypatch):
     writer = _writer(tmp_path, keys)
     _break_writes(monkeypatch, writer)
-    with _Running(tmp_path, basis_evaluator=_basis_evaluator(), writer=writer, strict=True) as server:
+    with _Running(tmp_path, basis_evaluator=_basis_evaluator(), writer=writer) as server:
         response = server.ask(_req())
     assert response["decision"] == "deny" and response["enforced"] is True
     assert response["rule_id"] == "_receipt_unavailable"
     assert response["receipt_status"] == "failed"
+
+
+def test_the_library_defaults_are_strict_too(tmp_path, keys, monkeypatch):
+    """The CLI passes strictness explicitly, but an embedder calling `evaluate_pre_tool_use` or
+    `GateServer` directly must get the same posture, not a quietly weaker one."""
+    import inspect
+
+    for function in (evaluate_pre_tool_use, GateServer.__init__):
+        assert inspect.signature(function).parameters["strict_receipts"].default is True
+    writer = _writer(tmp_path, keys)
+    _break_writes(monkeypatch, writer)
+    response = evaluate_pre_tool_use(
+        GateRequest(agent_id="a", tool_name="Bash", tool_input_sha256=_DIGEST),
+        evaluator=lambda e, c: _decision(), basis_evaluator=_basis_evaluator(), ctx=_ctx(),
+        device_id="dev-1", receipts=writer,
+    )
+    assert response["decision"] == "deny" and response["receipt_status"] == "failed"
 
 
 def test_strict_mode_never_blocks_in_observe_mode(tmp_path, keys, monkeypatch):
@@ -803,9 +820,16 @@ def _cli(*argv: str) -> subprocess.CompletedProcess:
     )
 
 
-def test_cli_refuses_strict_receipts_without_a_receipt_dir():
-    result = _cli("--strict-receipts")
-    assert result.returncode == 2 and "--strict-receipts needs --receipt-dir" in result.stderr
+def test_cli_refuses_lenient_receipts_without_a_receipt_dir():
+    result = _cli("--lenient-receipts")
+    assert result.returncode == 2 and "--lenient-receipts needs --receipt-dir" in result.stderr
+
+
+def test_cli_no_longer_has_a_strict_flag_because_strict_is_the_default():
+    assert "--strict-receipts" not in subprocess.run(
+        [sys.executable, "-m", "shield.cli", "gate-daemon", "--help"],
+        cwd=_REPO_ROOT, capture_output=True, text=True, timeout=60,
+    ).stdout
 
 
 def test_cli_refuses_a_receipt_dir_without_both_keys(tmp_path):
@@ -831,3 +855,47 @@ def test_cli_refuses_an_unverifiable_log_before_touching_the_policy_pack(tmp_pat
                   "--receipt-hmac-key-file", str(hmac_key))
     assert result.returncode == 1
     assert "UNTRUSTED_SIGNER" in result.stderr and "refusing to extend" in result.stderr
+
+
+@pytest.mark.parametrize(("extra_args", "expected_strict"), [([], True), (["--lenient-receipts"], False)])
+def test_cli_passes_strict_to_the_server_unless_lenient_is_asked_for(tmp_path, extra_args, expected_strict):
+    """Pins the daemon's actual wiring, not only the library default: `_gate_daemon` must hand
+    `serve_forever` strict=True by default and strict=False only for an explicit opt-out."""
+    key_pem, hmac_key = tmp_path / "signer.pem", tmp_path / "hmac.key"
+    key_pem.write_bytes(Keypair.generate().private_pem())
+    hmac_key.write_bytes(os.urandom(32))
+    key_pem.chmod(0o600)
+    hmac_key.chmod(0o600)
+    script = textwrap.dedent(
+        """
+        import json, sys
+        import shield.cli as cli
+
+        class FakePack:
+            manifest = {"name": "t", "version": "1"}
+            pack_hash = "sha256:" + "ab" * 32
+
+        class FakeEngine:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        captured = {}
+        cli.resolve_pack = lambda *args, **kwargs: FakePack()
+        cli.PolicyEngine = FakeEngine
+        cli.serve_forever = lambda socket_path, **kwargs: captured.update(kwargs)
+
+        code = cli.main(["gate-daemon", "--device-id", "dev-1", "--register-agent", "a",
+                         "--receipt-dir", sys.argv[1], "--receipt-key", sys.argv[2],
+                         "--receipt-hmac-key-file", sys.argv[3], *sys.argv[4:]])
+        print(json.dumps({"code": code, "strict": captured.get("strict_receipts"),
+                          "has_writer": captured.get("receipts") is not None}))
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path / "receipts"), str(key_pem), str(hmac_key), *extra_args],
+        cwd=_REPO_ROOT, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    outcome = json.loads(result.stdout.strip().splitlines()[-1])
+    assert outcome == {"code": 0, "strict": expected_strict, "has_writer": True}
+    assert ("lenient" if not expected_strict else "strict") in result.stderr

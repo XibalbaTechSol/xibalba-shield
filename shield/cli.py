@@ -208,8 +208,8 @@ def _gate_daemon(args: argparse.Namespace) -> int:
 
     receipts = None
     if args.receipt_dir is None:
-        if args.strict_receipts:
-            print("shield gate-daemon: --strict-receipts needs --receipt-dir", file=sys.stderr)
+        if args.lenient_receipts:
+            print("shield gate-daemon: --lenient-receipts needs --receipt-dir", file=sys.stderr)
             return 2
     else:
         from .gate_receipts import (
@@ -235,7 +235,7 @@ def _gate_daemon(args: argparse.Namespace) -> int:
             return 1
         print(f"shield gate-daemon: receipts in {args.receipt_dir} (log {receipts.log_id}, "
               f"{receipts.receipt_count} existing, signer {receipts.signer_key}, "
-              f"{'strict' if args.strict_receipts else 'non-strict'})", file=sys.stderr)
+              f"{'lenient' if args.lenient_receipts else 'strict'})", file=sys.stderr)
 
     try:
         pack = resolve_pack(
@@ -291,7 +291,7 @@ def _gate_daemon(args: argparse.Namespace) -> int:
         serve_forever(
             socket_path, engine=policy_engine, ctx=ctx,
             device_id=device_config.device_id, enforcement_mode=args.enforcement_mode,
-            receipts=receipts, strict_receipts=args.strict_receipts,
+            receipts=receipts, strict_receipts=not args.lenient_receipts,
         )
     except OSError as exc:
         print(f"shield gate-daemon: {exc}", file=sys.stderr)
@@ -1079,9 +1079,11 @@ def main(argv: list[str] | None = None) -> int:
                              "id and tool name in receipts")
     p_gate.add_argument("--receipt-checkpoint-every", type=int, default=100,
                         help="receipts between signed checkpoints (a clean stop also writes one)")
-    p_gate.add_argument("--strict-receipts", action="store_true",
-                        help="in enforce mode, deny a call whose receipt could not be recorded "
-                             "(default: the decision stands and the response says receipt_status=failed)")
+    p_gate.add_argument("--lenient-receipts", action="store_true",
+                        help="let a call proceed when its receipt could not be recorded (the response "
+                             "says receipt_status=failed). Default is STRICT: in enforce mode such a "
+                             "call is denied, so a full disk stops tool calls rather than leaving "
+                             "unrecorded decisions")
     p_gate.set_defaults(func=_gate_daemon)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")

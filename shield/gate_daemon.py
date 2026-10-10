@@ -36,10 +36,13 @@ The receipt records the *final* verdict (after the local risk gate), so it asks 
 a `DecisionBasis` rather than reconstructing one from the 5-way `PolicyDecision`, which
 carries no reason code. A malformed request gets no receipt: there is no decision to record.
 
-If a receipt cannot be written the decision stands and the response says
-`receipt_status: "failed"` (logged at ERROR) -- unless `strict_receipts` is set, in which case
-enforce mode denies, because some deployments prefer no decision to an unrecorded one. Observe
-mode never blocks either way.
+If a receipt cannot be written, enforce mode **denies** by default (`strict_receipts=True`): a
+gate whose purpose is an auditable record should not let an unrecorded decision through. The
+response says `receipt_status: "failed"` (logged at ERROR). `strict_receipts=False`
+(`--lenient-receipts`) lets the decision stand instead, for deployments that prefer availability to
+a complete log. Observe mode never blocks either way. The cost of strict is real and stated: a full
+disk or a failing volume stops the gate answering `allow`, so every tool call is denied until the
+log is writable again.
 
 Fail-closed, and where the fail-open boundary actually is
 --------------------------------------------------------
@@ -185,7 +188,7 @@ def evaluate_pre_tool_use(
     enforcement_mode: str = "enforce",
     basis_evaluator: Optional[BasisEvaluator] = None,
     receipts: Optional[GateReceiptWriter] = None,
-    strict_receipts: bool = False,
+    strict_receipts: bool = True,
 ) -> dict[str, Any]:
     """Answer one PreToolUse question. Never raises; fails closed in enforce mode.
 
@@ -435,7 +438,7 @@ class GateServer(socketserver.ThreadingUnixStreamServer):
         enforcement_mode: str = "enforce",
         basis_evaluator: Optional[BasisEvaluator] = None,
         receipts: Optional[GateReceiptWriter] = None,
-        strict_receipts: bool = False,
+        strict_receipts: bool = True,
     ) -> None:
         if receipts is not None and basis_evaluator is None:
             raise ValueError("receipts require a basis_evaluator (PolicyEngine.evaluate_with_basis)")
@@ -544,7 +547,7 @@ def serve_forever(
     enforcement_mode: str = "enforce",
     ready: Optional[threading.Event] = None,
     receipts: Optional[GateReceiptWriter] = None,
-    strict_receipts: bool = False,
+    strict_receipts: bool = True,
 ) -> GateServer:
     """Bind `socket_path` and serve until shut down. Returns the server for the caller to close.
 
