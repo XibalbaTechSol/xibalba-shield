@@ -307,3 +307,12 @@
   now put a regular file where the directory must be, which fails for every user. Full suite: 680 passed, 17 skipped, 0 failed.
 - Regenerated the stale TOC in `docs/wiki/concepts/guardrail-hooks.md` (`scripts/wiki_toc.py --check` now passes).
 
+## [2026-10-11] feat | Advisory inference has a Settings form (integrity-core A7)
+
+- New Settings tab **Advisory Inference** (`ui/src/components/InferenceSettings.jsx`, validator in `ui/src/inferenceSettings.js`): provider,
+  failure mode, model, prompt profile, endpoint, `secret://` reference, timeout, max tokens, temperature and event classes. Shadow mode and
+  strict redaction are displayed as fixed. Closes the gap recorded when the backend settings API landed (an operator could configure
+  this only through the API, not the console).
+- Verified: 4 Playwright tests (desktop and 390px, HTTP mocked at the control-plane boundary), a 390px screenshot reviewed by eye, `oxlint`
+  clean on the new files, `vite build` passes. The sandbox has no downloadable browser, so the run used the preinstalled Chromium through a
+  throwaway config outside the repo.

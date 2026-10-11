@@ -2,7 +2,7 @@
 title: Configurable Advisory Inference
 acronyms: [Jev, LLM, SLM]
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-11
 type: concept
 tags: [enforcement, compliance, slm, infrastructure]
 confidence: high
@@ -13,6 +13,9 @@ source_files:
   - shield/backend/api.py
   - shield/cli.py
   - tests/test_jev_failure_modes.py
+  - ui/src/components/InferenceSettings.jsx
+  - ui/src/inferenceSettings.js
+  - ui/e2e/inference-settings.spec.ts
 ---
 
 # Configurable Advisory Inference
@@ -26,6 +29,7 @@ runtime path is defined by [`Event Router`](event-router.md) and remains separat
 
 - [Provider choices](#provider-choices)
 - [Settings contract](#settings-contract)
+- [Console form](#console-form)
 - [Runtime and evidence](#runtime-and-evidence)
 - [Failure boundary](#failure-boundary)
   - [Why a failure happened: reasoncode](#why-a-failure-happened-reasoncode)
@@ -61,6 +65,16 @@ The backend validates these tenant-scoped fields:
 
 Endpoints must use HTTP(S); non-loopback HTTP endpoints are rejected and must use HTTPS. Secret
 settings are references beginning with `secret://`, never raw credentials.
+
+## Console form
+
+Settings > **Advisory Inference** (`InferenceSettings.jsx`) edits these fields. Execution mode (shadow) and redaction (strict) are shown
+as fixed: there is no control for either. `ui/src/inferenceSettings.js` mirrors the backend's bounds so a bad value is refused before a
+request (a non-local `http` endpoint, a key that is not a `secret://` reference, an out-of-range timeout/tokens/temperature, a network
+provider with no endpoint), but the backend stays the authority and its refusal is shown verbatim. A save carries every other saved
+setting through unchanged; a provider of `disabled` forces `inferenceEnabled` off. Covered by `ui/e2e/inference-settings.spec.ts` (4
+Playwright tests at desktop width and 390px: the local refusals, the exact POSTed payload with no raw secret, a backend 422, and no
+sideways scroll on a phone). Not covered: a live provider call from the console, and the connected backend (the control plane is mocked at HTTP).
 
 ## Runtime and evidence
 
