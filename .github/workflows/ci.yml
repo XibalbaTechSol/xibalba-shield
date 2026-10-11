@@ -27,7 +27,7 @@ jobs:
           # Landing the two out of order is what broke main's CI on 2026-10-05 in both
           # this repo and its sibling; see the A0 precondition in integrity-core's
           # docs/EXECUTION_PLAN.md.
-          ref: 7cd86197ccbe34171781ecdff77201179e8a8144
+          ref: 93fc2c9b0d6adc26ef313a2f3c6d577c1d0f2578
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
