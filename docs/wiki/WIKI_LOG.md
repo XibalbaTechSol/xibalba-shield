@@ -273,3 +273,17 @@
   log is writable, so a strict gate trades availability for a complete record.
 - Tests pin the default at the library signature, behaviourally, and at the CLI wiring
   (mutation-checked: inverting the CLI flag, or reverting either library default, fails a test).
+
+## [2026-10-10] refactor | Gate receipts now use the SDK's shared writer
+
+- `shield/gate_receipts.py` is a thin adapter over `integrity_sdk.core.receipt_writer` (integrity-core B2 stage 3), the
+  same writer `bcc_middleware` uses, so the hardest-to-get-right code has one copy. Shield keeps its own vocabulary
+  (`tool_name` + input digest bound into the action), its `shield-gate:` log id, and a flat single-log layout.
+- No behavior change: a test pins the receipt hashes against the pre-swap writer from the same fixed key and inputs
+  (receipts.jsonl and checkpoints.jsonl were also compared byte for byte when the swap was made), so existing logs keep
+  verifying and extending. Strict-by-default is unchanged. Tests that injected failures via the deleted private
+  `writer._receipts_fd` now use the SDK writer's `_current.receipts_fd`.
+- Full suite: 627 passed, 17 skipped; 2 failures (`test_spool_enqueue_survives_an_unwritable_path...`,
+  `test_from_environment_raises_on_unwritable_outbox`) are unrelated and fail identically on clean `main` (this sandbox runs
+  as root, so "unwritable" paths are writable).
+

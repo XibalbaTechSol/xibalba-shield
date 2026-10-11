@@ -137,7 +137,7 @@ authorized one. `--enforcement-mode observe` always answers `allow` while report
 ### Signed, chained receipts (`--receipt-dir`)
 
 With `--receipt-dir` the daemon writes one **signed, chained receipt per decision** before it
-answers (`shield/gate_receipts.py`; the format, signing domain, chain and checkpoint rules are
+answers (`shield/gate_receipts.py`, a thin adapter over the SDK's shared writer `integrity_sdk.core.receipt_writer` since 2026-10-10; the format, signing domain, chain and checkpoint rules are
 `integrity_sdk.core.receipts`, shared with BCC and with `integrity-cli`'s independent verifier —
 Shield invents no receipt field). It is opt-in: without the flag the response says
 `receipt_status: "disabled"`, never silence.

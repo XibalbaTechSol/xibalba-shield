@@ -70,10 +70,12 @@ shield/
 ├── gate_daemon.py       # `shield gate-daemon`: Unix-socket PreToolUse allow/deny from a warm
 │                        # PolicyEngine (Tier 1 only, deliberately not EventRouter). Fails closed;
 │                        # socket 0600; carries a tool-input digest, never the input
-├── gate_receipts.py     # `--receipt-dir`: signed, chained, checkpointed receipt per gate decision
-│                        # (format = integrity_sdk.core.receipts). fsync before the answer; a log
-│                        # that fails verification refuses start; device/tool HMAC-hidden. [PLANNED]:
-│                        # BCC's side of integrity-core B2, shared conformance vectors, log rotation
+├── gate_receipts.py     # `--receipt-dir`: signed, chained, checkpointed receipt per gate decision.
+│                        # Thin adapter (tool_name+input-digest action binding, shield-gate: log id) over
+│                        # integrity_sdk.core.receipt_writer, which BCC shares; the durable writer, its
+│                        # failure posture and epoch rotation live there. Byte-identical to the pre-swap
+│                        # writer (pinned by a test). [PLANNED]: shared conformance vectors (B2 stage 4),
+│                        # epoch anchoring, rotation (the SDK has it; Shield runs one flat log)
 ├── hermes_contract.py   # Redacted Shield->Hermes event contract (JSON Schema in schemas/)
 ├── hermes_transport.py  # HermesSpool: HMAC-authenticated, bounded file spool; group_shared
 │                        # mode for the sensor->analyst account split (never world-readable)
