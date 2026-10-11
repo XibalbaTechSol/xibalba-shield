@@ -316,3 +316,9 @@
 - Verified: 4 Playwright tests (desktop and 390px, HTTP mocked at the control-plane boundary), a 390px screenshot reviewed by eye, `oxlint`
   clean on the new files, `vite build` passes. The sandbox has no downloadable browser, so the run used the preinstalled Chromium through a
   throwaway config outside the repo.
+
+## [2026-10-11] docs | README and CLAUDE.md match the Advisory Inference tab
+
+- `README.md` described a "Settings → Inference & Analysis panel" that did not exist (inference was configurable only through the API); it
+  now names the real tab, what the form fixes and refuses, and what its tests cover. `CLAUDE.md`: test count (680 passed, 17 skipped), the
+  `ui/` entry.

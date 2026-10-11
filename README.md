@@ -254,7 +254,7 @@ Enrolled agents fetch `/api/shield/device-settings` with their device token over
 
 ### Configurable advisory inference
 
-The dedicated Settings → Inference & Analysis panel configures post-policy advisory analysis. The
+The Settings → **Advisory Inference** tab (`ui/src/components/InferenceSettings.jsx`, added 2026-10-11; before that the settings were reachable only through the API) configures post-policy advisory analysis. The
 available providers are deterministic Jev fixture mode, the bounded local classifier, a Lila-style
 JSON adapter, and an OpenAI-compatible LLM adapter. Each provider receives only a redacted
 DecisionEnvelope after local policy has already produced its result.
@@ -263,6 +263,8 @@ Provider settings include model, endpoint, versioned prompt profile, timeout, to
 budgets, event-class scope, failure mode, and a `secret://` reference. Raw credentials remain
 host-managed; `SHIELD_INFERENCE_API_KEY` is read only by the optional HTTP adapter. Non-loopback
 HTTP endpoints are rejected and must use HTTPS.
+
+The form shows execution mode (shadow) and redaction (strict) as fixed, refuses out-of-range or unsafe values before a request, and shows the backend's refusal verbatim; the backend remains the authority. It is covered by `ui/e2e/inference-settings.spec.ts` with the control plane mocked at HTTP; no live provider call is made from the console.
 
 Inference is shadow-only. Jev or another provider can classify risk, estimate transitions, or
 recommend escalation, but cannot authorize, deny, contain, sign evidence, or delay the deterministic
