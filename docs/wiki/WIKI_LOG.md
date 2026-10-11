@@ -333,3 +333,10 @@
   times relative to now. Verified: it passes, and fails again with the `Dashboard.jsx` change reverted.
 - Still failing on clean `main`, not touched here: `e2e/opa-policies.spec.ts` (same stale-navigation drift) and the two `e2e/visual.spec.ts`
   screenshot comparisons (the sandbox renders differently from the committed baselines).
+
+## [2026-10-11] fix | opa-policies e2e follows the reorganised console
+
+- `ui/e2e/opa-policies.spec.ts` looked for a "Policy" button and an "OPA policies" tab that the console reorganisation removed; the OPA view now
+  sits under Configuration. The spec opens Configuration, disambiguates the section heading from the view's own (they differ only by case), and
+  scrolls the table into frame before its screenshot (it previously captured the top of the page, not the table). It fails when the mocked
+  "differs from file" state is changed, so the three load states are really asserted. `e2e/visual.spec.ts` (sandbox-rendering diffs) is untouched.

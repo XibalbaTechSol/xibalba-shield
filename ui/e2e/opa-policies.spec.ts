@@ -26,12 +26,16 @@ test('OPA policies view shows live load status per pack', async ({ page }) => {
   })
 
   await page.goto('/')
-  await page.getByRole('button', { name: /Policy/ }).first().click()
-  await page.getByRole('tab', { name: 'OPA policies' }).click()
-  await expect(page.getByRole('heading', { name: 'OPA Policies' })).toBeVisible()
+  // The OPA view lives under Configuration (it used to be a tab under Policies).
+  await page.getByRole('button', { name: 'Configuration', exact: true }).click()
+  // Two headings match case-insensitively: the Configuration section ("OPA policies") and the view's own ("OPA Policies").
+  await expect(page.getByRole('heading', { name: 'OPA policies', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'OPA Policies', exact: true })).toBeVisible()
   await expect(page.getByText(/OPA 1\.18\.2 · healthy · http:\/\/127\.0\.0\.1:8181 · 5 policies loaded in total/)).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Loaded', exact: true })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Loaded — differs from file' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Not loaded' })).toBeVisible()
+  // The view sits below the policy bundle and integrations on Configuration: bring it into the frame for the screenshot.
+  await page.getByRole('heading', { name: 'OPA Policies', exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: process.env.OPA_SHOT || 'test-results/opa-policies.png', fullPage: false })
 })
