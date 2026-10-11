@@ -24,6 +24,7 @@ source_files:
 - [Combined-condition regression coverage](#combined-condition-regression-coverage)
 - [Documented drift vs. README.md and CLAUDE.md — now corrected](#documented-drift-vs-readme-md-and-claude-md-now-corrected)
 - [Interface shape reused by Tier 2](#interface-shape-reused-by-tier-2)
+- [Conformance with the shared decision vectors (2026-10-11)](#conformance-with-the-shared-decision-vectors-2026-10-11)
 - [Related pages](#related-pages)
 
 ## Overview
@@ -175,6 +176,22 @@ this is the intended, tested current behavior, not an accidental regression.
 `shield/agent_core/slm_backend.py`'s `SlmBackend` protocol implements — a Tier-2 backend is a
 drop-in escalation path with the same call shape, not a parallel decision system. See
 [SLM Cascade Tiers](slm-cascade-tiers.md).
+
+## Conformance with the shared decision vectors (2026-10-11)
+
+`tests/test_decision_vectors.py` runs the 49 gate-level vectors of integrity-core's
+`integrity-sdk/tests/conformance/decision_vectors.json` through `PolicyEngine.evaluate_with_basis` with only the OPA
+transport stubbed (integrity-core B2 stage 4; BCC and the SDK run the same file). Shield's entrypoint is the whole
+`data.shield.policy` package object, so the engine extracts the contract result from it:
+
+- none of `decision` / `reason_code` / `controls` present, or an undefined result: nothing matched, the pack's per-event-class
+  default applies (this is why the two `{}` vectors carry a pinned Shield exception);
+- any of them present: a rule matched, and exactly what it produced goes to `resolve()`;
+- a result that is not an object at all: goes to `resolve()` too.
+
+Before this, a result with `decision` but no `reason_code`, and any non-object result, were read as "nothing matched" and took the
+default (`log_only` or `permit` for sensor events), a fail-open the contract and BCC do not have. Ten vectors caught it. Mutations
+of the extraction (non-object as no-match, requiring both keys) fail 8 and 2 vectors.
 
 ## Related pages
 

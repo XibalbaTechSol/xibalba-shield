@@ -22,7 +22,7 @@ from typing import Mapping, Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from integrity_sdk.core.decision import DENY, ENFORCE, LOG_ONLY, PERMIT, resolve as resolve_decision
+from integrity_sdk.core.decision import DENY, ENFORCE, LOG_ONLY, NO_MATCH, PERMIT, resolve as resolve_decision
 from integrity_sdk.core.opa import OpaClient, OpaError
 from integrity_sdk.core.packs import LoadedPack
 
@@ -43,6 +43,9 @@ logger = logging.getLogger("shield.policy_engine")
 # `_translate_decision`'s docstring for why this mapping exists at all.
 _CONTAIN_MARKER = "_CONTAIN_"
 _ESCALATE_MARKER = "_ESCALATE_"
+
+
+_CONTRACT_KEYS = frozenset({"decision", "reason_code", "controls"})
 
 
 def _translate_decision(resolved_decision: str, reason_code: str) -> str:
@@ -243,20 +246,23 @@ class PolicyEngine:
                     self._last_opa_check_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                     self._last_opa_error = None
                     raw = raw_result if isinstance(raw_result, Mapping) else {}
-                    # `decision`/`reason_code` are present only when a rule actually matched
-                    # (see shield/policies/packs/*/policy.rego -- deliberately no `default`
-                    # for either), which is what lets `resolve()` distinguish "a rule
-                    # matched" from "nothing matched, apply this pack's per-event-class
-                    # default" (docs/EXECUTION_PLAN.md A3 "permit means permitted").
-                    # `mode=ENFORCE` here is Shield's own OPA-evaluation step; the separate
-                    # observe/enforce posture `router.py` applies afterward is unrelated.
-                    raw_decision = (
-                        {
-                            "decision": raw.get("decision"), "reason_code": raw.get("reason_code"),
-                            "controls": raw.get("controls", []),
-                        }
-                        if "decision" in raw and "reason_code" in raw else None
-                    )
+                    # Shield's entrypoint is the whole `data.shield.policy` package object (display vars such as
+                    # rule_id/name/message carry Rego `default`s, so they are always present); the C3 contract
+                    # result is the `decision`/`reason_code`/`controls` subset, present ONLY when a rule matched.
+                    # So: none of the three keys, or an undefined result => nothing matched => the pack default.
+                    # Any contract key present => a rule matched, and what it produced goes to `resolve()` AS IT IS,
+                    # so a half-formed result ({"decision": "deny"} with no reason_code) is MALFORMED and denies,
+                    # rather than being read as "nothing matched" and taking a log_only/permit default. And a
+                    # result that is not an object at all (a string, list, number, boolean) is malformed too.
+                    # Pinned by tests/test_decision_vectors.py against integrity-core's shared vectors.
+                    if raw_result is NO_MATCH or raw_result is None:
+                        raw_decision = None
+                    elif not isinstance(raw_result, Mapping):
+                        raw_decision = raw_result
+                    elif _CONTRACT_KEYS & raw.keys():
+                        raw_decision = {key: raw[key] for key in _CONTRACT_KEYS if key in raw}
+                    else:
+                        raw_decision = None
                     resolved = resolve_decision(
                         event.klass, raw_decision, event_defaults=pack.event_defaults, mode=ENFORCE,
                         pack_hash=pack.pack_hash,

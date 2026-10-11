@@ -287,3 +287,16 @@
   `test_from_environment_raises_on_unwritable_outbox`) are unrelated and fail identically on clean `main` (this sandbox runs
   as root, so "unwritable" paths are writable).
 
+## [2026-10-11] fix | Policy results are interpreted by the shared decision vectors; two fail-opens closed
+
+- Added `tests/test_decision_vectors.py`, which runs integrity-core's shared decision vectors (B2 stage 4) through
+  `PolicyEngine.evaluate_with_basis`. It found that the engine read a result with `decision` but no `reason_code`, and any
+  non-object result (string, list, number, boolean), as "no rule matched", so they took the event class default (`log_only` or
+  `permit` for sensor events) instead of failing closed as the decision contract and BCC do.
+- Fixed in `shield/policy_engine/engine.py`: any contract key present means a rule matched and goes to `resolve()` as it is
+  (half-formed => `INTEGRITY_MALFORMED_DECISION`, deny); a non-object result goes to `resolve()` too. An object with none of the
+  contract keys still means "no match" (Shield's entrypoint is the whole package object); two vectors record that as a pinned
+  Shield exception.
+- Behavior change: only for malformed policy output, which a verified pack should never produce. CI's integrity-core pin is
+  bumped in this PR to a ref that carries the vector file.
+
