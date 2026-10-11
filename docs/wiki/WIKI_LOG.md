@@ -322,3 +322,14 @@
 - `README.md` described a "Settings → Inference & Analysis panel" that did not exist (inference was configurable only through the API); it
   now names the real tab, what the form fixes and refuses, and what its tests cover. `CLAUDE.md`: test count (680 passed, 17 skipped), the
   `ui/` entry.
+
+## [2026-10-11] fix | The console no longer blanks when /api/shield/agents omits `agents`; runtime-health e2e repaired
+
+- Product bug found while repairing the spec: `Dashboard.jsx` assigned `agents.value.agents` straight into state, so a control plane that
+  answered `{}` (or an older one without the field) crashed the whole console on `data.agents.flatMap` (blank page). It now defaults to `[]`.
+- `ui/e2e/runtime-health.spec.ts` had been failing since the console's navigation was reorganised (Posture / Agent / Network / Decisions /
+  Evidence / Configuration, Settings in the profile menu, Hermes profile on the Agent view) and, separately, because its decision times
+  were fixed 2026-09-08 dates while the event stream shows only the last 24 hours. It now walks the current navigation and builds decision
+  times relative to now. Verified: it passes, and fails again with the `Dashboard.jsx` change reverted.
+- Still failing on clean `main`, not touched here: `e2e/opa-policies.spec.ts` (same stale-navigation drift) and the two `e2e/visual.spec.ts`
+  screenshot comparisons (the sandbox renders differently from the committed baselines).

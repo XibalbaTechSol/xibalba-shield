@@ -144,7 +144,7 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
 
     setData((current) => ({
       summary: live ? visibleSummary : (realOnly ? null : current.summary),
-      agents: agents.status === 'fulfilled' ? agents.value.agents : current.agents,
+      agents: agents.status === 'fulfilled' ? (agents.value.agents || []) : current.agents,
       devices: visibleDevices,
       outcomes: outcomes.status === 'fulfilled' ? outcomes.value.enforcement_outcomes.filter((row) => !row.outcome?.synthetic) : [],
       exporter: exporter.status === 'fulfilled' ? visibleExporter : current.exporter,
