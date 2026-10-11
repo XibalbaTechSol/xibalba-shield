@@ -11538,3 +11538,13 @@ h1, h2, h3, h4, b {
 .console .configuration-unified svg[data-lucide='circle-check'] {
   color: currentColor;
 }
+
+/* Advisory inference form: an invalid field is marked by its message, not only by colour. */
+.field-error { color: #ff8a80; }
+.console.theme-light .field-error { color: #b3261e; }
+.settings-fields-grid > label input[aria-invalid="true"] { border-color: #ff8a80; }
+.console.theme-light .settings-fields-grid > label input[aria-invalid="true"] { border-color: #b3261e; }
+@media (max-width: 640px) {
+  /* Two columns do not fit a phone: stack the form. */
+  #settings-panel-inference .settings-fields-grid { grid-template-columns: 1fr; }
+}

@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  Brain,
   Copy,
   Cpu,
   Key,
@@ -20,6 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { ShieldApi } from '../api'
+import { InferenceSettings } from './InferenceSettings'
 import { readSession, writeSession, removeSession } from '../storage'
 
 export function TenantSwitcher() {
@@ -477,6 +479,15 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
 
         <button
           type="button"
+          role="tab" aria-selected={activeTab === 'inference'} aria-controls="settings-panel-inference" id="settings-tab-inference" className={`settings-tab-btn ${activeTab === 'inference' ? 'active' : ''}`}
+          onClick={() => setActiveTab('inference')}
+        >
+          <Brain size={15} />
+          <span>Advisory Inference</span>
+        </button>
+
+        <button
+          type="button"
           role="tab" aria-selected={activeTab === 'profile'} aria-controls="settings-panel-profile" id="settings-tab-profile" className={`settings-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
@@ -484,6 +495,8 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           <span>Operator Profile</span>
         </button>
       </div>
+
+      {activeTab === 'inference' && <InferenceSettings api={api} />}
 
       {activeTab === 'sensors' && (
         <form className="settings-tab-pane" id="settings-panel-sensors" role="tabpanel" aria-labelledby="settings-tab-sensors" onSubmit={saveOperational}>
