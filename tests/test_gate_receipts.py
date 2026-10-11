@@ -316,7 +316,7 @@ def _failing_write(monkeypatch, writer: GateReceiptWriter, *, partial: int = 0):
     state = {"armed": True}
 
     def write(fd, data):
-        if state["armed"] and fd == writer._receipts_fd:
+        if state["armed"] and fd == writer._current.receipts_fd:
             state["armed"] = False
             if partial:
                 real_write(fd, bytes(data[:partial]))
@@ -549,7 +549,7 @@ def _break_writes(monkeypatch, writer):
     real_write = os.write
 
     def write(fd, data):
-        if fd == writer._receipts_fd:
+        if fd == writer._current.receipts_fd:
             raise OSError(5, "Input/output error")
         return real_write(fd, data)
 
@@ -899,3 +899,30 @@ def test_cli_passes_strict_to_the_server_unless_lenient_is_asked_for(tmp_path, e
     outcome = json.loads(result.stdout.strip().splitlines()[-1])
     assert outcome == {"code": 0, "strict": expected_strict, "has_writer": True}
     assert ("lenient" if not expected_strict else "strict") in result.stderr
+
+
+def test_receipts_are_byte_identical_to_the_pre_swap_writer(tmp_path):
+    """The writer moved to integrity-sdk (B2 stage 3). Logs written before the move must keep verifying and
+    extending, so what Shield now writes must be exactly what it wrote: same action binding, same log id, same
+    canonical bytes. These hashes were produced by BOTH the old in-repo writer (git show origin/main@41595e7)
+    and the shim, from the same fixed key, HMAC key, inputs and timestamps, and compared byte for byte."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    key = bytes(range(32))
+    pem = Ed25519PrivateKey.from_private_bytes(key).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    writer = GateReceiptWriter(tmp_path / "g", signer=Keypair.from_pem(pem), hmac_key=key,
+                               log_id=default_log_id(key, "dev-1"), checkpoint_every=2)  # 3rd receipt carries a checkpoint_reference
+    refs = [
+        writer.record(agent_did="did:key:a", device_id="dev-1", tool_name="Bash", tool_input_sha256="ab" * 32,
+                      event_class="agent.tool_call", pack_hash="sha256:" + "11" * 32, decision="deny",
+                      reason_code="R", mode="enforce", controls=("C-1",), timestamp=stamp)
+        for stamp in ("2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z", "2026-01-01T00:00:03Z")
+    ]
+    writer.close()
+    assert [ref.hash for ref in refs] == [
+        "0xe1b0628829c300bdc07f0887fc97b0cae203a5f66fc54fbbde645f24fef2184e",
+        "0x96b45269633fd33a7e05e3c9831596d88cdb5b4c2e0c9c2763bd879318a5e3e0",
+        "0x4c010837ffbf8a02c5a161fd4fabf6fd0495e154e429b391598836c18c5fd205",
+    ]
