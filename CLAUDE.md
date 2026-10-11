@@ -87,6 +87,8 @@ shield/
                          #  observe|enforce` (default enforce); Hermes config errors disable
                          #  publication with a warning, never stop the sensor
 
+ui/                      # React/Vite operator console (Playwright e2e under ui/e2e). Settings → Advisory Inference is
+                          # InferenceSettings.jsx + inferenceSettings.js (client mirror of backend bounds; backend is the authority)
 slm_training/           # Tier-2 SLM training pipeline — app.py, train.py (QLoRA),
                           # generate_dataset.py, dataset.jsonl, models/ (Qwen2.5-0.5B GGUF)
 policies/                # defaults/ (JSON: smb, professional-services, regulated) + rego/
@@ -110,7 +112,7 @@ is the reference example of how to state that honestly.
 ```bash
 uv venv --system-site-packages .venv && uv pip install -e ".[dev]" --python .venv/bin/python
 # --system-site-packages: bcc (python3-bpfcc) is a system package, not pip-installable
-.venv/bin/python -m pytest --basetemp=.pytest-tmp   # 454 passed, 12 skipped (2026-09-28)
+.venv/bin/python -m pytest --basetemp=.pytest-tmp   # 680 passed, 17 skipped (2026-10-11)
 # --basetemp keeps pytest's temp dirs out of /tmp: the live Shield sensor on this box
 # SIGSTOPs executables run from /tmp (e.g. test-built venvs), which looks like a hang.
 sudo .venv/bin/python -m pytest tests/test_ebpf_sensor.py -v   # root-gated eBPF tests
