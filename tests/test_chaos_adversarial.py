@@ -16,7 +16,6 @@ an architectural limitation, not fabricated as a test that doesn't actually exer
 from __future__ import annotations
 
 import os
-import stat
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -162,19 +161,18 @@ def test_spool_enqueue_survives_an_unwritable_path_without_raising(tmp_path):
     cannot be created. `enqueue()` must log and return, never raise -- a real disk
     failure during containment/export must not also crash the enforcement path that
     was trying to record it."""
-    unwritable_parent = tmp_path / "readonly"
-    unwritable_parent.mkdir()
-    unwritable_parent.chmod(stat.S_IREAD | stat.S_IEXEC)  # read+execute, no write
-    db_path = unwritable_parent / "nested" / "spool.db"
+    # A regular file where the spool's parent directory must be: creating it fails with NotADirectoryError for EVERY user,
+    # root included. (A chmod-based "read-only" directory only fails for non-root, so it passed in CI and failed as root.)
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("a file, not a directory")
+    db_path = blocker / "nested" / "spool.db"
 
-    try:
-        spool.enqueue(db_path, kind="decision", payload={"agent_id": "did:test", "nonce": 1}, error="disk full")
-        # No exception -- the whole point of this test. status() also degrades cleanly:
-        # the db file was never created, so this reads as "nothing pending" rather than
-        # erroring, which is the honest answer given the write never happened.
-        assert spool.status(db_path) == {"pending": 0, "oldest_age_seconds": None}
-    finally:
-        unwritable_parent.chmod(stat.S_IRWXU)  # restore so tmp_path cleanup can remove it
+    spool.enqueue(db_path, kind="decision", payload={"agent_id": "did:test", "nonce": 1}, error="disk full")
+    # No exception -- the whole point of this test. status() also degrades cleanly:
+    # the db file was never created, so this reads as "nothing pending" rather than
+    # erroring, which is the honest answer given the write never happened.
+    assert spool.status(db_path) == {"pending": 0, "oldest_age_seconds": None}
+    assert not db_path.exists()
 
 
 @patch("shield.integrity_exporter.exporter.IntegrityClient")
@@ -194,22 +192,21 @@ def test_export_decision_still_returns_a_clean_failure_when_disk_is_also_full(mo
     mock_bcc.submit_commitment.side_effect = RuntimeError("bcc_middleware unreachable")
     mock_client_cls.return_value = MagicMock(_batcher=None)
 
-    unwritable_parent = tmp_path / "readonly"
-    unwritable_parent.mkdir()
-    unwritable_parent.chmod(stat.S_IREAD | stat.S_IEXEC)
+    # A regular file where the spool's parent directory must be, so the spool write genuinely fails for every user
+    # (a chmod "read-only" directory does nothing as root, which made this test pass without exercising the failure).
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("a file, not a directory")
 
-    exporter = IntegrityExporter(bcc_middleware_url="http://unused", spool_db_path=unwritable_parent / "nested" / "spool.db")
-    try:
-        result = exporter.export_decision(PolicyDecision(
-            device_id="dev-test",
-            event_ref=EventRef(klass="network_flow", event_id="evt-1"),
-            rule=RuleRef(rule_id="test-rule", name="test", version="1.0.0"),
-            decision=Decision(action="deny", reason="test", severity="medium"),
-        ))
-        assert result["authorized"] is False
-        assert "submission failed" in result["reason"]
-    finally:
-        unwritable_parent.chmod(stat.S_IRWXU)
+    exporter = IntegrityExporter(bcc_middleware_url="http://unused", spool_db_path=blocker / "nested" / "spool.db")
+    result = exporter.export_decision(PolicyDecision(
+        device_id="dev-test",
+        event_ref=EventRef(klass="network_flow", event_id="evt-1"),
+        rule=RuleRef(rule_id="test-rule", name="test", version="1.0.0"),
+        decision=Decision(action="deny", reason="test", severity="medium"),
+    ))
+    assert result["authorized"] is False
+    assert "submission failed" in result["reason"]
+    assert not (blocker / "nested").exists(), "the spool write must really have failed"
 
 
 # --- Chaos: sensor unload (watchdog resilience) -----------------------------------------

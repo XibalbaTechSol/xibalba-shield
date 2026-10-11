@@ -300,3 +300,10 @@
 - Behavior change: only for malformed policy output, which a verified pack should never produce. CI's integrity-core pin is
   bumped in this PR to a ref that carries the vector file.
 
+## [2026-10-11] fix | Root-safe failure tests; guardrail-hooks TOC regenerated
+
+- Three tests simulated "cannot write" with a `chmod`-ed directory, which does nothing for root: two failed as root and one
+  passed without exercising the failure (`test_export_decision_still_returns_a_clean_failure_when_disk_is_also_full`). They
+  now put a regular file where the directory must be, which fails for every user. Full suite: 680 passed, 17 skipped, 0 failed.
+- Regenerated the stale TOC in `docs/wiki/concepts/guardrail-hooks.md` (`scripts/wiki_toc.py --check` now passes).
+
