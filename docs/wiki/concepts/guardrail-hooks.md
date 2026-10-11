@@ -24,6 +24,7 @@ source_files:
 - [Overview](#overview)
 - [These are library calls an agent runtime makes — not a sensor loop](#these-are-library-calls-an-agent-runtime-makes-not-a-sensor-loop)
 - [The out-of-process gate: shield gate-daemon](#the-out-of-process-gate-shield-gate-daemon)
+  - [Signed, chained receipts (--receipt-dir)](#signed-chained-receipts-receipt-dir)
 - [Related pages](#related-pages)
 
 ## Overview
