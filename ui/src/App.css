@@ -466,7 +466,7 @@ h1, h2, h3, h4, b {
 .preview-row { min-height: 43px; gap: 8px; padding: 0 10px; border-bottom: 1px solid color-mix(in srgb, var(--accent) 12%, transparent); font-size: 10px; }
 .preview-row:last-child { border-bottom: 0; }
 .preview-row b { min-width: 0; flex: 1; color: var(--text); font-weight: 600; }
-.preview-row em { color: var(--accent-text); font-style: normal; font-size: 9px; text-align: right; }
+.preview-row em { color: var(--accent-text); font-style: normal; font-size: 10px; text-align: right; }
 .preview-arrow { color: var(--accent-text); font-size: 14px; }
 .preview-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .preview-dot.green { background: var(--accent-fill); }.preview-dot.blue { background: var(--accent-fill); }.preview-dot.amber { background: var(--amber); }.preview-dot.red { background: var(--red); }
@@ -474,8 +474,8 @@ h1, h2, h3, h4, b {
 .preview-actions h3 { margin: 0 0 12px; color: var(--text); font-size: 12px; }
 .preview-actions ol { display: grid; gap: 10px; margin: 0 0 13px; padding-left: 18px; color: var(--text); font-size: 10px; line-height: 1.3; }
 .preview-actions li::marker { color: var(--accent-text); font-weight: 700; }
-.preview-actions small { display: block; color: var(--accent-text); font-size: 9px; line-height: 1.4; }
-.preview-footer { flex-wrap: wrap; gap: 10px 14px; margin-top: auto; padding: 15px 4px 2px; color: var(--accent-text); font-size: 9px; }
+.preview-actions small { display: block; color: var(--accent-text); font-size: 10px; line-height: 1.4; }
+.preview-footer { flex-wrap: wrap; gap: 10px 14px; margin-top: auto; padding: 15px 4px 2px; color: var(--accent-text); font-size: 10px; }
 .preview-footer svg { color: var(--accent-text); }
 
 .ring {
@@ -603,7 +603,7 @@ h1, h2, h3, h4, b {
 }
 
 .features h2 {
-  font-size: 38px;
+  font-size: 42px;
   font-weight: 700;
   margin: 12px 0;
   letter-spacing: -0.02em;
@@ -745,7 +745,7 @@ h1, h2, h3, h4, b {
 }
 
 .cta h2 {
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 700;
   margin: 8px 0 0;
   color: var(--text);
@@ -933,7 +933,7 @@ h1, h2, h3, h4, b {
 }
 
 .auth-form h2 {
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 700;
   margin: 0 0 8px 0;
   letter-spacing: -0.02em;
@@ -1352,6 +1352,7 @@ h1, h2, h3, h4, b {
 
 .device-card-button {
   width: 100%;
+  background: transparent;
   border: 1px solid var(--line);
   color: inherit;
   text-align: left;
@@ -1491,10 +1492,10 @@ h1, h2, h3, h4, b {
 .routing-node-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 0; background: var(--panel-elevated); color: var(--accent-text); }
 .routing-node.active .routing-node-icon, .routing-node.configured .routing-node-icon { background: var(--panel-elevated); color: var(--accent-text); }
 .routing-node b { display: block; color: var(--text); font-size: 12px; }
-.routing-node strong { color: var(--accent-text); font-size: 9px; letter-spacing: .08em; }
+.routing-node strong { color: var(--accent-text); font-size: 10px; letter-spacing: .08em; }
 .routing-node.muted strong { color: var(--accent-text); }
 .routing-connector { position: relative; display: flex; justify-content: center; height: 25px; border-left: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); margin-left: 26px; }
-.routing-connector span { align-self: center; margin-left: 14px; padding: 0 6px; background: var(--panel-elevated); color: var(--accent-text); font-family: var(--font-mono); font-size: 9px; }
+.routing-connector span { align-self: center; margin-left: 14px; padding: 0 6px; background: var(--panel-elevated); color: var(--accent-text); font-family: var(--font-mono); font-size: 10px; }
 .detail-secondary-action, .detail-primary-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: fit-content; padding: 9px 12px; border-radius: 0; font-size: 12px; font-weight: 700; }
 .detail-secondary-action { border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: var(--panel-elevated); color: var(--accent-text); }
 .detail-secondary-action:hover { border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent-text); }
@@ -1559,7 +1560,7 @@ h1, h2, h3, h4, b {
 }
 .console.theme-command-center .command-brand .brand b {
   font-family: 'Barlow Condensed', var(--font-heading), sans-serif;
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 600;
 }
 .console.theme-command-center .command-brand .brand i { color: var(--text); }
@@ -1633,8 +1634,8 @@ h1, h2, h3, h4, b {
   font-weight: 600;
 }
 .console.theme-command-center h1 { font-size: clamp(38px, 4.6vw, 52px); letter-spacing: -.02em; }
-.console.theme-command-center h2 { font-size: 34px; }
-.console.theme-command-center h3 { font-size: 26px; }
+.console.theme-command-center h2 { font-size: 32px; }
+.console.theme-command-center h3 { font-size: 25px; }
 .console.theme-command-center p,
 .console.theme-command-center span,
 .console.theme-command-center label,
@@ -1658,7 +1659,7 @@ h1, h2, h3, h4, b {
   box-shadow: none;
 }
 .console.theme-command-center .metric { padding: 22px 20px; }
-.console.theme-command-center .metric > b { font-family: 'Barlow Condensed', sans-serif; font-size: 44px; }
+.console.theme-command-center .metric > b { font-family: 'Barlow Condensed', sans-serif; font-size: 42px; }
 .console.theme-command-center .metric > div > span { border-radius: 0; background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-text); }
 .console.theme-command-center .panel { padding: 22px; }
 .console.theme-command-center .panel-title h3 { font-size: 25px; }
@@ -1720,7 +1721,7 @@ h1, h2, h3, h4, b {
 .agent-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 16px; color: var(--muted); font-size: 13px; }
 .agent-toolbar > span { display: flex; align-items: center; gap: 8px; }
 .agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.agent-card { padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); text-align: left; cursor: pointer; }
+.agent-card { padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .agent-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 4%, transparent); }
 .agent-card-top { display: flex; justify-content: space-between; align-items: center; }
 .agent-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 0; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -1781,7 +1782,7 @@ h1, h2, h3, h4, b {
   gap: 28px;
   margin-bottom: 22px;
 }
-.integrations-command-header h2 { margin: 0 0 7px; font-size: 24px; letter-spacing: -.025em; }
+.integrations-command-header h2 { margin: 0 0 7px; font-size: 25px; letter-spacing: -.025em; }
 .integrations-command-header p { margin: 0; max-width: 670px; color: var(--muted); font-size: 13px; }
 .integrations-command-header .primary-action-btn { flex: 0 0 auto; }
 .integrations-view .primary-action-btn { background: var(--accent-fill); color: var(--ink-on-accent); box-shadow: none; }
@@ -1794,7 +1795,7 @@ h1, h2, h3, h4, b {
   padding: 22px 26px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--panel);
+  background: transparent;
 }
 .signal-stack { display: grid; gap: 10px; }
 .signal-stack strong { margin-bottom: 2px; color: var(--text); font-size: 13px; }
@@ -1815,7 +1816,7 @@ h1, h2, h3, h4, b {
   margin: 14px 0 30px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--panel);
+  background: transparent;
 }
 .pipeline-health-rail > div { display: flex; gap: 12px; align-items: center; min-width: 0; padding: 18px 20px; border-right: 1px solid var(--line); }
 .pipeline-health-rail > div:last-child { border-right: 0; }
@@ -1831,7 +1832,7 @@ h1, h2, h3, h4, b {
 .pipeline-row code { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .pipeline-name { display: grid; gap: 3px; }
 .pipeline-name b { color: var(--text); }
-.pipeline-name small { color: var(--dim); font-size: 9px; letter-spacing: .08em; }
+.pipeline-name small { color: var(--dim); font-size: 10px; letter-spacing: .08em; }
 .pipeline-status { display: flex; align-items: center; gap: 7px; color: var(--accent-text); }
 .pipeline-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-fill); }
 .pipeline-actions { display: flex; gap: 7px; justify-content: flex-end; }
@@ -2117,7 +2118,7 @@ h1, h2, h3, h4, b {
 }
 
 .welcome h2 {
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 700;
   margin: 6px 0 2px;
 }
@@ -2182,7 +2183,7 @@ h1, h2, h3, h4, b {
 
 .metric > b {
   display: block;
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 700;
   margin: 14px 0 4px;
   letter-spacing: -0.02em;
@@ -2315,7 +2316,7 @@ h1, h2, h3, h4, b {
 }
 
 .donut b {
-  font-size: 26px;
+  font-size: 25px;
   font-weight: 700;
 }
 
@@ -2587,7 +2588,7 @@ h1, h2, h3, h4, b {
 }
 
 .workspace-header h2 {
-  font-size: 30px;
+  font-size: 32px;
   line-height: 1.1;
   margin: 6px 0 8px;
 }
@@ -2733,7 +2734,7 @@ h1, h2, h3, h4, b {
 
 .resource > header h2,
 .view-header h2 {
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 700;
   margin: 6px 0 4px;
 }
@@ -2759,7 +2760,7 @@ h1, h2, h3, h4, b {
 }
 
 .resource-card {
-  background: var(--panel);
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 20px;
@@ -3135,7 +3136,7 @@ h1, h2, h3, h4, b {
 
 .landing .site-nav { max-width: 1240px; height: 72px; border-bottom: 0; }
 .landing .site-nav .brand img { width: 38px; height: 38px; border-radius: 0; }
-.landing .site-nav .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.landing .site-nav .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; }
 .landing .nav-links a,
 .landing .learn-more-link,
 .landing .checks,
@@ -3210,7 +3211,7 @@ h1, h2, h3, h4, b {
 .auth-back:hover { color: var(--text); }
 .auth-story { padding: 72px clamp(32px, 7vw, 96px); background: var(--bg); border-right-color: var(--line); }
 .auth-story .brand img { width: 38px; height: 38px; border-radius: 0; }
-.auth-story .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.auth-story .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; }
 .auth-story-body h1 { max-width: 560px; font-size: clamp(46px, 5vw, 64px); line-height: .98; color: var(--text); }
 .auth-story-body p,
 .auth-story aside small,
@@ -3224,7 +3225,7 @@ h1, h2, h3, h4, b {
 .auth-tabs { border-bottom-color: var(--line); }
 .auth-tabs button { border-radius: 0; color: var(--muted); }
 .auth-tabs button.active { color: var(--accent-text); border-bottom-color: var(--accent); }
-.auth-form h2 { font-size: 38px; }
+.auth-form h2 { font-size: 42px; }
 .auth-form label { color: var(--muted); }
 .auth-form input { border-radius: 0; border-color: var(--line); background: var(--panel-elevated); color: var(--text); }
 .auth-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -3234,12 +3235,13 @@ h1, h2, h3, h4, b {
 
 /* Light operator theme: the same IA and spacing, with the mockup's bright surface treatment. */
 .console.theme-command-center .tools > button {
-  background: var(--panel);
+  background: transparent;
   border-color: var(--line);
   color: var(--text);
 }
+/* Industry's .btn-secondary hover is a wash of the ink, not a surface fill. */
 .console.theme-command-center .tools > button:hover {
-  background: var(--panel-elevated);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   border-color: var(--line-hover);
   color: var(--text);
 }
@@ -3278,7 +3280,7 @@ h1, h2, h3, h4, b {
 
 @media (max-width: 640px) {
   .hero { padding: 40px 20px; }
-  .hero h1 { font-size: 36px; }
+  .hero h1 { font-size: 32px; }
   .lede { font-size: 16px; }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .checks { flex-direction: column; gap: 10px; }
@@ -3315,7 +3317,7 @@ h1, h2, h3, h4, b {
 }
 
 .policy-bundle-card {
-  background: var(--panel);
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -3328,8 +3330,7 @@ h1, h2, h3, h4, b {
 
 .policy-bundle-card:hover {
   border-color: var(--line-hover);
-  background: var(--panel-elevated);
-  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .policy-bundle-card.selected {
@@ -3422,7 +3423,7 @@ h1, h2, h3, h4, b {
 }
 
 .action-badge {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.05em;
   padding: 2px 6px;
@@ -3631,7 +3632,7 @@ h1, h2, h3, h4, b {
 
 .reasoning-hero h2 {
   margin: 0 0 6px;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text);
 }
@@ -3668,7 +3669,7 @@ h1, h2, h3, h4, b {
 }
 
 .reasoning-stat-card .stat-val {
-  font-size: 22px;
+  font-size: 20px;
   font-family: var(--font-heading);
   color: var(--text);
 }
@@ -4050,7 +4051,7 @@ h1, h2, h3, h4, b {
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--accent-text);
   background: transparent;
   padding: 4px 6px;
   border-radius: var(--radius-sm);
@@ -4715,7 +4716,7 @@ h1, h2, h3, h4, b {
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 18px;
-  background: var(--panel);
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -4765,7 +4766,7 @@ h1, h2, h3, h4, b {
 }
 
 .method-badge {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   padding: 2px 4px;
   border-radius: 0;
@@ -5205,7 +5206,9 @@ h1, h2, h3, h4, b {
 .readiness-row:last-child { border-bottom: 0; }
 .readiness-row > div { display: grid; gap: 3px; min-width: 0; }
 .readiness-row b, .operator-panel li b { color: var(--text); font-size: 13px; }
-.readiness-row small, .operator-panel li span { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Operator guidance and readiness detail are instructions to act on, so they
+   wrap instead of truncating; the grid column is already minmax(0, 1fr). */
+.readiness-row small, .operator-panel li span { color: var(--muted); font-size: 11px; overflow: visible; text-overflow: clip; white-space: normal; }
 .readiness-row strong { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .readiness-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 0; }
 .readiness-icon.good { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -5306,12 +5309,12 @@ h1, h2, h3, h4, b {
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--line);
-  background: var(--panel-elevated);
+  background: transparent;
 }
 
 .quality-coverage-grid b {
   color: var(--text);
-  font-size: 24px;
+  font-size: 25px;
   line-height: 1;
 }
 
@@ -5371,7 +5374,7 @@ h1, h2, h3, h4, b {
 .evidence-reference-metrics article:last-child { border-right: 0; }
 .evidence-reference-metrics span,
 .evidence-reference-metrics small { color: var(--muted); font-size: 11px; }
-.evidence-reference-metrics b { color: var(--text); font-size: 28px; line-height: 1; }
+.evidence-reference-metrics b { color: var(--text); font-size: 25px; line-height: 1; }
 
 .evidence-reference-grid {
   display: grid;
@@ -5502,7 +5505,7 @@ h1, h2, h3, h4, b {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: transparent;
   color: var(--muted);
   font-size: 12px;
 }
@@ -5668,6 +5671,11 @@ h1, h2, h3, h4, b {
 .session-props-grid dd code {
   font-family: var(--font-mono);
   font-size: 12px;
+  /* a truncated URL is missing information, not tidy typography */
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .session-danger-row {
@@ -6030,7 +6038,7 @@ h1, h2, h3, h4, b {
   border-right-color: var(--line);
 }
 .console.theme-command-center .side .brand img { width: 38px; height: 38px; border-radius: 0; }
-.console.theme-command-center .side .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
+.console.theme-command-center .side .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; }
 .console.theme-command-center .side nav button { border-radius: 0; font-family: 'Barlow', sans-serif; }
 .console.theme-command-center .side nav button.active {
   background: var(--accent-soft);
@@ -6057,7 +6065,7 @@ h1, h2, h3, h4, b {
   flex-wrap: nowrap;
 }
 .console.theme-command-center .top-title { display: block; }
-.console.theme-command-center .top-title h1 { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; letter-spacing: .01em; }
+.console.theme-command-center .top-title h1 { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; letter-spacing: .01em; }
 .console.theme-command-center .top-title p { font-family: 'Barlow', sans-serif; }
 @media (max-width: 960px) {
   .console.theme-command-center { grid-template-columns: 1fr; }
@@ -6167,7 +6175,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .pipeline-row {
   border-color: var(--line);
   border-radius: 0;
-  background: var(--panel-elevated);
+  background: transparent;
   color: var(--text);
 }
 .console.theme-command-center .agent-card:hover,
@@ -6295,7 +6303,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .developer-view {
   border-color: var(--line);
   border-radius: 0;
-  background: var(--panel);
+  background: transparent;
   color: var(--text);
   box-shadow: none;
 }
@@ -6330,7 +6338,7 @@ h1, h2, h3, h4, b {
   border-bottom: 1px solid var(--line);
 }
 .console.theme-command-center .side .brand img { width: 52px; height: 52px; }
-.console.theme-command-center .side .brand b { font-size: 19px; letter-spacing: -.01em; }
+.console.theme-command-center .side .brand b { font-size: 18px; letter-spacing: -.01em; }
 .console.theme-command-center .side > nav:not(.account-nav) { padding: 14px 10px; gap: 2px; }
 .console.theme-command-center .side .nav-group { gap: 2px; }
 .console.theme-command-center .side .nav-group > small { margin: 14px 12px 5px; color: var(--dim); font-size: 10px; letter-spacing: .1em; }
@@ -6476,7 +6484,7 @@ h1, h2, h3, h4, b {
 
 .agent-workspace > header h2 {
   margin: 6px 0 8px;
-  font-size: 28px;
+  font-size: 25px;
 }
 
 .agent-workspace > header > span {
@@ -6501,7 +6509,7 @@ h1, h2, h3, h4, b {
 .agent-workspace > .agent-grid {
   padding: 20px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: transparent;
 }
 
 .agent-workspace > .agent-toolbar,
@@ -6577,9 +6585,9 @@ h1, h2, h3, h4, b {
   .shared-agent-picker select { width: min(190px, 44vw); }
 }
 .console.theme-command-center .metric { padding: 20px 22px; }
-.console.theme-command-center .metric > b { font-size: 40px; line-height: 1.05; letter-spacing: -.02em; }
+.console.theme-command-center .metric > b { font-size: 42px; line-height: 1.05; letter-spacing: -.02em; }
 .console.theme-command-center .panel { padding: 20px 22px; }
-.console.theme-command-center .panel-title h3 { font-size: 22px; }
+.console.theme-command-center .panel-title h3 { font-size: 20px; }
 .console.theme-command-center .panel-title { padding-bottom: 12px; }
 .console.theme-command-center .metrics { gap: 0; margin-bottom: 20px; }
 .console.theme-command-center .metrics .metric + .metric { border-left: 0; }
@@ -6715,7 +6723,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .welcome h2 {
   max-width: 760px;
   margin-top: 8px;
-  font-size: clamp(38px, 4.2vw, 52px);
+  font-size: clamp(32px, 4.2vw, 42px);
   line-height: .98;
 }
 
@@ -6750,7 +6758,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .metric > b { margin-top: 16px; font-size: 42px; }
 .console.theme-command-center .mock-posture-grid { gap: 24px; margin-bottom: 24px; }
 .console.theme-command-center .mock-posture-grid .panel { min-height: 360px; padding: 22px; }
-.console.theme-command-center .mock-posture-grid .panel-title h3 { font-size: 24px; }
+.console.theme-command-center .mock-posture-grid .panel-title h3 { font-size: 25px; }
 .console.theme-command-center .responder-grid { margin-top: 12px; }
 
 .console.theme-command-center .audit-packet-button {
@@ -6887,7 +6895,7 @@ h1, h2, h3, h4, b {
 
 .configuration-section-heading h3 {
   margin: 0;
-  font-size: 26px;
+  font-size: 25px;
 }
 
 .configuration-section-heading p:last-child {
@@ -6966,7 +6974,7 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .evidence-runtime-strip span {
-  background: var(--panel);
+  background: transparent;
   border-color: var(--line);
   color: var(--muted);
 }
@@ -7065,7 +7073,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .pipeline-table,
 .console.theme-command-center .report-preview,
 .console.theme-command-center .modal-card {
-  background: var(--panel-elevated);
+  background: transparent;
   border-color: var(--line);
   color: var(--text-primary);
 }
@@ -7105,7 +7113,7 @@ h1, h2, h3, h4, b {
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
-  stroke-width: 2.4;
+  stroke-width: 1.5;
   vertical-align: middle;
 }
 
@@ -7335,9 +7343,9 @@ h1, h2, h3, h4, b {
   overflow: hidden;
   color: var(--text);
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.12;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -7814,7 +7822,7 @@ h1, h2, h3, h4, b {
     padding: 12px 16px 0;
   }
 
-  .header-identity strong { font-size: 21px; }
+  .header-identity strong { font-size: 20px; }
   .console.theme-command-center .tools { gap: 6px; }
   .console.theme-command-center .connection { display: none; }
 }
@@ -7831,10 +7839,10 @@ h1, h2, h3, h4, b {
 
 /* Canonical cross-page type and window rhythm. */
 .console.theme-command-center {
-  --type-display: 52px;
-  --type-page: 34px;
-  --type-section: 26px;
-  --type-panel: 22px;
+  --type-display: 42px;
+  --type-page: 32px;
+  --type-section: 25px;
+  --type-panel: 20px;
   --type-body: 14px;
   --type-copy: 13px;
   --type-label: 12px;
@@ -8013,7 +8021,7 @@ h1, h2, h3, h4, b {
 
 /* Decisions summary window: flat shared surface, consistent metric cards. */
 .console.theme-command-center .reasoning-hero {
-  background: var(--panel);
+  background: transparent;
   background-image: none;
   border-color: var(--line);
   border-radius: 0;
@@ -8025,7 +8033,7 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .reasoning-stat-card {
-  background: var(--panel-elevated);
+  background: transparent;
   border-color: var(--line);
   border-radius: 0;
 }
@@ -8438,7 +8446,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .change-request-row,
 .console.theme-command-center .event-detail-grid > div,
 .console.theme-command-center .outcome-ledger .outcome-row {
-  background-color: var(--bg);
+  background-color: transparent;
 }
 
 .console.theme-command-center .metrics,
@@ -8525,7 +8533,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item,
 .console.theme-command-center .response-status-bar {
-  background-color: var(--bg);
+  background-color: transparent;
 }
 
 .console.theme-command-center .response-pane,
@@ -8603,7 +8611,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .active-token-row,
 .console.theme-command-center .form-feedback-alert,
 .console.theme-command-center .minted-token-alert {
-  background-color: var(--bg);
+  background-color: transparent;
 }
 
 .console.theme-command-center .routing-node.active,
@@ -9020,7 +9028,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .active-token-row,
 .console.theme-command-center .form-feedback-alert,
 .console.theme-command-center .minted-token-alert {
-  background-color: var(--bg) !important;
+  background-color: transparent !important;
 }
 
 .console.theme-command-center .workspace-header {
@@ -9050,12 +9058,16 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .policy-history-row.selected,
 .console.theme-command-center .event-stream-card:hover,
 .console.theme-command-center .pipeline-row:hover {
-  background-color: var(--bg) !important;
+  background-color: color-mix(in srgb, var(--text) 7%, transparent) !important;
   border-color: var(--line-hover);
 }
 
-/* Remove neutral background blocks wherever the frame and text hierarchy are
-   sufficient. State backgrounds are reintroduced explicitly below. */
+/* Industry's cards are transparent line drawings: "Do not round cards, figures
+   or buttons, and do not give cards or figures a surface fill -- they are line
+   drawings (the solid accent primary button is the one deliberate exception)."
+   The frame and its registration crosses carry the structure, so the ground
+   shows through every card primitive. Overlays are deliberately absent from
+   this list: a drawer or dialog must still occlude what is behind it. */
 .console.theme-command-center .panel,
 .console.theme-command-center .resource,
 .console.theme-command-center .settings-card,
@@ -9099,7 +9111,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .snippet-body,
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item {
-  background-color: var(--panel-solid) !important;
+  background-color: transparent !important;
 }
 
 .console.theme-command-center .status-badge,
@@ -9304,7 +9316,7 @@ h1, h2, h3, h4, b {
 }
 
 .console .configuration-unified .integrations-command-header h2 {
-  font-size: 24px;
+  font-size: 25px;
 }
 
 .console .configuration-unified .integrations-command-header p,
@@ -9858,3 +9870,65 @@ h1, h2, h3, h4, b {
   /* Two columns do not fit a phone: stack the form. */
   #settings-panel-inference .settings-fields-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Industry grammar: icons ──────────────────────────────────────────────
+   Industry grammar: icon weight. The set is Lucide at stroke-width 1.5 ("Do
+   not use thick icon strokes; the set is Lucide at 1.5"). lucide-react emits
+   stroke-width="2" as a presentation attribute on the <svg> itself, and a CSS
+   property outranks a presentation attribute on the same element, so this one
+   rule re-weights every icon in the console. Charts are unaffected: a child
+   that carries its own stroke-width attribute still beats an inherited value,
+   so the donut ring and similar keep their own geometry. */
+.console svg { stroke-width: 1.5; }
+
+/* An unstyled <small> takes the UA's `font-size: smaller`, which is 0.833x the
+   parent and lands on 11.7px -- off Industry's fixed scale. Components that
+   set their own size are unaffected; this only catches the unstyled ones. */
+.console small { font-size: 12px; }
+
+/* A URL or identifier is information the operator may need to read in full, so
+   it wraps rather than truncating. Industry has no ellipsis convention; the
+   fixed type scale plus wrapping keeps the whole value inside its window. */
+.console .integration-endpoint,
+.console .integration-endpoint code,
+.console .pipeline-row code,
+.console .session-props-grid dd code {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+/* A flex item's default min-width is auto, so an unbreakable token -- a
+   sha256 digest, a DID, a URL -- refuses to shrink and pushes its row wider
+   than the frame. At 1280 that drove the runtime-health hash 33px outside
+   .sensor and shoved the status badge into the copy beside it. Letting these
+   rows shrink and the digest wrap keeps the information inside its window. */
+.console .sensor,
+.console .sensor p,
+.console .readiness-row,
+.console .agent-fact,
+.console .routing-node { min-width: 0; }
+.console .sensor p,
+.console .sensor p * { min-width: 0; overflow-wrap: anywhere; }
+.console .telemetry-scope-note {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+/* These sections clip to 6px of padding so the corner crosses can bleed past
+   their cards without being cut into an L. A grid or flex child's default
+   min-width is auto, so at narrow widths the content refused to shrink into
+   that inset and overflowed the content box by exactly the bleed -- 6px of
+   the Configuration section was clipped at 1280. Letting the children shrink
+   keeps the crosses whole and the content inside. */
+.console.theme-command-center .agent-unified-section > *,
+.console.theme-command-center .evidence-unified-section > *,
+.console.theme-command-center .decisions-policy-section > *,
+.console.theme-command-center .decisions-approvals-section > *,
+.console.theme-command-center .configuration-section > * {
+  min-width: 0;
+  max-width: 100%;
+}
+

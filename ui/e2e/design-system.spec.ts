@@ -17,13 +17,6 @@ const CANON = {
     accentHover: 'rgb(181, 217, 253)', // #b5d9fd accent-300
     colorScheme: 'dark',
   },
-  light: {
-    bg: 'rgb(242, 242, 243)',       // #f2f2f3
-    panel: 'rgb(233, 233, 234)',    // #e9e9ea
-    text: 'rgb(29, 31, 32)',        // #1d1f20
-    accent: 'rgb(89, 128, 166)',    // #5980a6
-    colorScheme: 'light',
-  },
 }
 
 const FORBIDDEN_FONTS = ['Manrope', 'DM Sans', 'Inter', 'Avenir', 'Helvetica']
@@ -87,7 +80,11 @@ test.describe('Industry design system conformance', () => {
     await expect(page.locator('main.console')).toHaveCSS('background-color', CANON.dark.bg)
   })
 
-  test('the light theme is Industry\'s own ground', async ({ page }) => {
+  test('there is no light theme to fall back to', async ({ page }) => {
+    // Industry ships a single light ground and Shield's console is the derived
+    // dark counterpart; carrying both meant every rule existed twice and the
+    // copies drifted. A stored 'light' preference must now render dark, and no
+    // theme control or light rule may survive anywhere in the cascade.
     await page.addInitScript(() => {
       sessionStorage.setItem('shield-session', '1')
       sessionStorage.setItem('shield-console-theme', 'light')
@@ -97,12 +94,18 @@ test.describe('Industry design system conformance', () => {
     })
     await page.route('**/api/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
     await page.goto('/')
-    await expect(page.locator('main.console')).toHaveClass(/theme-light/)
-    const t = await tokens(page, ['--bg', '--panel', '--text', '--accent'])
-    expect(t['--bg']).toBe(CANON.light.bg)
-    expect(t['--panel']).toBe(CANON.light.panel)
-    expect(t['--text']).toBe(CANON.light.text)
-    expect(t['--accent']).toBe(CANON.light.accent)
+    const console_ = page.locator('main.console')
+    await expect(console_).toHaveClass(/theme-command-center/)
+    await expect(console_).not.toHaveClass(/theme-light/)
+    await expect(console_).toHaveCSS('background-color', CANON.dark.bg)
+    expect(await page.locator('.theme-toggle, .theme-choice').count(),
+      'a theme control still exists').toBe(0)
+    const lightRules = await page.evaluate(() =>
+      [...document.styleSheets]
+        .flatMap((sh) => { try { return [...sh.cssRules] } catch { return [] } })
+        .filter((r) => (r as CSSStyleRule).selectorText && /theme-light/.test((r as CSSStyleRule).selectorText))
+        .length)
+    expect(lightRules, 'light-theme rules survive in the cascade').toBe(0)
   })
 
   test('type is Barlow Condensed over Barlow, with no drifted faces', async ({ page }) => {
@@ -183,7 +186,7 @@ test.describe('Industry design system conformance', () => {
      the drifted colour lived in the agent drawer, routing panes, event cards and
      integration badges, which the default empty Posture view never renders. */
   const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Evidence', 'Configuration']
-  const THEMES = ['command-center', 'light'] as const
+  const THEMES = ['command-center'] as const
 
   for (const theme of THEMES) {
     for (const route of ROUTES) {
@@ -387,7 +390,7 @@ test.describe('Industry design system conformance', () => {
   /* Contrast. Industry warns that the accent-to-ground pair is tuned to 3:1 --
      fine for icons, large text and chrome, not for body copy -- so --accent-text
      exists for paragraph-size accent text and must clear 4.5:1 in both themes. */
-  for (const theme of ['command-center', 'light'] as const) {
+  for (const theme of THEMES) {
     test(`text tokens clear WCAG AA on the ${theme} ground`, async ({ page }) => {
       await page.addInitScript((t) => {
         sessionStorage.setItem('shield-session', '1')
@@ -413,6 +416,192 @@ test.describe('Industry design system conformance', () => {
         const r = ratio(t[name], t['--bg'])
         expect(r, `${name} on --bg is ${r.toFixed(2)}:1, below AA 4.5:1`).toBeGreaterThanOrEqual(4.5)
       }
+    })
+  }
+})
+
+/* ── Industry grammar, measured in the rendered page ───────────────────────
+ * The assertions above check tokens and faces. These check the things a token
+ * cannot express: that information stays inside its window, that every frame
+ * and its registration crosses are actually visible, and that buttons, type
+ * sizes and icon weights are the ones Industry defines.
+ *
+ * Each rule below exists because the sweep caught a real defect: a sha256
+ * digest pushed 33px outside its row at 1280 and shoved a status badge into
+ * the copy; a control-plane URL truncated to an ellipsis; the top-bar buttons
+ * wore a panel fill Industry has no variant for; the hero heading rendered at
+ * 52px, off the fixed scale.
+ *
+ * Measurement notes that cost real debugging:
+ *  - rects must be intersected with every clipping ancestor, or a collapsed
+ *    <details> reads as a 314px spill;
+ *  - a registration cross is identified by its SIZE (a small square pseudo),
+ *    not by merely having a ::before -- the event ledger's status stripe is a
+ *    3px x full-height bar;
+ *  - replaced elements (input, img, svg) never paint ::before/::after;
+ *  - icon weight must be read from the COMPUTED value, because a CSS property
+ *    outranks lucide's stroke-width="2" presentation attribute.
+ */
+test.describe('Industry grammar in the rendered console', () => {
+  // Industry's fixed scale, plus the component sizes styles.css defines.
+  const SCALE = [10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 25, 32, 42]
+  const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Evidence', 'Configuration']
+
+  const sweep = (page: Page) => page.evaluate((SCALE) => {
+    const out: string[] = []
+    const root = document.querySelector('main.console')!
+    const all = [...root.querySelectorAll('*')] as HTMLElement[]
+    const num = (v: string) => parseFloat(v) || 0
+    const alpha = (c: string) => { const m = c.match(/[\d.]+/g); return !m ? 0 : (m.length === 4 ? +m[3] : 1) }
+    const name = (e: Element) => e.tagName.toLowerCase() + '.' +
+      (e.className || '').toString().trim().split(/\s+/).filter(Boolean).slice(0, 2).join('.')
+    const shown = all.filter((e) => {
+      const s = getComputedStyle(e), r = e.getBoundingClientRect()
+      return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.01 && r.width > 0 && r.height > 0
+    })
+    const clipOf = (e: Element) => {
+      let r = { l: 0, t: 0, r: innerWidth, b: innerHeight }
+      for (let p = e.parentElement; p; p = p.parentElement) {
+        const s = getComputedStyle(p)
+        if (s.overflowX === 'visible' && s.overflowY === 'visible') continue
+        const pr = p.getBoundingClientRect()
+        r = { l: Math.max(r.l, pr.left), t: Math.max(r.t, pr.top), r: Math.min(r.r, pr.right), b: Math.min(r.b, pr.bottom) }
+      }
+      return r
+    }
+    const visRect = (e: Element) => {
+      const b = e.getBoundingClientRect(), c = clipOf(e)
+      const l = Math.max(b.left, c.l), t = Math.max(b.top, c.t)
+      const rr = Math.min(b.right, c.r), bb = Math.min(b.bottom, c.b)
+      return { left: l, top: t, right: rr, bottom: bb, width: Math.max(0, rr - l), height: Math.max(0, bb - t) }
+    }
+    const onScreen = (e: Element) => { const v = visRect(e); return v.width > 1 && v.height > 1 }
+
+    // (a) text truncated or clipped by its own box
+    for (const e of shown) {
+      const s = getComputedStyle(e)
+      if (!(['hidden', 'clip'].includes(s.overflowX) || ['hidden', 'clip'].includes(s.overflowY) || s.textOverflow === 'ellipsis')) continue
+      // Only elements that hold text of their own: a container's scroll extent
+      // includes deliberate slack (these sections clip to a 6px corner-mark
+      // bleed) while its text-bearing descendants are each checked here anyway.
+      if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim())) continue
+      const dw = e.scrollWidth - e.clientWidth, dh = e.scrollHeight - e.clientHeight
+      const t = (e.textContent || '').trim()
+      if (t && (dw > 1 || dh > 1)) out.push(`clipped ${name(e)} by ${dw}x${dh}px: ${JSON.stringify(t.slice(0, 40))}`)
+    }
+
+    const framed = shown.filter((e) => {
+      const s = getComputedStyle(e)
+      return ['Top', 'Right', 'Bottom', 'Left'].every((d) =>
+        num(s[('border' + d + 'Width') as any]) > 0 && alpha(s[('border' + d + 'Color') as any]) > 0.02)
+    })
+
+    // (b) content escaping its framed window
+    for (const f of framed) {
+      const fr = f.getBoundingClientRect()
+      for (const kid of [...f.querySelectorAll('*')] as HTMLElement[]) {
+        if (!onScreen(kid)) continue
+        const ks = getComputedStyle(kid)
+        if (ks.position === 'fixed' || ks.position === 'absolute') continue
+        const kr = visRect(kid)
+        const outX = Math.max(0, Math.round(kr.right - fr.right), Math.round(fr.left - kr.left))
+        const outY = Math.max(0, Math.round(kr.bottom - fr.bottom), Math.round(fr.top - kr.top))
+        if (outX > 2 || outY > 2) { out.push(`escapes ${name(f)}: ${name(kid)} by ${outX}x${outY}px`); break }
+      }
+    }
+
+    // (c) frames complete, and their registration crosses inside every clip
+    const REPLACED = ['INPUT', 'IMG', 'SELECT', 'TEXTAREA', 'VIDEO', 'CANVAS', 'IFRAME', 'BR', 'HR']
+    for (const f of framed) {
+      const s = getComputedStyle(f), fr = f.getBoundingClientRect()
+      const missing = ['Top', 'Right', 'Bottom', 'Left'].filter((d) =>
+        num(s[('border' + d + 'Width') as any]) < 0.5 || alpha(s[('border' + d + 'Color') as any]) < 0.03)
+      if (missing.length) out.push(`frame ${name(f)} missing border: ${missing.join(',')}`)
+      if (REPLACED.includes(f.tagName)) continue
+      const markLike = (pe: string) => {
+        const st = getComputedStyle(f, pe)
+        if (!st.content || st.content === 'none') return false
+        const w = parseFloat(st.width), h = parseFloat(st.height)
+        return w >= 6 && w <= 26 && h >= 6 && h <= 26
+      }
+      if (!(markLike('::before') || markLike('::after'))) continue
+      const c = clipOf(f), bleed = 6
+      const cut = [[fr.left, fr.top], [fr.right, fr.top], [fr.left, fr.bottom], [fr.right, fr.bottom]]
+        .filter(([x, y]) => x - bleed < c.l - 1 || x + bleed > c.r + 1 || y - bleed < c.t - 1 || y + bleed > c.b + 1).length
+      if (cut) out.push(`corner crosses clipped on ${name(f)}: ${cut}/4`)
+    }
+
+    // (c2) cards are transparent line drawings. Industry: "do not give cards or
+    // figures a surface fill -- they are line drawings (the solid accent primary
+    // button is the one deliberate exception)". A framed window may therefore
+    // paint nothing, or the ground itself; an overlay is exempt because a drawer
+    // or dialog must still occlude whatever sits behind it.
+    const groundRGB = (getComputedStyle(root).backgroundColor.match(/[\d.]+/g) || []).slice(0, 3).map(Number)
+    const OVERLAY = '.event-drawer, .agent-detail, .modal-card, .dialog, [role="dialog"], [aria-modal="true"], .menu, .dropdown, .popover, .toast'
+    for (const f of framed) {
+      if (f.closest(OVERLAY) || f.matches(OVERLAY)) continue
+      // Only windows. Industry's .tag is explicitly a tinted chip, and meter
+      // tracks and status pills are small framed objects of the same family --
+      // the "no surface fill" rule is about cards and panels.
+      const fr0 = f.getBoundingClientRect()
+      if (fr0.width < 200 || fr0.height < 72) continue
+      const bg = getComputedStyle(f).backgroundColor
+      // a translucent wash is a hover/selected state, not a surface fill
+      if (alpha(bg) < 0.2) continue
+      const rgb = (bg.match(/[\d.]+/g) || []).slice(0, 3).map(Number)
+      const isGround = rgb.length === 3 && groundRGB.length === 3 && rgb.every((v, i) => Math.abs(v - groundRGB[i]) <= 2)
+      if (!isGround) out.push(`card has a surface fill ${name(f)}: ${bg}`)
+    }
+
+    // (d) button grounds: the one solid accent fill, or a transparent object
+    const probe = document.createElement('span')
+    probe.style.cssText = 'position:absolute;left:-9999px;color:var(--accent)'
+    root.appendChild(probe)
+    const acc = (getComputedStyle(probe).color.match(/[\d.]+/g) || []).slice(0, 3).map(Number)
+    probe.remove()
+    const nearAcc = (c: number[], tol: number) => c.length === 3 && acc.length === 3 && c.every((v, i) => Math.abs(v - acc[i]) <= tol)
+    const navLike = (e: Element) => !!e.closest('nav, [role="tablist"], .side, .settings-tabs')
+      || e.getAttribute('role') === 'tab'
+      || /(^|[\s.-])(row|tab|nav-item|endpoint-nav-item)/.test((e.className || '').toString())
+    for (const b of shown) {
+      if (!(b.tagName === 'BUTTON' || b.getAttribute('role') === 'button')) continue
+      if (navLike(b) || !onScreen(b)) continue
+      const s = getComputedStyle(b), bg = s.backgroundColor, a = alpha(bg)
+      const rgb = (bg.match(/[\d.]+/g) || []).slice(0, 3).map(Number)
+      const solid = a > 0.9 && nearAcc(rgb, 26)
+      const tint = a <= 0.9 && nearAcc(rgb, 60)
+      if (!solid && !(a < 0.12 || tint)) out.push(`button ground ${name(b)}: ${bg} ${JSON.stringify((b.textContent || '').trim().slice(0, 20))}`)
+      if (num(s.borderTopLeftRadius) > 2 && s.borderTopLeftRadius !== '50%') out.push(`button rounded ${name(b)}: ${s.borderTopLeftRadius}`)
+    }
+
+    // (e) the fixed type scale, and (f) Lucide at 1.5
+    for (const e of shown) {
+      if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim())) continue
+      const px = Math.round(num(getComputedStyle(e).fontSize) * 10) / 10
+      if (!SCALE.includes(px)) out.push(`type off scale ${name(e)}: ${px}px ${JSON.stringify((e.textContent || '').trim().slice(0, 24))}`)
+    }
+    for (const svg of [...root.querySelectorAll('svg')]) {
+      if (!onScreen(svg)) continue
+      const n = parseFloat(getComputedStyle(svg).strokeWidth)
+      if (n && Math.abs(n - 1.5) > 0.01) out.push(`icon stroke ${n}`)
+    }
+    return [...new Set(out)]
+  }, SCALE)
+
+  for (const width of [1280, 1600]) {
+    test(`every route keeps its content, frames and grammar at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await enterConsole(page)
+      const problems: string[] = []
+      for (const route of ROUTES) {
+        const btn = page.getByRole('button', { name: new RegExp('^' + route, 'i') }).first()
+        if (await btn.count()) { await btn.click(); await page.waitForTimeout(400) }
+        await page.evaluate(() => document.fonts.ready)
+        expect(await page.locator('main.console *').count(),
+          `${route} rendered too little to audit`).toBeGreaterThan(80)
+        problems.push(...(await sweep(page)).map((p) => `[${route}] ${p}`))
+      }
+      expect(problems, `Industry grammar violations:\n  ${problems.join('\n  ')}`).toEqual([])
     })
   }
 })
