@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { stubShieldApi } from './shieldFixture'
 
 /* Conformance audit against the Industry design system (ui/src/App.css header).
  * These assertions read *computed* styles, so they fail if any rule anywhere in
@@ -27,17 +28,14 @@ const CANON = {
 
 const FORBIDDEN_FONTS = ['Manrope', 'DM Sans', 'Inter', 'Avenir', 'Helvetica']
 
-async function enterConsole(page: Page) {
-  await page.addInitScript(() => {
-    sessionStorage.setItem('shield-session', '1')
-    sessionStorage.setItem('shield-connection', JSON.stringify({
-      baseUrl: window.location.origin, tenant: 'tenant-a', token: 'test-token',
-    }))
-  })
-  await page.route('**/api/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
+async function enterConsole(page: Page, theme?: 'command-center' | 'light') {
+  await stubShieldApi(page, theme)
   await page.goto('/')
   await expect(page.locator('main.console')).toBeVisible()
+  // guard against a vacuous sweep: every assertion below quantifies over a set of
+  // elements, and an empty set satisfies all of them.
+  expect(await page.locator('main.console *').count(),
+    'console rendered too little to audit').toBeGreaterThan(100)
 }
 
 /** Resolved value of a custom property on the console element. */
@@ -181,49 +179,208 @@ test.describe('Industry design system conformance', () => {
     })
   }
 
-  /* Every route, not just the landing view: the drifted light palette lived in the
-     Agent drawer and the routing panes, which the default Posture view never shows. */
+  /* Every route, in both themes, against the populated control-plane fixture --
+     the drifted colour lived in the agent drawer, routing panes, event cards and
+     integration badges, which the default empty Posture view never renders. */
   const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Evidence', 'Configuration']
+  const THEMES = ['command-center', 'light'] as const
 
-  for (const route of ROUTES) {
-    test(`${route} conforms: square, tokenised, no neutral light fill`, async ({ page }) => {
-      await enterConsole(page)
-      if (route !== 'Posture') {
-        await page.getByRole('button', { name: route, exact: true }).first().click()
-      }
-      await page.waitForTimeout(250)
-      const report = await page.evaluate(() => {
-        const rounded: string[] = []
-        const pale: string[] = []
-        const badFont: string[] = []
-        for (const el of document.querySelectorAll('main.console *')) {
+  for (const theme of THEMES) {
+    for (const route of ROUTES) {
+      test(`${route} conforms on the ${theme} ground`, async ({ page }) => {
+        await enterConsole(page, theme)
+        if (route !== 'Posture') {
+          await page.getByRole('button', { name: route, exact: true }).first().click()
+          await page.waitForTimeout(300)
+        }
+        const report = await page.evaluate(() => {
+          const rounded: string[] = []
+          const pale: string[] = []
+          const badFont: string[] = []
+          const offPalette: string[] = []
+          const lowContrast: string[] = []
+
+          const parse = (v: string) => {
+            const m = /^rgba?\((\d+), (\d+), (\d+)(?:, ([0-9.]+))?\)$/.exec(v)
+            return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null
+          }
+          const lum = (c: { r: number; g: number; b: number }) => {
+            const f = [c.r, c.g, c.b].map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
+            return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+          }
+          const contrast = (x: { r: number; g: number; b: number }, y: { r: number; g: number; b: number }) => {
+            const [a, b] = [lum(x), lum(y)]
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+          }
+          const hueOf = (c: { r: number; g: number; b: number }) => {
+            const [r, g, b] = [c.r / 255, c.g / 255, c.b / 255]
+            const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min
+            if (d === 0) return -1
+            let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+            h *= 60; return h < 0 ? h + 360 : h
+          }
+          /** steel ~195-230, amber ~25-50, red ~0-20 or >350 */
+          const onPalette = (h: number) =>
+            h < 0 || (h >= 185 && h <= 235) || (h >= 20 && h <= 55) || h <= 15 || h >= 345
+
+          /** the first ancestor whose background is opaque enough to read text against */
+          const backdrop = (el: Element) => {
+            let n: Element | null = el
+            while (n) {
+              const c = parse(getComputedStyle(n).backgroundColor)
+              if (c && c.a >= 0.85) return c
+              n = n.parentElement
+            }
+            return parse(getComputedStyle(document.body).backgroundColor)
+          }
+          const hasText = (el: Element) =>
+            [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent || '').trim().length > 1)
+
+          for (const el of document.querySelectorAll('main.console *')) {
+            const cs = getComputedStyle(el)
+            const name = `${el.tagName.toLowerCase()}.${(el as HTMLElement).className}`.slice(0, 70)
+            if (cs.visibility === 'hidden' || cs.display === 'none' || cs.opacity === '0') continue
+
+            for (const r of [cs.borderTopLeftRadius, cs.borderTopRightRadius,
+                             cs.borderBottomLeftRadius, cs.borderBottomRightRadius]) {
+              if (r !== '0px' && !r.endsWith('%')) { rounded.push(`${name}: ${r}`); break }
+            }
+            for (const bad of ['Manrope', 'DM Sans', 'Inter', 'Avenir']) {
+              if (cs.fontFamily.includes(bad)) { badFont.push(`${name}: ${cs.fontFamily}`); break }
+            }
+
+            const bg = parse(cs.backgroundColor)
+            if (bg && bg.a >= 0.5) {
+              const chroma = Math.max(bg.r, bg.g, bg.b) - Math.min(bg.r, bg.g, bg.b)
+              // a neutral light fill on the dark ground is the white-panel defect
+              if (document.querySelector('main.console.theme-command-center')
+                  && (bg.r + bg.g + bg.b) / 3 > 140 && chroma < 26) pale.push(`${name}: ${cs.backgroundColor}`)
+              if (chroma > 24 && !onPalette(hueOf(bg))) offPalette.push(`${name} bg ${cs.backgroundColor}`)
+            }
+            const fg = parse(cs.color)
+            if (fg) {
+              const chroma = Math.max(fg.r, fg.g, fg.b) - Math.min(fg.r, fg.g, fg.b)
+              if (chroma > 24 && !onPalette(hueOf(fg))) offPalette.push(`${name} fg ${cs.color}`)
+              if (hasText(el) && fg.a >= 0.9) {
+                const under = backdrop(el)
+                if (under) {
+                  const size = parseFloat(cs.fontSize)
+                  const bold = (parseInt(cs.fontWeight, 10) || 400) >= 700
+                  const large = size >= 24 || (size >= 18.66 && bold)
+                  const need = large ? 3 : 4.5
+                  const got = contrast(fg, under)
+                  if (got < need) lowContrast.push(`${name}: ${got.toFixed(2)}:1 (needs ${need}) ${cs.color} on rgb(${under.r}, ${under.g}, ${under.b})`)
+                }
+              }
+            }
+          }
+          return {
+            rounded: [...new Set(rounded)], pale: [...new Set(pale)], badFont: [...new Set(badFont)],
+            offPalette: [...new Set(offPalette)], lowContrast: [...new Set(lowContrast)],
+            overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          }
+        })
+        expect(report.rounded, `rounded: ${report.rounded.slice(0, 8).join('; ')}`).toEqual([])
+        expect(report.badFont, `drifted fonts: ${report.badFont.slice(0, 8).join('; ')}`).toEqual([])
+        expect(report.pale, `neutral light fills: ${report.pale.slice(0, 8).join('; ')}`).toEqual([])
+        expect(report.offPalette, `colour outside steel/amber/red: ${report.offPalette.slice(0, 8).join('; ')}`).toEqual([])
+        expect(report.lowContrast, `text below AA: ${report.lowContrast.slice(0, 8).join('; ')}`).toEqual([])
+        expect(report.overflow).toBeLessThanOrEqual(1)
+      })
+    }
+  }
+
+
+  /* Overlays. The agent drawer and the expanded event detail were the surfaces
+     carrying the hardcoded light palette, and neither renders until opened, so a
+     route sweep alone never looks at them. */
+  for (const theme of THEMES) {
+    test(`the agent drawer and event detail conform on the ${theme} ground`, async ({ page }) => {
+      await enterConsole(page, theme)
+
+      await page.getByRole('button', { name: 'Agent', exact: true }).first().click()
+      const card = page.locator('button.agent-card').first()
+      await expect(card, 'the fixture should render at least one agent card').toBeVisible()
+      await card.click()
+      const drawer = page.locator('.agent-detail-drawer')
+      await expect(drawer).toBeVisible()
+
+      const audit = async (scope: string) => page.evaluate((sel) => {
+        const root = document.querySelector(sel)
+        if (!root) return null
+        const parse = (v: string) => {
+          const m = /^rgba?\((\d+), (\d+), (\d+)(?:, ([0-9.]+))?\)$/.exec(v)
+          return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null
+        }
+        const lum = (c: { r: number; g: number; b: number }) => {
+          const f = [c.r, c.g, c.b].map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
+          return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+        }
+        const backdrop = (el: Element) => {
+          let n: Element | null = el
+          while (n) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a >= 0.85) return c; n = n.parentElement }
+          return parse(getComputedStyle(document.body).backgroundColor)
+        }
+        const dark = !!document.querySelector('main.console.theme-command-center')
+        const rounded: string[] = [], pale: string[] = [], low: string[] = []
+        const els = [root, ...root.querySelectorAll('*')]
+        for (const el of els) {
           const cs = getComputedStyle(el)
-          const name = `${el.tagName.toLowerCase()}.${(el as HTMLElement).className}`
-          for (const r of [cs.borderTopLeftRadius, cs.borderTopRightRadius,
-                           cs.borderBottomLeftRadius, cs.borderBottomRightRadius]) {
+          if (cs.display === 'none' || cs.visibility === 'hidden') continue
+          const name = `${el.tagName.toLowerCase()}.${(el as HTMLElement).className}`.slice(0, 60)
+          for (const r of [cs.borderTopLeftRadius, cs.borderBottomRightRadius]) {
             if (r !== '0px' && !r.endsWith('%')) { rounded.push(`${name}: ${r}`); break }
           }
-          const m = /^rgba?\((\d+), (\d+), (\d+)(?:, ([0-9.]+))?\)$/.exec(cs.backgroundColor)
-          if (m) {
-            const [r, g, b] = [+m[1], +m[2], +m[3]]
-            const a = m[4] === undefined ? 1 : +m[4]
-            const chroma = Math.max(r, g, b) - Math.min(r, g, b)
-            if (a >= 0.5 && (r + g + b) / 3 > 140 && chroma < 26) pale.push(`${name}: ${cs.backgroundColor}`)
+          const bg = parse(cs.backgroundColor)
+          if (dark && bg && bg.a >= 0.5) {
+            const chroma = Math.max(bg.r, bg.g, bg.b) - Math.min(bg.r, bg.g, bg.b)
+            if ((bg.r + bg.g + bg.b) / 3 > 140 && chroma < 26) pale.push(`${name}: ${cs.backgroundColor}`)
           }
-          for (const bad of ['Manrope', 'DM Sans', 'Inter', 'Avenir']) {
-            if (cs.fontFamily.includes(bad)) { badFont.push(`${name}: ${cs.fontFamily}`); break }
+          const fg = parse(cs.color)
+          const text = [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent || '').trim().length > 1)
+          if (fg && text) {
+            const under = backdrop(el)
+            if (under) {
+              const size = parseFloat(cs.fontSize)
+              const need = size >= 24 || (size >= 18.66 && (parseInt(cs.fontWeight, 10) || 400) >= 700) ? 3 : 4.5
+              const la = lum(fg), lb = lum(under)
+              const got = (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+              if (got < need) low.push(`${name}: ${got.toFixed(2)}:1 ${cs.color} on rgb(${under.r}, ${under.g}, ${under.b})`)
+            }
           }
         }
-        const overflow = document.documentElement.scrollWidth - document.documentElement.clientWidth
-        return {
-          rounded: [...new Set(rounded)], pale: [...new Set(pale)],
-          badFont: [...new Set(badFont)], overflow,
+        return { count: els.length, rounded: [...new Set(rounded)], pale: [...new Set(pale)], low: [...new Set(low)] }
+      }, scope)
+
+      const d = await audit('.agent-detail-drawer')
+      expect(d, 'drawer not found').not.toBeNull()
+      expect(d!.count, 'drawer rendered too little to audit').toBeGreaterThan(10)
+      expect(d!.rounded, `drawer rounded: ${d!.rounded.slice(0, 6).join('; ')}`).toEqual([])
+      expect(d!.pale, `drawer light fills: ${d!.pale.slice(0, 6).join('; ')}`).toEqual([])
+      expect(d!.low, `drawer text below AA: ${d!.low.slice(0, 6).join('; ')}`).toEqual([])
+
+      // and the expanded event detail on Decisions > Event stream.
+      // The drawer is aria-modal and its backdrop swallows clicks, so close it first.
+      const close = page.locator('.agent-detail-close').first()
+      if (await close.count()) await close.click()
+      else await page.keyboard.press('Escape')
+      await expect(drawer).toBeHidden()
+      await page.getByRole('button', { name: 'Decisions', exact: true }).first().click()
+      const tab = page.getByRole('tab', { name: 'Event stream' })
+      if (await tab.count()) {
+        await tab.click()
+        const row = page.locator('.event-row, .event-card').first()
+        if (await row.count()) {
+          await row.click()
+          await page.waitForTimeout(200)
+          const e = await audit('.event-stream-container')
+          if (e) {
+            expect(e.rounded, `event detail rounded: ${e.rounded.slice(0, 6).join('; ')}`).toEqual([])
+            expect(e.pale, `event detail light fills: ${e.pale.slice(0, 6).join('; ')}`).toEqual([])
+            expect(e.low, `event detail text below AA: ${e.low.slice(0, 6).join('; ')}`).toEqual([])
+          }
         }
-      })
-      expect(report.rounded, `rounded: ${report.rounded.slice(0, 10).join('; ')}`).toEqual([])
-      expect(report.pale, `neutral light fills: ${report.pale.slice(0, 10).join('; ')}`).toEqual([])
-      expect(report.badFont, `drifted fonts: ${report.badFont.slice(0, 10).join('; ')}`).toEqual([])
-      expect(report.overflow).toBeLessThanOrEqual(1)
+      }
     })
   }
 

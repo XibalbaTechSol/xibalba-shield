@@ -1,53 +1,55 @@
 /* Global reset and element base for the Shield console.
  *
- * App.css owns the design tokens and every component. This file deliberately
- * stays a reset plus the Industry element base (type scale, links, focus,
- * selection, disabled) so it cannot fight the component layer: it used to
- * restyle `button`, `input` and `table` globally in a blue/Inter palette that
- * had drifted off the design system, which leaked into any control App.css
- * did not fully override.
+ * App.css owns the design tokens and every component. This file keeps the
+ * structural rules the app has always relied on -- the universal reset, and
+ * the base geometry of `button`, the form controls and `table` -- and takes
+ * every colour, font and radius from the tokens instead of the blue/Inter
+ * glass palette it used to carry, which had drifted off the design system and
+ * leaked into any control App.css did not fully override.
  *
- * Type scale, headings and interaction states below are Industry's own.
+ * Structure here is deliberately unchanged from the pre-audit file; only
+ * colour, type and radius move. The one exception is the heading scale, which
+ * is Industry's and is part of what this audit is correcting.
  */
 
-*,
-*::before,
-*::after {
+* {
   box-sizing: border-box;
-}
-
-html,
-body {
   margin: 0;
   padding: 0;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
 }
 
-body {
-  background-color: var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.55;
-  font-weight: 400;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+a {
+  font-weight: 500;
+  color: var(--accent-text);
+  text-decoration: inherit;
+  text-underline-offset: 3px;
+  transition: color 0.25s;
 }
 
-/* Industry's fixed heading scale — Barlow Condensed, tight leading.
+a:hover {
+  color: var(--accent-hover);
+}
+
+/* Industry's fixed heading scale -- Barlow Condensed, tight leading.
    Components that set their own size keep it; this is the base. */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  margin: 0 0 var(--space-2, 6.8px);
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text);
   font-family: var(--font-heading);
   font-weight: var(--heading-weight);
   line-height: 1.12;
   letter-spacing: -0.015em;
-  color: var(--text);
+  margin-bottom: 0.5rem;
 }
 
 h1 { font-size: 42px; }
@@ -55,86 +57,105 @@ h2 { font-size: 32px; }
 h3 { font-size: 25px; }
 h4 { font-size: 20px; }
 h5 { font-size: 16px; }
-h6 {
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+img { display: block; max-width: 100%; }
+
+code, kbd, pre, samp { font-family: var(--font-mono); }
+
+/* Form elements */
+input, select, textarea {
+  background: var(--panel-elevated);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 0.75rem 1rem;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
 }
 
-p { margin: 0 0 10.2px; }
-
-a {
-  color: var(--accent);
-  text-decoration: inherit;
-  text-underline-offset: 3px;
-}
-
-a:hover {
-  color: var(--accent-hover);
-}
-
-img {
-  display: block;
-  max-width: 100%;
-}
-
-code,
-kbd,
-pre,
-samp {
-  font-family: var(--font-mono);
-}
-
-button,
-input,
-select,
-textarea {
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 button {
+  background: var(--accent-fill);
+  color: var(--ink-on-accent);
+  border: 1px solid var(--accent-fill);
+  padding: 0.75rem 1.5rem;
+  border-radius: 0;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: var(--heading-weight);
   cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-/* Themed interaction states — never the browser defaults. */
-:focus {
-  outline: none;
+button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button:active { background: var(--accent-pressed); border-color: var(--accent-pressed); }
+
+button.secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
 }
+
+button.secondary:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: var(--line-hover);
+}
+
+/* Themed interaction states -- never the browser defaults. */
+:focus { outline: none; }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-::selection {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+:disabled, [aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+
+/* Layout utilities still referenced by markup */
+.container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+/* Table styles */
+table { width: 100%; border-collapse: collapse; text-align: left; }
+
+th, td { padding: 1rem; border-bottom: 1px solid var(--line-faint); }
+
+th {
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
 }
 
-:disabled,
-[aria-disabled='true'] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
+tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
 
-/* The one utility still used in markup: a square status label.
-   `.badge` carries `green` / `amber` / `red` modifiers from SettingsView. */
+/* A square status label. `.badge` carries `green` / `amber` / `red`
+   modifiers from SettingsView; the mono palette maps "green" to the accent. */
 .badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: 0.25rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0;
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .badge.green {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .badge.amber {
@@ -147,4 +168,20 @@ button {
   border-color: color-mix(in srgb, var(--red) 35%, transparent);
   background: color-mix(in srgb, var(--red) 15%, transparent);
   color: var(--red);
+}
+
+.hero-logo {
+  width: clamp(180px, 26vw, 320px);
+  height: clamp(180px, 26vw, 320px);
+  border-radius: 0;
+  object-fit: cover;
+  margin-bottom: 24px;
+  display: block;
+}
+
+/* Kept verbatim from the pre-audit file: this overrides App.css's 32px brand
+   mark. It is a geometry rule, not a colour one, so this audit leaves it. */
+.brand img {
+  width: 48px !important;
+  height: 48px !important;
 }
