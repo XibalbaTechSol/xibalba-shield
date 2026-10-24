@@ -457,7 +457,15 @@ test.describe('Industry grammar in the rendered console', () => {
       (e.className || '').toString().trim().split(/\s+/).filter(Boolean).slice(0, 2).join('.')
     const shown = all.filter((e) => {
       const s = getComputedStyle(e), r = e.getBoundingClientRect()
-      return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.01 && r.width > 0 && r.height > 0
+      if (!(s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.01 && r.width > 0 && r.height > 0)) return false
+      // display/visibility/opacity do not describe a closed <details>: its rows
+      // keep their laid-out boxes and the UA simply does not paint them.
+      if (typeof e.checkVisibility === 'function'
+        && !e.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true })) return false
+      for (let p = e.parentElement; p; p = p.parentElement) {
+        if (p.tagName === 'DETAILS' && !(p as HTMLDetailsElement).open && !e.closest('summary')) return false
+      }
+      return true
     })
     const clipOf = (e: Element) => {
       let r = { l: 0, t: 0, r: innerWidth, b: innerHeight }
@@ -469,6 +477,23 @@ test.describe('Industry grammar in the rendered console', () => {
       }
       return r
     }
+    /* Scrolling is not clipping: a window below the fold is reachable, so the
+       vertical viewport bound is dropped here. The horizontal bounds stay --
+       nothing scrolls sideways to reveal a cross past the left or right edge. */
+    const clipNoVp = (e: Element) => {
+      let r = { l: 0, t: -1e7, r: innerWidth, b: 1e7 }
+      for (let p = e.parentElement; p; p = p.parentElement) {
+        const s = getComputedStyle(p)
+        if (s.overflowX === 'visible' && s.overflowY === 'visible') continue
+        const pr = p.getBoundingClientRect()
+        r = { l: Math.max(r.l, pr.left), t: Math.max(r.t, pr.top), r: Math.min(r.r, pr.right), b: Math.min(r.b, pr.bottom) }
+      }
+      return r
+    }
+    const MARKED = ['.metric', '.panel', '.resource', '.settings-card', '.hybrid-architecture-card',
+      '.outbox-status-card', '.policy-bundle-card', '.policy-deploy-panel', '.integration-card',
+      '.event-stream-card', '.api-explorer-layout', '.agent-detail-section', '.agent-toolbar',
+      '.agent-grid'].join(',')
     const visRect = (e: Element) => {
       const b = e.getBoundingClientRect(), c = clipOf(e)
       const l = Math.max(b.left, c.l), t = Math.max(b.top, c.t)
@@ -488,6 +513,52 @@ test.describe('Industry grammar in the rendered console', () => {
       const dw = e.scrollWidth - e.clientWidth, dh = e.scrollHeight - e.clientHeight
       const t = (e.textContent || '').trim()
       if (t && (dw > 1 || dh > 1)) out.push(`clipped ${name(e)} by ${dw}x${dh}px: ${JSON.stringify(t.slice(0, 40))}`)
+    }
+
+    // (a2) nothing is permanently out of reach sideways. `auto`/`scroll` is a
+    // deliberate sideways scroller; `hidden`/`clip` puts content beyond reach.
+    for (const e of [document.documentElement, ...shown]) {
+      if (e !== document.documentElement && !/hidden|clip/.test(getComputedStyle(e).overflowX)) continue
+      // a form control scrolls its own value natively; the caret still reaches it
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.tagName)) continue
+      const over = e.scrollWidth - e.clientWidth
+      if (over > 1) out.push(`${name(e)} overflows horizontally by ${over}px`)
+    }
+
+    /* (a3) two laid-out things sitting on top of each other.
+
+       Only pairs in the SAME stacking layer are compared. Paint order alone
+       cannot tell a deliberate occlusion (a drawer over the console behind it)
+       from a real collision, but the z-index layer can: things meant to cover
+       each other are put in different layers on purpose, and two boxes that
+       collide inside one layer are a layout fault. Containment is skipped for
+       the same reason -- a child is supposed to sit on its parent.
+
+       Rects are the CLIPPED ones, so a row scrolled out of a pane does not read
+       as colliding with whatever is painted where it would have been. */
+    const layer = (e: Element) => {
+      for (let p: Element | null = e; p; p = p.parentElement) {
+        const st = getComputedStyle(p)
+        if (st.position !== 'static' && st.zIndex !== 'auto') {
+          const z = parseInt(st.zIndex, 10)
+          if (Number.isFinite(z)) return z
+        }
+      }
+      return 0
+    }
+    const leaves = shown.filter((e) => ['BUTTON', 'A', 'INPUT', 'SELECT'].includes(e.tagName)
+      || [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim()))
+    for (let i = 0; i < leaves.length; i++) {
+      for (let j = i + 1; j < leaves.length; j++) {
+        const a = leaves[i], b = leaves[j]
+        if (a.contains(b) || b.contains(a)) continue
+        if (layer(a) !== layer(b)) continue
+        const ra = visRect(a), rb = visRect(b)
+        if (ra.width < 1 || ra.height < 1 || rb.width < 1 || rb.height < 1) continue
+        const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left)
+        const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top)
+        if (ox > 2 && oy > 2) out.push(`${name(a)} overlaps ${name(b)} by ${Math.round(ox)}x${Math.round(oy)}px`)
+      }
     }
 
     const framed = shown.filter((e) => {
@@ -518,14 +589,30 @@ test.describe('Industry grammar in the rendered console', () => {
         num(s[('border' + d + 'Width') as any]) < 0.5 || alpha(s[('border' + d + 'Color') as any]) < 0.03)
       if (missing.length) out.push(`frame ${name(f)} missing border: ${missing.join(',')}`)
       if (REPLACED.includes(f.tagName)) continue
-      const markLike = (pe: string) => {
+      /* A cross is drawn as eight gradient arms on ONE pseudo inset outside the
+         window -- the only way a mark can straddle a corner, since a background
+         is clipped to the border box. Identifying it by the pseudo's SIZE (the
+         shape of the four-corner-boxes technique) silently matched nothing once
+         the arms moved onto an inset pseudo, and this whole check passed over
+         every panel without looking at one. */
+      const marks = (pe: string) => {
         const st = getComputedStyle(f, pe)
-        if (!st.content || st.content === 'none') return false
-        const w = parseFloat(st.width), h = parseFloat(st.height)
-        return w >= 6 && w <= 26 && h >= 6 && h <= 26
+        if (!st.content || st.content === 'none') return null
+        const arms = (st.backgroundImage.match(/gradient/g) || []).length
+        if (arms < 8) return null
+        const inset = -parseFloat(st.top)
+        return Number.isFinite(inset) ? { bleed: inset } : null
       }
-      if (!(markLike('::before') || markLike('::after'))) continue
-      const c = clipOf(f), bleed = 6
+      const m = marks('::before') || marks('::after')
+      if (!m) {
+        // Only the window primitives are marked: a tag, a meter track and a
+        // status pill all carry a border and none of them carries a cross.
+        if (f.matches(MARKED) && fr.width >= 200 && fr.height >= 72)
+          out.push(`no registration cross on ${name(f)}`)
+        continue
+      }
+      if (m.bleed < 6) out.push(`cross on ${name(f)} bleeds only ${m.bleed}px; Industry offsets the corner -6px`)
+      const c = clipNoVp(f), bleed = m.bleed
       const cut = [[fr.left, fr.top], [fr.right, fr.top], [fr.left, fr.bottom], [fr.right, fr.bottom]]
         .filter(([x, y]) => x - bleed < c.l - 1 || x + bleed > c.r + 1 || y - bleed < c.t - 1 || y + bleed > c.b + 1).length
       if (cut) out.push(`corner crosses clipped on ${name(f)}: ${cut}/4`)
@@ -588,14 +675,23 @@ test.describe('Industry grammar in the rendered console', () => {
     return [...new Set(out)]
   }, SCALE)
 
-  for (const width of [1280, 1600]) {
+  for (const width of [390, 1280, 1600]) {
     test(`every route keeps its content, frames and grammar at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
       await enterConsole(page)
       const problems: string[] = []
       for (const route of ROUTES) {
-        const btn = page.getByRole('button', { name: new RegExp('^' + route, 'i') }).first()
-        if (await btn.count()) { await btn.click(); await page.waitForTimeout(400) }
+        // At phone width the rail is behind the menu toggle and the route
+        // buttons are not in the document, so without opening it first every
+        // route measures the same Posture screen over and over.
+        let btn = page.getByRole('button', { name: new RegExp('^' + route, 'i') }).first()
+        if (!(await btn.count())) {
+          const menu = page.getByRole('button', { name: /toggle navigation menu/i }).first()
+          if (await menu.count()) { await menu.click(); await page.waitForTimeout(300) }
+          btn = page.getByRole('button', { name: new RegExp('^' + route, 'i') }).first()
+        }
+        expect(await btn.count(), `route ${route} unreachable at ${width}px`).toBeGreaterThan(0)
+        await btn.click(); await page.waitForTimeout(400)
         await page.evaluate(() => document.fonts.ready)
         expect(await page.locator('main.console *').count(),
           `${route} rendered too little to audit`).toBeGreaterThan(80)

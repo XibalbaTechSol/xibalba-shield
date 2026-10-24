@@ -110,8 +110,6 @@
   color-scheme: dark;
 }
 
-/* ── Industry's own light ground. Role tokens only; ramps are shared. ──── */
-
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -1823,8 +1821,8 @@ h1, h2, h3, h4, b {
 .pipeline-health-rail svg { flex: 0 0 auto; color: var(--accent-text); }
 .pipeline-health-rail span { display: grid; min-width: 0; gap: 3px; }
 .pipeline-health-rail small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
-.pipeline-health-rail strong { overflow: hidden; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.pipeline-table { border: 1px solid var(--line); border-radius: var(--radius-md); overflow-x: auto; background: var(--panel); }
+.pipeline-health-rail strong { color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.pipeline-table { border: 1px solid var(--line); border-radius: 0; overflow-x: auto; background: transparent; }
 .pipeline-table-head,.pipeline-row { display: grid; grid-template-columns: 1.05fr 1.45fr .75fr .8fr .65fr 1fr; gap: 14px; align-items: center; min-width: 880px; padding: 12px 16px; }
 .pipeline-table-head { background: var(--panel-elevated); border-bottom: 1px solid var(--line); color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .pipeline-row { border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
@@ -4085,9 +4083,12 @@ h1, h2, h3, h4, b {
   text-align: center;
   padding: 48px 24px;
   color: var(--muted);
-  background: var(--panel);
+  /* an empty state is still a card, and cards are line drawings. This one is
+     only rendered when the decision stream has nothing in it, so it escaped
+     the first pass entirely -- the backend had events then and none now. */
+  background: transparent;
   border: 1px dashed var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4654,8 +4655,17 @@ h1, h2, h3, h4, b {
 
 .dev-auth-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.6fr;
+  /* a bare `fr` track still has a min-content floor, so the API token -- one
+     unbreakable string -- held the third column open at 357px inside a 262px
+     box and pushed the section off the side of a phone. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr);
   gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .dev-auth-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .auth-prop {
@@ -4689,9 +4699,10 @@ h1, h2, h3, h4, b {
 
 .token-field code {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  /* the value here is already masked, so there is no secret in letting it
+     wrap -- and an ellipsis on a bearer token hides how much of it there is */
+  overflow-wrap: anywhere;
 }
 
 .icon-chip-btn {
@@ -4718,8 +4729,12 @@ h1, h2, h3, h4, b {
   gap: 18px;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  /* The radius is 0 under Industry, so there is no rounded corner left for
+     `overflow: hidden` to clip the grid into -- and while it was there it cut
+     this window's own registration crosses off and pushed its scroll width 6px
+     past its client width, since a pseudo that bleeds outside still counts as
+     content to a scroll container. */
+  border-radius: 0;
 }
 
 .api-endpoints-nav {
@@ -6423,33 +6438,19 @@ h1, h2, h3, h4, b {
 .console.theme-command-center h2 { font-size: 32px; }
 .console.theme-command-center h3 { font-size: 25px; }
 
-.console.theme-command-center .metric,
-.console.theme-command-center .panel,
-.console.theme-command-center .resource,
-.console.theme-command-center .settings-card,
-.console.theme-command-center .hybrid-architecture-card,
-.console.theme-command-center .outbox-status-card,
-.console.theme-command-center .policy-bundle-card,
-.console.theme-command-center .policy-deploy-panel,
-.console.theme-command-center .integration-card,
-.console.theme-command-center .event-stream-card,
-.console.theme-command-center .api-explorer-layout,
-.console.theme-command-center .agent-detail-section {
-  background-image:
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted));
-  background-repeat: no-repeat;
-  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
-  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
-}
-
 .console.theme-command-center {
   --frame-line: color-mix(in srgb, var(--neutral-900) 28%, transparent);
   --frame-tick: rgba(171, 181, 188, .72);
 }
 
+/* Industry's registration cross: `.blueprint > .corner` is an 11px "+" offset
+   -6px, so each arm straddles the corner with 6px outside the window and 5px
+   inside. Painting the arms as the element's OWN background cannot do that --
+   a background is clipped to the border box, so the marks came out as L
+   brackets tucked inside each corner, which is a different mark from the one
+   Cortex and the spec draw. They are drawn on a pseudo-element instead, inset
+   -6px, which is what lets them cross the corner. Eight gradient layers rather
+   than four corner boxes: no extra elements, same rendered result. */
 .console.theme-command-center .metric,
 .console.theme-command-center .panel,
 .console.theme-command-center .resource,
@@ -6462,13 +6463,37 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .event-stream-card,
 .console.theme-command-center .api-explorer-layout,
 .console.theme-command-center .agent-detail-section {
+  position: relative;
   border-color: var(--frame-line);
+}
+.console.theme-command-center .metric::before,
+.console.theme-command-center .panel::before,
+.console.theme-command-center .resource::before,
+.console.theme-command-center .settings-card::before,
+.console.theme-command-center .hybrid-architecture-card::before,
+.console.theme-command-center .outbox-status-card::before,
+.console.theme-command-center .policy-bundle-card::before,
+.console.theme-command-center .policy-deploy-panel::before,
+.console.theme-command-center .integration-card::before,
+.console.theme-command-center .event-stream-card:not(.event-ledger-row)::before,
+.console.theme-command-center .api-explorer-layout::before,
+.console.theme-command-center .agent-detail-section::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  pointer-events: none;
+  background-repeat: no-repeat;
   background-image:
     linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
     linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick));
-  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px;
+  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
+  background-position:
+    top 6px left 0, top 0 left 6px,
+    top 6px right 0, top 0 right 6px,
+    bottom 6px left 0, bottom 0 left 6px,
+    bottom 6px right 0, bottom 0 right 6px;
 }
 
 .agent-workspace {
@@ -6497,7 +6522,8 @@ h1, h2, h3, h4, b {
   margin: 0;
   padding: 14px 18px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  /* a framed toolbar is a window, and windows are line drawings */
+  background: transparent;
 }
 
 .agent-workspace > .hybrid-architecture-card,
@@ -6514,15 +6540,27 @@ h1, h2, h3, h4, b {
 
 .agent-workspace > .agent-toolbar,
 .agent-workspace > .agent-grid {
+  position: relative;
   border-color: var(--frame-line, var(--line));
+}
+.agent-workspace > .agent-toolbar::before,
+.agent-workspace > .agent-grid::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  pointer-events: none;
+  background-repeat: no-repeat;
   background-image:
     linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))),
     linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))),
     linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))),
     linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted))), linear-gradient(var(--frame-tick, var(--muted)), var(--frame-tick, var(--muted)));
-  background-repeat: no-repeat;
-  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px;
-  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
+  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
+  background-position:
+    top 6px left 0, top 0 left 6px,
+    top 6px right 0, top 0 right 6px,
+    bottom 6px left 0, bottom 0 left 6px,
+    bottom 6px right 0, bottom 0 right 6px;
 }
 
 .containment-view {
@@ -9932,3 +9970,98 @@ h1, h2, h3, h4, b {
   max-width: 100%;
 }
 
+
+/* ── Industry grammar: navigation ──────────────────────────────────
+   Industry sizes a nav link at 14px (`.nav a`) and the wordmark at 18px
+   (`.nav-brand`). The rail's labels carried no size of their own and took the
+   body's, landing on 16px here and 18px in Cortex -- a legal step in both
+   cases, but not the same one, and not the one Industry names. Stated
+   explicitly so the two consoles' rails read alike. */
+.console.theme-command-center .side nav button span {
+  font-size: 14px;
+}
+
+/* ── Industry grammar: the ledger row's registration cross ────────────────
+   An event ledger row is an .event-stream-card, so it takes the window frame
+   and its crosses -- but its own ::before is already the 3px status stripe
+   that carries the decision colour, and one element has only one ::before.
+   The cross moves to ::after there. Without this the 50 rows on Decisions
+   render with a frame and no marks at all. */
+.console.theme-command-center .event-stream-card.event-ledger-row::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick));
+  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
+  background-position:
+    top 6px left 0, top 0 left 6px,
+    top 6px right 0, top 0 right 6px,
+    bottom 6px left 0, bottom 0 left 6px,
+    bottom 6px right 0, bottom 0 right 6px;
+}
+
+/* ── Industry grammar: the console at phone width ──────────────────────────
+   These were invisible until the audit could actually reach the routes at
+   390px. The rail is behind the menu toggle there, so the route buttons are
+   not in the document, and a sweep that silently skipped the click measured
+   the Posture screen six times and called all six clean.
+
+   An identifier is information, not decoration: a rule name, a device id and
+   a decision subject were each truncated to an ellipsis rather than wrapped,
+   and a truncated identifier cannot be read, copied or searched for. */
+.console.theme-command-center .rule-name,
+.console.theme-command-center .subject-target {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* A flex or grid item's default min-width is auto, which is "as wide as my
+   content" -- so one unbreakable string holds the whole section open and
+   pushes it past the viewport. These two sections ran 25px and 75px wide. */
+.console.theme-command-center .agent-unified-section,
+.console.theme-command-center .configuration-section,
+.console.theme-command-center .agent-unified-section > *,
+.console.theme-command-center .configuration-section > * {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .console.theme-command-center .agent-unified-section,
+  .console.theme-command-center .configuration-section {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* The API explorer is a 260px endpoint list beside the console. At phone width
+   those two columns do not fit, and the console ran 209px past the section --
+   previously hidden because the layout clipped it, which also cut off its own
+   registration crosses. It stacks instead. */
+@media (max-width: 640px) {
+  .console.theme-command-center .api-explorer-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .console.theme-command-center .api-explorer-layout > * {
+    min-width: 0;
+  }
+}
+
+/* Four health figures side by side give each about 90px on a phone, which
+   truncated "No delivery configured" to an ellipsis. The rail wraps to two
+   columns there and the values wrap rather than being cut. */
+@media (max-width: 640px) {
+  .console.theme-command-center .pipeline-health-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .console.theme-command-center .pipeline-health-rail > div:nth-child(2n) {
+    border-right: 0;
+  }
+}
