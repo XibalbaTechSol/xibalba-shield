@@ -215,6 +215,8 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
     data.summary?.device_count ?? data.devices.filter((d) => d.status !== 'attention').length
 
   const openView = (id) => {
+    // a new page starts at its top, as in Cortex; the previous page's scroll position is not its
+    if (id !== view) window.scrollTo({ top: 0 })
     setView(id)
     setMenu(false)
   }
