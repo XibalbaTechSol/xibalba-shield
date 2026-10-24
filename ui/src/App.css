@@ -1510,14 +1510,30 @@ h1, h2, h3, h4, b {
   --red: var(--status-conflict);
   --red-soft: var(--status-conflict-soft);
   grid-template-columns: 1fr;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: 'Barlow', var(--font-body), sans-serif;
 }
 
 .console.theme-command-center .side { display: none; }
-.console.theme-command-center .main { width: 100%; }
+.console.theme-command-center .main {
+  width: 100%;
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 .console.theme-command-center .top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  flex-shrink: 0;
   min-height: 122px;
   height: auto;
   padding: 18px clamp(18px, 4vw, 58px) 0;
@@ -6373,7 +6389,7 @@ h1, h2, h3, h4, b {
   height: 28px;
   flex: 0 0 auto;
   background: var(--green);
-  color: var(--bg);
+  color: var(--ink-on-accent, #102027);
   font-size: 12px;
   font-weight: 600;
 }
@@ -7246,12 +7262,16 @@ h1, h2, h3, h4, b {
 .console .status-badge,
 .console .live-status-pill,
 .console .policy-active-pill,
-.console .form-message,
 .console .save-feedback-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   line-height: 1;
+}
+
+.console .form-message {
+  display: block;
+  line-height: 1.45;
 }
 
 .console input[type='checkbox'] {
@@ -9135,46 +9155,134 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center :is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource
-):not(:is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource,
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-  ) *)::before {
+  .metric,
+  .panel,
+  .resource,
+  .settings-card,
+  .action-form,
+  .resource-card,
+  .agent-card,
+  .responder-card,
+  .responder-panel,
+  .policy-bundle-card,
+  .policy-deploy-panel,
+  .approval-panel,
+  .transaction-result,
+  .integration-card,
+  .network-card,
+  .opa-card,
+  .developer-view,
+  .api-explorer-layout,
+  .event-stream-toolbar,
+  .event-inline-json,
+  .audit-event,
+  .pipeline-table,
+  .response-pane,
+  .response-json-box,
+  .code-snippets-section,
+  .opa-source-code,
+  .report-preview,
+  .body-editor,
+  .policy-rules-summary,
+  .agent-reasoning-callout,
+  .settings-readout,
+  .toggle-item,
+  .hybrid-architecture-card,
+  .hybrid-pair,
+  .hybrid-detail-panel,
+  .outbox-status-card,
+  .routing-node,
+  .memory-result,
+  .agent-fact,
+  .device-detail-summary,
+  .theme-choice,
+  .endpoint-item,
+  .sensor,
+  .contract-card,
+  .catalog-card,
+  .signal-routing-map,
+  .pipeline-health-rail,
+  .telemetry-chart,
+  .evidence-reference-metrics,
+  .evidence-reference-grid > .resource,
+  .feature-card,
+  .agent-security-details,
+  .hero-art,
+  .mermaid-frame,
+  .reasoning-hero,
+  .avatar-preference-section,
+  .event-cards-stream,
+  .metadata-rail > b):not(:is(
+  .metric,
+  .panel,
+  .resource,
+  .settings-card,
+  .action-form,
+  .resource-card,
+  .agent-card,
+  .responder-card,
+  .responder-panel,
+  .policy-bundle-card,
+  .policy-deploy-panel,
+  .approval-panel,
+  .transaction-result,
+  .integration-card,
+  .network-card,
+  .opa-card,
+  .developer-view,
+  .api-explorer-layout,
+  .event-stream-toolbar,
+  .event-inline-json,
+  .audit-event,
+  .pipeline-table,
+  .response-pane,
+  .response-json-box,
+  .code-snippets-section,
+  .opa-source-code,
+  .report-preview,
+  .body-editor,
+  .policy-rules-summary,
+  .agent-reasoning-callout,
+  .settings-readout,
+  .toggle-item,
+  .hybrid-architecture-card,
+  .hybrid-pair,
+  .hybrid-detail-panel,
+  .outbox-status-card,
+  .routing-node,
+  .memory-result,
+  .agent-fact,
+  .device-detail-summary,
+  .theme-choice,
+  .endpoint-item,
+  .sensor,
+  .contract-card,
+  .catalog-card,
+  .signal-routing-map,
+  .pipeline-health-rail,
+  .telemetry-chart,
+  .evidence-reference-metrics,
+  .evidence-reference-grid > .resource,
+  .policy-enforcement-panel,
+  .posture-runtime-panel,
+  .readiness-panel,
+  .live-telemetry-panel,
+  .hermes-hero-card,
+  .guardrails-panel,
+  .change-queue-card,
+  .appearance-card,
+  .operator-panel,
+  .routing-section,
+  .event-detail-panel,
+  .modal-card,
+  .feature-card,
+  .agent-security-details,
+  .hero-art,
+  .mermaid-frame,
+  .reasoning-hero,
+  .avatar-preference-section,
+  .event-cards-stream,
+  .metadata-rail > b) *)::before {
   content: '' !important;
   position: absolute !important;
   inset: -4px !important;
@@ -9244,39 +9352,96 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center :is(
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-):not(:is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource,
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-  ) *)::before {
+  .policy-enforcement-panel,
+  .posture-runtime-panel,
+  .readiness-panel,
+  .live-telemetry-panel,
+  .hermes-hero-card,
+  .guardrails-panel,
+  .change-queue-card,
+  .appearance-card,
+  .operator-panel,
+  .routing-section,
+  .event-detail-panel,
+  .modal-card,
+  .feature-card,
+  .agent-security-details,
+  .hero-art,
+  .mermaid-frame,
+  .reasoning-hero,
+  .avatar-preference-section,
+  .event-cards-stream,
+  .metadata-rail > b):not(:is(
+  .metric,
+  .panel,
+  .resource,
+  .settings-card,
+  .action-form,
+  .resource-card,
+  .agent-card,
+  .responder-card,
+  .responder-panel,
+  .policy-bundle-card,
+  .policy-deploy-panel,
+  .approval-panel,
+  .transaction-result,
+  .integration-card,
+  .network-card,
+  .opa-card,
+  .developer-view,
+  .api-explorer-layout,
+  .event-stream-toolbar,
+  .event-inline-json,
+  .audit-event,
+  .pipeline-table,
+  .response-pane,
+  .response-json-box,
+  .code-snippets-section,
+  .opa-source-code,
+  .report-preview,
+  .body-editor,
+  .policy-rules-summary,
+  .agent-reasoning-callout,
+  .settings-readout,
+  .toggle-item,
+  .hybrid-architecture-card,
+  .hybrid-pair,
+  .hybrid-detail-panel,
+  .outbox-status-card,
+  .routing-node,
+  .memory-result,
+  .agent-fact,
+  .device-detail-summary,
+  .theme-choice,
+  .endpoint-item,
+  .sensor,
+  .contract-card,
+  .catalog-card,
+  .signal-routing-map,
+  .pipeline-health-rail,
+  .telemetry-chart,
+  .evidence-reference-metrics,
+  .evidence-reference-grid > .resource,
+  .policy-enforcement-panel,
+  .posture-runtime-panel,
+  .readiness-panel,
+  .live-telemetry-panel,
+  .hermes-hero-card,
+  .guardrails-panel,
+  .change-queue-card,
+  .appearance-card,
+  .operator-panel,
+  .routing-section,
+  .event-detail-panel,
+  .modal-card,
+  .feature-card,
+  .agent-security-details,
+  .hero-art,
+  .mermaid-frame,
+  .reasoning-hero,
+  .avatar-preference-section,
+  .event-cards-stream,
+  .metadata-rail > b) *)::before {
   content: '' !important;
   position: absolute !important;
   inset: -4px !important;
@@ -10569,4 +10734,110 @@ body {
     height: 30px !important;
     inset: auto !important;
   }
+}
+
+/* ==========================================================================
+   Primary buttons carry the registration crosses (Industry mock: the primary
+   button is the one solid object on the board, and keeps its marks). The same
+   frame as a window: 9px arms straddling each corner, in frame-tick.
+   ========================================================================== */
+.console.theme-command-center :is(.primary-btn, button.primary, .primary-action-btn, .deploy-button, .detail-primary-action, .mint-token-btn, .audit-packet-button),
+.landing :is(.primary, .cta-btn),
+.auth .primary.submit {
+  position: relative;
+}
+.console.theme-command-center :is(.primary-btn,
+  button.primary,
+  .primary-action-btn,
+  .deploy-button,
+  .detail-primary-action,
+  .mint-token-btn,
+  .audit-packet-button,
+  .connect-btn,
+  .execute-btn,
+  .save-btn,
+  .feature-card,
+  .agent-security-details,
+  .hero-art,
+  .mermaid-frame,
+  .reasoning-hero,
+  .avatar-preference-section,
+  .event-cards-stream,
+  .metadata-rail > b)::before,
+.landing :is(.primary,
+  .cta-btn,
+  .feature-card,
+  .agent-security-details,
+  .hero-art,
+  .mermaid-frame,
+  .reasoning-hero,
+  .avatar-preference-section,
+  .event-cards-stream,
+  .metadata-rail > b)::before,
+.auth .primary.submit::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick));
+  background-size: 9px 1px, 1px 9px, 9px 1px, 1px 9px, 9px 1px, 1px 9px, 9px 1px, 1px 9px;
+  background-position:
+    top 4px left 0, top 0 left 4px,
+    top 4px right 0, top 0 right 4px,
+    bottom 4px left 0, bottom 0 left 4px,
+    bottom 4px right 0, bottom 0 right 4px;
+}
+
+/* ==========================================================================
+   Frames: every top-level framed box is a window with crosses and a frame-line
+   rule; layout wrappers (unbordered sections) are not windows, so they neither
+   draw crosses nor suppress the crosses of the windows inside them. The event
+   ledger is one window; its rows are rows inside it.
+   ========================================================================== */
+.console.theme-command-center :is(.panel, .resource, .settings-card, .action-form, .resource-card, .agent-card,
+  .responder-card, .responder-panel, .policy-bundle-card, .policy-deploy-panel, .approval-panel, .integration-card,
+  .network-card, .opa-card, .developer-view, .api-explorer-layout, .event-stream-toolbar, .catalog-card,
+  .pipeline-table, .pipeline-health-rail, .signal-routing-map, .hybrid-architecture-card, .outbox-status-card,
+  .evidence-reference-metrics, .reasoning-hero, .avatar-preference-section, .event-cards-stream, .event-stream-card,
+  .hermes-hero-card, .guardrails-panel, .change-queue-card, .telemetry-chart),
+.landing :is(.feature-card, .agent-security-details, .hero-art, .mermaid-frame, .metadata-rail > b),
+.auth .auth-story aside {
+  position: relative;
+  border-color: var(--frame-line);
+}
+.console.theme-command-center .event-cards-stream {
+  border: 1px solid var(--frame-line);
+  padding: 6px;
+}
+.landing :is(.feature-card, .agent-security-details, .hero-art, .mermaid-frame, .metadata-rail > b)::before,
+.auth .auth-story aside::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
+    linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick));
+  background-size: 9px 1px, 1px 9px, 9px 1px, 1px 9px, 9px 1px, 1px 9px, 9px 1px, 1px 9px;
+  background-position:
+    top 4px left 0, top 0 left 4px,
+    top 4px right 0, top 0 right 4px,
+    bottom 4px left 0, bottom 0 left 4px,
+    bottom 4px right 0, bottom 0 right 4px;
+}
+.landing :is(.feature-card, .agent-security-details, .hero-art, .mermaid-frame),
+.auth .auth-story aside {
+  --frame-line: rgba(92, 100, 106, 0.28);
+  --frame-tick: rgba(171, 181, 188, 0.72);
+}
+.landing .metadata-rail > b {
+  --frame-tick: rgba(171, 181, 188, 0.72);
 }
