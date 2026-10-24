@@ -10808,7 +10808,10 @@ body {
 .landing :is(.feature-card, .agent-security-details, .hero-art, .mermaid-frame, .metadata-rail > b),
 .auth .auth-story aside {
   position: relative;
-  border-color: var(--frame-line);
+  border-color: var(--frame-line) !important; /* older, more specific rules set the control hairline */
+}
+.console.theme-command-center .metrics {
+  border-color: var(--frame-line) !important;
 }
 .console.theme-command-center .event-cards-stream {
   border: 1px solid var(--frame-line);
@@ -10840,4 +10843,23 @@ body {
 }
 .landing .metadata-rail > b {
   --frame-tick: rgba(171, 181, 188, 0.72);
+}
+
+/* A selected chip is a state, not a primary action: accent-soft with an accent rule. */
+.console.theme-command-center :is(.select-bundle-btn.active, .endpoint-nav-item.active) {
+  border: 1px solid var(--shield-accent) !important;
+  background: var(--shield-accent-soft) !important;
+  color: var(--ink) !important;
+}
+
+/* Boxes that clip their own overflow cut off their crosses (4px outside the border). */
+.landing :is(.agent-security-details, .hero-art) {
+  overflow: clip;
+  overflow-clip-margin: 6px;
+}
+/* The diagram scrolls sideways on a phone; on wider screens it fits, so it need not clip. */
+@media (min-width: 761px) {
+  .landing .mermaid-frame {
+    overflow: visible;
+  }
 }
