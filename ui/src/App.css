@@ -10473,3 +10473,17 @@ body {
 .console.theme-command-center .eyebrow {
   color: var(--shield-accent);
 }
+
+/* ==========================================================================
+   Square everywhere (design system: radius-none for every console element,
+   status dots, pills, badges and avatars included). Only charts stay round.
+   ========================================================================== */
+:is(.console, .landing, .auth) *,
+:is(.console, .landing, .auth) *::before,
+:is(.console, .landing, .auth) *::after {
+  border-radius: 0 !important;
+}
+.console :is(.donut, .ring),
+.console .donut::after {
+  border-radius: 50% !important;
+}
