@@ -11,7 +11,7 @@
   --line-hover: rgba(255, 255, 255, 0.16);
   --text: #f5f7f9;
   --muted: #8b9bb4;
-  --dim: #525d6b;
+  --dim: var(--ink-dim);
   --green: #4ed08a;
   --green-hover: #3bb573;
   --green-soft: rgba(78, 208, 138, 0.14);
@@ -390,7 +390,7 @@ h1, h2, h3, h4, b {
 .preview-row:last-child { border-bottom: 0; }
 .preview-row b { min-width: 0; flex: 1; color: #e4edf4; font-weight: 600; }
 .preview-row em { color: #91a6b8; font-style: normal; font-size: 9px; text-align: right; }
-.preview-arrow { color: #64798d; font-size: 14px; }
+.preview-arrow { color: var(--ink-dim); font-size: 14px; }
 .preview-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .preview-dot.green { background: #4ed08a; }.preview-dot.blue { background: #5b9df5; }.preview-dot.amber { background: #f3b557; }.preview-dot.red { background: #ef6a72; }
 .preview-actions { padding: 13px; }
@@ -595,7 +595,7 @@ h1, h2, h3, h4, b {
 .shield-capabilities article { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 24px 28px 24px 0; border-bottom: 1px solid var(--line); }
 .shield-capabilities article:nth-child(odd) { border-right: 1px solid var(--line); }
 .shield-capabilities article:nth-child(even) { padding-left: 28px; }
-.shield-capabilities article > span { color: var(--green); font: 700 11px/1.5 ui-monospace, monospace; }
+.shield-capabilities article > span { color: var(--green); font: 700 11px/1.5 var(--font-mono); }
 .shield-capabilities h3 { margin: 0 0 7px; font-size: 15px; }
 .shield-capabilities p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .assurance-rows { border-top: 1px solid rgba(78,208,138,.28); }
@@ -1865,7 +1865,7 @@ h1, h2, h3, h4, b {
   overflow: auto;
   color: #c5f5d5;
   background: #070b10;
-  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 12px/1.65 var(--font-mono);
   white-space: pre;
 }
 
@@ -5362,7 +5362,7 @@ h1, h2, h3, h4, b {
   color: var(--muted);
   font-size: 10px;
 }
-.evidence-chain-footnote b { color: var(--text); font-family: var(--font-mono, monospace); font-weight: 500; }
+.evidence-chain-footnote b { color: var(--text); font-family: var(--font-mono); font-weight: 500; }
 
 .evidence-reference-metrics article {
   display: grid;
@@ -10455,6 +10455,18 @@ body {
 /* Ink on a filled accent: dark on the dark theme's light accent (9.0:1). */
 .console.theme-command-center {
   --on-green: var(--ink-on-accent);
+}
+
+/* A row's "View source" is a secondary action: hairline, no fill. */
+.console.theme-command-center .configuration-unified .policy-table td:last-child button {
+  border: 1px solid var(--hairline) !important;
+  background: transparent !important;
+  color: var(--ink) !important;
+}
+
+/* Code, preformatted text and keys use the console's mono face, not the browser default. */
+.console :is(code, pre, kbd, samp) {
+  font-family: var(--font-mono);
 }
 
 /* Eyebrows carry the product accent. */

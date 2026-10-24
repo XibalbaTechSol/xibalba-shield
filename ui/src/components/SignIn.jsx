@@ -144,7 +144,7 @@ export function SignIn({ back, connect }) {
                       id="displayName"
                       name="displayName"
                       required
-                      placeholder="Alice Chen"
+                      placeholder="Alice chen"
                     />
                   </label>
                   <label htmlFor="tenant">

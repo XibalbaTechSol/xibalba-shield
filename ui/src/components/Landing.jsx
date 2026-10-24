@@ -37,7 +37,7 @@ export function Landing({ next }) {
   return (
     <main className="landing">
       <header className="site-header">
-        <nav className="site-nav" aria-label="Main Navigation">
+        <nav className="site-nav" aria-label="Main navigation">
           <a className="brand-link" href="#top" aria-label="Xibalba Shield home"><Brand /></a>
           <div className="nav-links">
             <a href="#platform">Platform</a>

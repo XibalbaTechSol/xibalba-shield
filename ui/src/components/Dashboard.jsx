@@ -257,7 +257,7 @@ export function Dashboard({ connection, logout }) {
         <div className="bottom-profile" style={{ marginTop: 'auto', padding: '1rem 0.75rem 0' }}>
           {profileMenu && <div className="profile-menu" role="menu">
             <button type="button" role="menuitem" onClick={() => { setProfileMenu(false); openView('settings') }}>Settings</button>
-            <button type="button" role="menuitem" onClick={() => logout()}>Log out</button>
+            <button type="button" role="menuitem" onClick={() => logout()}>Sign out</button>
           </div>}
           <nav aria-label="Account navigation" className="account-nav">
             <button
@@ -266,7 +266,7 @@ export function Dashboard({ connection, logout }) {
               onClick={() => logout()}
             >
               <LogOut aria-hidden="true" />
-              <span>Log out</span>
+              <span>Sign out</span>
             </button>
           </nav>
           <button
