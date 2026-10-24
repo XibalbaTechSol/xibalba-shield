@@ -5,12 +5,10 @@ import {
   Gauge,
   HardDrive,
   LogOut,
-  Moon,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Sliders,
-  Sun,
   TriangleAlert,
   X,
   Workflow,
@@ -57,7 +55,7 @@ const NAV = [
 ]
 const VIEW_LABELS = Object.fromEntries(NAV.map(([id, , label]) => [id, label]))
 
-export function Dashboard({ connection, logout, theme = 'command-center', onThemeChange }) {
+export function Dashboard({ connection, logout }) {
   const [realOnly, setRealOnly] = useState(() => readSession('shield-real-only') !== 'false')
   const [menu, setMenu] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
@@ -89,12 +87,6 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
     message: 'Connecting to control plane',
   })
   const [refreshing, setRefreshing] = useState(false);
-  const lightMode = theme === 'light'
-  const toggleTheme = () => {
-    const nextTheme = lightMode ? 'command-center' : 'light'
-    writeSession('shield-console-theme', nextTheme)
-    onThemeChange?.(nextTheme)
-  }
 
 
 
@@ -222,7 +214,7 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
   }
 
   return (
-    <main className={`console ${theme === 'command-center' ? 'theme-command-center' : 'theme-light'}`}>
+    <main className="console theme-command-center">
       <aside className={`side${menu ? ' open' : ''}${navCollapsed ? ' collapsed' : ''}`} aria-label="Console navigation">
         <header>
           <Brand />
@@ -335,15 +327,6 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
               </select>
             </label>
             <button
-              aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
-              title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
-              type="button"
-              className="theme-toggle"
-              onClick={toggleTheme}
-            >
-              {lightMode ? <Moon aria-hidden="true" /> : <Sun aria-hidden="true" />}
-            </button>
-            <button
               aria-label="Refresh data"
               title="Refresh"
               type="button"
@@ -419,8 +402,6 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
               refresh={refresh}
               connection={connection}
                 logout={logout}
-                theme={theme}
-                onThemeChange={onThemeChange}
                 timeRange={timeRange}
               />
           )}

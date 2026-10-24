@@ -17,7 +17,7 @@ export function MermaidDiagram({ chart, label }) {
         themeVariables: {
           background: '#1b1f23', primaryColor: '#262b30', primaryTextColor: '#eef0f1',
           primaryBorderColor: '#64717c', lineColor: '#9fc3df', secondaryColor: '#1b1f23',
-          tertiaryColor: '#14171a', fontFamily: 'Barlow, system-ui, sans-serif',
+          tertiaryColor: '#0d0f11', fontFamily: 'Barlow, system-ui, sans-serif',
         },
         flowchart: { curve: 'basis', htmlLabels: true, nodeSpacing: 28, rankSpacing: 42 },
       })

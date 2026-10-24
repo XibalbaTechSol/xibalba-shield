@@ -3,15 +3,17 @@
  *
  * Source: the "Xibalba Console" design system (tokens.json), which follows the Industry mock as
  * measured in docs/audits/UI_MOCK_COMPARISON_MATRIX.md. Commit 7e36a2d hand-edited the dark
- * palette away from that measurement (#0d0f11 ground, .24 lines, #5980a6 accent); these tokens
- * restore it, so Shield and Cortex share one chassis and differ only in product accent.
+ * palette away from that measurement (.24 lines, #5980a6 accent); these tokens restore it, so
+ * Shield and Cortex share one chassis and differ only in product accent. The one deliberate
+ * departure is the ground: the owner kept the darker #0d0f11 for both products.
  *
  * The chassis is shared. The accent identifies the product. The status vocabulary is identical.
  * Keep this file in step with Cortex's copy; never use cortex-accent as chrome here.
  */
 :root {
-  /* surfaces: one graphite for the page, every window and the top bar */
-  --ground: #14171a;
+  /* surfaces: one graphite for the page, every window and the top bar. #0d0f11 is the owner's
+     choice (2026-10-24), darker than the Industry mock's #14171a; the rest of the chassis is the mock's. */
+  --ground: #0d0f11;
   --elevated: #262b30;
 
   /* rules */

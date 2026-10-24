@@ -1455,31 +1455,31 @@ h1, h2, h3, h4, b {
 .agent-detail-error { margin: 28px 32px; }
 
 .appearance-card { border-color: var(--line); }
-.theme-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
-.theme-choice { position: relative; display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-elevated); cursor: pointer; }
-.theme-choice:hover { border-color: var(--line-hover); }
-.theme-choice.selected { border-color: var(--green); box-shadow: 0 0 0 2px var(--green-soft); }
-.theme-choice input { position: absolute; opacity: 0; pointer-events: none; }
-.theme-choice b, .theme-choice small { display: block; }
-.theme-choice b { color: var(--text); font-size: 12px; }
-.theme-choice small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; }
-.theme-swatch { display: grid; gap: 4px; align-content: center; width: 58px; height: 42px; padding: 7px; border: 1px solid var(--line); border-radius: 6px; }
-.theme-swatch i { display: block; height: 4px; border-radius: 2px; }
-.theme-swatch-command { background: #14171a; border-color: #9fc3df; }
-.theme-swatch-command i:nth-child(1) { width: 70%; background: #87b5d0; }
-.theme-swatch-command i:nth-child(2) { width: 88%; background: #283536; }
-.theme-swatch-command i:nth-child(3) { width: 54%; background: #9ca8ab; }
-.theme-swatch-light { background: #f5f7fb; border-color: #b9c9da; }
-.theme-swatch-light i:nth-child(1) { width: 70%; background: #159b6b; }
-.theme-swatch-light i:nth-child(2) { width: 88%; background: #dbe4ee; }
-.theme-swatch-light i:nth-child(3) { width: 54%; background: #8291a4; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @media (max-width: 640px) {
   .agent-detail-body, .agent-detail-hero { padding-left: 18px; padding-right: 18px; }
   .agent-detail-identity-grid { grid-template-columns: 1fr; }
   .agent-detail-section-heading { display: grid; }
   .agent-detail-proof { width: fit-content; }
-  .theme-choice-grid { grid-template-columns: 1fr; }
+  
 }
 
 /* ==========================================================================
@@ -1525,7 +1525,7 @@ h1, h2, h3, h4, b {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 22px;
-  background: #14171a;
+  background: var(--ground);
   border-bottom: 1px solid var(--line);
   backdrop-filter: none;
 }
@@ -1676,8 +1676,8 @@ h1, h2, h3, h4, b {
   color: var(--text);
   border-color: var(--line);
 }
-.console.theme-command-center .theme-choice { border-radius: 0; background: var(--panel-elevated); }
-.console.theme-command-center .theme-choice.selected { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+
+
 
 @media (max-width: 760px) {
   .console.theme-command-center .top { padding-inline: 16px; }
@@ -3131,7 +3131,7 @@ h1, h2, h3, h4, b {
 .landing .landing-section-copy p,
 .landing .landing-assurance > div:first-child p { color: var(--mock-muted); }
 .landing .primary,
-.auth .primary { border-radius: 0; border-color: var(--mock-accent); background: var(--mock-accent); color: #14171a; box-shadow: none; }
+.auth .primary { border-radius: 0; border-color: var(--mock-accent); background: var(--mock-accent); color: var(--ink-on-accent); box-shadow: none; }
 .landing .primary:hover,
 .auth .primary:hover { background: var(--shield-accent-hover); }
 .landing .hero { max-width: 1240px; min-height: 600px; padding: 88px 24px; gap: 72px; }
@@ -3172,7 +3172,7 @@ h1, h2, h3, h4, b {
 .landing .landing-assurance,
 .landing .landing-agent-security { border-color: var(--mock-line); }
 .landing .cta { background: var(--mock-panel); border-block: 1px solid var(--mock-line); }
-.landing .cta-btn { border-radius: 0; background: var(--mock-accent); color: #14171a; box-shadow: none; }
+.landing .cta-btn { border-radius: 0; background: var(--mock-accent); color: var(--ink-on-accent); box-shadow: none; }
 .landing .site-footer { background: var(--mock-bg); border-top-color: var(--mock-line); }
 
 /* Mermaid diagrams are framed as the same technical windows used by the
@@ -3222,127 +3222,30 @@ h1, h2, h3, h4, b {
 .session-note { color: var(--mock-muted); }
 
 /* Light operator theme: the same IA and spacing, with the mockup's bright surface treatment. */
-.console.theme-light {
-  --bg: #f2f2f3;
-  --bg-gradient: #f2f2f3;
-  --panel: #e9e9ea;
-  --panel-solid: #e9e9ea;
-  --panel-elevated: #f2f2f3;
-  --line: rgba(29, 31, 32, .16);
-  --line-hover: rgba(29, 31, 32, .45);
-  --text: #1d1f20;
-  --muted: #5d5d60;
-  --dim: #77777b;
-  --green: #416180;
-  --green-hover: #2c455d;
-  --green-soft: rgba(65, 97, 128, .12);
-  --green-glow: rgba(65, 97, 128, .18);
-  --cyan: #416180;
-  --amber: #8a641c;
-  --amber-soft: rgba(138, 100, 28, .12);
-  --red: #9b3b3b;
-  --red-soft: rgba(155, 59, 59, .12);
-  background: var(--bg-gradient);
-  color: var(--text);
-  color-scheme: light;
-}
-.console.theme-light .side { background: rgba(255,255,255,.94); }
-.console.theme-light .top { background: rgba(255,255,255,.88); }
-.console.theme-light .metric,
-.console.theme-light .panel { box-shadow: 0 3px 10px rgba(43, 43, 45, .16); }
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .action-form,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .approval-panel,
-.console.theme-light .transaction-result,
-.console.theme-light .responder-panel,
-.console.theme-light .integration-card,
-.console.theme-light .integrations-section,
-.console.theme-light .network-card,
-.console.theme-light .opa-card,
-.console.theme-light .code-snippets-section,
-.console.theme-light .dev-auth-card,
-.console.theme-light .contract-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .outbox-status-card {
-  background: var(--panel);
-  border-color: var(--line);
-  color: var(--text);
-  box-shadow: 0 3px 10px rgba(43, 43, 45, .16);
-}
-.console.theme-light .settings-readout,
-.console.theme-light .toggle-item,
-.console.theme-light .avatar-preference-section,
-.console.theme-light .avatar-preview-box,
-.console.theme-light .agent-remediation-panel,
-.console.theme-light .responder-card,
-.console.theme-light .agent-card,
-.console.theme-light .policy-history-row,
-.console.theme-light .event-stream-toolbar,
-.console.theme-light .event-stream-card,
-.console.theme-light .evidence-runtime-strip,
-.console.theme-light .pipeline-row {
-  background: var(--panel-elevated);
-  border-color: var(--line);
-  color: var(--text);
-}
-.console.theme-light .device-detail-backdrop,
-.console.theme-light .agent-detail-backdrop,
-.console.theme-light .event-drawer-backdrop { background: rgba(20, 35, 61, .28); }
-.console.theme-light .device-detail-drawer,
-.console.theme-light .agent-detail-drawer,
-.console.theme-light .event-drawer,
-.console.theme-light .opa-source-modal { background: var(--panel); color: var(--text); }
-.console.theme-light .api-endpoints-nav,
-.console.theme-light .response-pane,
-.console.theme-light .event-inline-json { background: #f7faff; color: var(--text); }
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .action-form,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .approval-panel,
-.console.theme-light .transaction-result,
-.console.theme-light .responder-panel,
-.console.theme-light .integration-card,
-.console.theme-light .integrations-section,
-.console.theme-light .network-card,
-.console.theme-light .opa-card,
-.console.theme-light .code-snippets-section,
-.console.theme-light .dev-auth-card,
-.console.theme-light .contract-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .outbox-status-card,
-.console.theme-light .metric,
-.console.theme-light .panel,
-.console.theme-light .telemetry-chart {
-  padding: 20px;
-}
-.console.theme-light .panels,
-.console.theme-light .cards,
-.console.theme-light .command-grid,
-.console.theme-light .settings-grid,
-.console.theme-light .responder-grid,
-.console.theme-light .integration-grid,
-.console.theme-light .policy-grid,
-.console.theme-light .agent-grid,
-.console.theme-light .live-telemetry-grid { gap: 20px; }
-.console.theme-light .tools > button,
+
+
+
+
+
+
+
+
+
+
+
+
 .console.theme-command-center .tools > button {
   background: var(--panel);
   border-color: var(--line);
   color: var(--text);
 }
-.console.theme-light .tools > button:hover,
+
 .console.theme-command-center .tools > button:hover {
   background: var(--panel-elevated);
   border-color: var(--line-hover);
   color: var(--text);
 }
-.console.theme-command-center .live-telemetry-grid,
-.console.theme-light .live-telemetry-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.console.theme-command-center .live-telemetry-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .resource-widget { display: grid; gap: 16px; min-width: 0; }
 .resource-widget-section { display: grid; gap: 9px; }
 .resource-widget-label,
@@ -3362,8 +3265,7 @@ h1, h2, h3, h4, b {
 .memory-bar-track i { background: var(--amber); }
 .memory-usage { padding-top: 12px; border-top: 1px solid var(--line); }
 @media (max-width: 1180px) {
-  .console.theme-command-center .live-telemetry-grid,
-  .console.theme-light .live-telemetry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console.theme-command-center .live-telemetry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -4127,9 +4029,7 @@ h1, h2, h3, h4, b {
   color: #e2e8f0;
 }
 
-.console.theme-light .reasoning-rationale {
-  color: var(--muted);
-}
+
 
 .reasoning-footer-meta {
   display: flex;
@@ -5839,14 +5739,12 @@ h1, h2, h3, h4, b {
 
 /* Agent is a continuous workspace; the former tabs become clearly separated
    sections so all three operational surfaces remain visible together. */
-.console.theme-command-center .agent-unified-workspace,
-.console.theme-light .agent-unified-workspace {
+.console.theme-command-center .agent-unified-workspace {
   display: grid;
   gap: 28px;
 }
 
-.console.theme-command-center .agent-unified-section,
-.console.theme-light .agent-unified-section {
+.console.theme-command-center .agent-unified-section {
   display: grid;
   gap: 16px;
   min-width: 0;
@@ -5854,57 +5752,47 @@ h1, h2, h3, h4, b {
   border-top: 1px solid var(--line);
 }
 
-.console.theme-command-center .agent-unified-section:first-child,
-.console.theme-light .agent-unified-section:first-child {
+.console.theme-command-center .agent-unified-section:first-child {
   padding-top: 0;
   border-top: 0;
 }
 
-.console.theme-command-center .agent-unified-heading,
-.console.theme-light .agent-unified-heading {
+.console.theme-command-center .agent-unified-heading {
   display: grid;
   gap: 5px;
   max-width: 780px;
 }
 
 .console.theme-command-center .agent-unified-heading .eyebrow,
-.console.theme-light .agent-unified-heading .eyebrow,
 .console.theme-command-center .agent-unified-heading h3,
-.console.theme-light .agent-unified-heading h3,
-.console.theme-command-center .agent-unified-heading p:last-child,
-.console.theme-light .agent-unified-heading p:last-child {
+.console.theme-command-center .agent-unified-heading p:last-child {
   margin: 0;
 }
 
-.console.theme-command-center .agent-unified-heading h3,
-.console.theme-light .agent-unified-heading h3 {
+.console.theme-command-center .agent-unified-heading h3 {
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: var(--type-section);
   line-height: 1.05;
 }
 
-.console.theme-command-center .agent-unified-heading p:last-child,
-.console.theme-light .agent-unified-heading p:last-child {
+.console.theme-command-center .agent-unified-heading p:last-child {
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.5;
 }
 
-.console.theme-command-center .agent-unified-section > .agent-workspace,
-.console.theme-light .agent-unified-section > .agent-workspace {
+.console.theme-command-center .agent-unified-section > .agent-workspace {
   margin-top: 0;
 }
 
 /* Evidence keeps both assurance surfaces in one scrollable workspace. */
-.console.theme-command-center .evidence-unified-workspace,
-.console.theme-light .evidence-unified-workspace {
+.console.theme-command-center .evidence-unified-workspace {
   display: grid;
   gap: 28px;
 }
 
-.console.theme-command-center .evidence-unified-section,
-.console.theme-light .evidence-unified-section {
+.console.theme-command-center .evidence-unified-section {
   display: grid;
   gap: 16px;
   min-width: 0;
@@ -5912,38 +5800,31 @@ h1, h2, h3, h4, b {
   border-top: 1px solid var(--line);
 }
 
-.console.theme-command-center .evidence-unified-section:first-child,
-.console.theme-light .evidence-unified-section:first-child {
+.console.theme-command-center .evidence-unified-section:first-child {
   padding-top: 0;
   border-top: 0;
 }
 
-.console.theme-command-center .evidence-unified-heading,
-.console.theme-light .evidence-unified-heading {
+.console.theme-command-center .evidence-unified-heading {
   display: grid;
   gap: 5px;
   max-width: 780px;
 }
 
 .console.theme-command-center .evidence-unified-heading .eyebrow,
-.console.theme-light .evidence-unified-heading .eyebrow,
 .console.theme-command-center .evidence-unified-heading h3,
-.console.theme-light .evidence-unified-heading h3,
-.console.theme-command-center .evidence-unified-heading p:last-child,
-.console.theme-light .evidence-unified-heading p:last-child {
+.console.theme-command-center .evidence-unified-heading p:last-child {
   margin: 0;
 }
 
-.console.theme-command-center .evidence-unified-heading h3,
-.console.theme-light .evidence-unified-heading h3 {
+.console.theme-command-center .evidence-unified-heading h3 {
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: var(--type-section);
   line-height: 1.05;
 }
 
-.console.theme-command-center .evidence-unified-heading p:last-child,
-.console.theme-light .evidence-unified-heading p:last-child {
+.console.theme-command-center .evidence-unified-heading p:last-child {
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.5;
@@ -5951,14 +5832,12 @@ h1, h2, h3, h4, b {
 
 /* The two approval surfaces share one Decisions tab while remaining visually
    distinct governance sections. */
-.console.theme-command-center .decisions-approvals-workspace,
-.console.theme-light .decisions-approvals-workspace {
+.console.theme-command-center .decisions-approvals-workspace {
   display: grid;
   gap: 28px;
 }
 
-.console.theme-command-center .decisions-approvals-section,
-.console.theme-light .decisions-approvals-section {
+.console.theme-command-center .decisions-approvals-section {
   display: grid;
   gap: 16px;
   min-width: 0;
@@ -5966,52 +5845,43 @@ h1, h2, h3, h4, b {
   border-top: 1px solid var(--line);
 }
 
-.console.theme-command-center .decisions-approvals-section:first-child,
-.console.theme-light .decisions-approvals-section:first-child {
+.console.theme-command-center .decisions-approvals-section:first-child {
   padding-top: 0;
   border-top: 0;
 }
 
-.console.theme-command-center .decisions-approvals-heading,
-.console.theme-light .decisions-approvals-heading {
+.console.theme-command-center .decisions-approvals-heading {
   display: grid;
   gap: 5px;
   max-width: 780px;
 }
 
 .console.theme-command-center .decisions-approvals-heading .eyebrow,
-.console.theme-light .decisions-approvals-heading .eyebrow,
 .console.theme-command-center .decisions-approvals-heading h3,
-.console.theme-light .decisions-approvals-heading h3,
-.console.theme-command-center .decisions-approvals-heading p:last-child,
-.console.theme-light .decisions-approvals-heading p:last-child {
+.console.theme-command-center .decisions-approvals-heading p:last-child {
   margin: 0;
 }
 
-.console.theme-command-center .decisions-approvals-heading h3,
-.console.theme-light .decisions-approvals-heading h3 {
+.console.theme-command-center .decisions-approvals-heading h3 {
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: var(--type-section);
   line-height: 1.05;
 }
 
-.console.theme-command-center .decisions-approvals-heading p:last-child,
-.console.theme-light .decisions-approvals-heading p:last-child {
+.console.theme-command-center .decisions-approvals-heading p:last-child {
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.5;
 }
 
 /* Policy selection and enforcement stay together in one Decisions workspace. */
-.console.theme-command-center .decisions-policy-workspace,
-.console.theme-light .decisions-policy-workspace {
+.console.theme-command-center .decisions-policy-workspace {
   display: grid;
   gap: 28px;
 }
 
-.console.theme-command-center .decisions-policy-section,
-.console.theme-light .decisions-policy-section {
+.console.theme-command-center .decisions-policy-section {
   display: grid;
   gap: 16px;
   min-width: 0;
@@ -6019,38 +5889,31 @@ h1, h2, h3, h4, b {
   border-top: 1px solid var(--line);
 }
 
-.console.theme-command-center .decisions-policy-section:first-child,
-.console.theme-light .decisions-policy-section:first-child {
+.console.theme-command-center .decisions-policy-section:first-child {
   padding-top: 0;
   border-top: 0;
 }
 
-.console.theme-command-center .decisions-policy-heading,
-.console.theme-light .decisions-policy-heading {
+.console.theme-command-center .decisions-policy-heading {
   display: grid;
   gap: 5px;
   max-width: 780px;
 }
 
 .console.theme-command-center .decisions-policy-heading .eyebrow,
-.console.theme-light .decisions-policy-heading .eyebrow,
 .console.theme-command-center .decisions-policy-heading h3,
-.console.theme-light .decisions-policy-heading h3,
-.console.theme-command-center .decisions-policy-heading p:last-child,
-.console.theme-light .decisions-policy-heading p:last-child {
+.console.theme-command-center .decisions-policy-heading p:last-child {
   margin: 0;
 }
 
-.console.theme-command-center .decisions-policy-heading h3,
-.console.theme-light .decisions-policy-heading h3 {
+.console.theme-command-center .decisions-policy-heading h3 {
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: var(--type-section);
   line-height: 1.05;
 }
 
-.console.theme-command-center .decisions-policy-heading p:last-child,
-.console.theme-light .decisions-policy-heading p:last-child {
+.console.theme-command-center .decisions-policy-heading p:last-child {
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.5;
@@ -6333,7 +6196,6 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .status-badge,
 .console.theme-command-center .live-status-pill,
 .console.theme-command-center .status-pill,
-.console.theme-command-center .theme-choice,
 .console.theme-command-center .responder-gate,
 .console.theme-command-center .responder-status { border-radius: 0; }
 .console.theme-command-center .status-badge,
@@ -6579,17 +6441,11 @@ h1, h2, h3, h4, b {
   background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
 }
 
-.console.theme-light .top {
-  flex-wrap: wrap;
-}
 
-.console.theme-light .field-group label,
-.console.theme-light .settings-fields-grid > label {
-  color: var(--text);
-}
 
-.console.theme-command-center,
-.console.theme-light {
+
+
+.console.theme-command-center {
   --frame-line: rgba(92, 100, 106, .28);
   --frame-tick: rgba(171, 181, 188, .72);
 }
@@ -6605,20 +6461,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .integration-card,
 .console.theme-command-center .event-stream-card,
 .console.theme-command-center .api-explorer-layout,
-.console.theme-command-center .agent-detail-section,
-.console.theme-light .metric,
-.console.theme-light .panel,
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .outbox-status-card,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .integration-card,
-.console.theme-light .event-stream-card,
-.console.theme-light .api-explorer-layout,
-.console.theme-light .agent-detail-section,
-.console.theme-light .evidence-reference-metrics {
+.console.theme-command-center .agent-detail-section {
   border-color: var(--frame-line);
   background-image:
     linear-gradient(var(--frame-tick), var(--frame-tick)), linear-gradient(var(--frame-tick), var(--frame-tick)),
@@ -6705,7 +6548,7 @@ h1, h2, h3, h4, b {
 }
 
 /* Keep the active tenant/agent namespace visible in the header. */
-.console.theme-light .shared-agent-picker,
+
 .console.theme-command-center .shared-agent-picker {
   display: flex;
   align-items: center;
@@ -6943,134 +6786,43 @@ h1, h2, h3, h4, b {
   display: none;
 }
 
-.console.theme-light .audit-packet-button {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--panel);
-  color: var(--text);
-  font: 600 12px 'Barlow Condensed', sans-serif;
-}
+
 
 /* Light mode uses the same Console composition as dark mode. Only the
    surface tokens change; navigation, header density, and content rhythm do
    not drift between themes. */
-.console.theme-light {
-  --bg: #f2f2f3;
-  --bg-gradient: #f2f2f3;
-  --panel: #e9e9ea;
-  --panel-solid: #e9e9ea;
-  --panel-elevated: #f8f8f8;
-  --line: rgba(29, 31, 32, .28);
-  --line-hover: rgba(29, 31, 32, .45);
-  --text: #1d1f20;
-  --muted: #62676c;
-  --dim: #777d82;
-  --green: #416180;
-  --green-hover: #2f4e6b;
-  --green-soft: rgba(65, 97, 128, .13);
-  --green-glow: rgba(65, 97, 128, .16);
-  --cyan: #416180;
-  --amber: #9b6c2c;
-  --amber-soft: rgba(155, 108, 44, .14);
-  --red: #a84e4e;
-  --red-soft: rgba(168, 78, 78, .14);
-  grid-template-columns: 248px 1fr;
-  background: var(--bg);
-  color: var(--text);
-  color-scheme: light;
-  font-family: 'Barlow', var(--font-body), sans-serif;
-}
-.console.theme-light .side {
-  display: flex;
-  background: var(--panel);
-  border-right-color: var(--line);
-}
-.console.theme-light .side .brand img { width: 38px; height: 38px; border-radius: 0; }
-.console.theme-light .side .brand b { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; }
-.console.theme-light .side nav button,
-.console.theme-light .profile-btn,
-.console.theme-light .account-nav button { border-radius: 0; font-family: 'Barlow', sans-serif; }
-.console.theme-light .side nav button.active {
-  background: var(--green-soft);
-  color: var(--text);
-  border-left: 2px solid var(--green);
-}
-.console.theme-light .side nav button.active svg { color: var(--green); }
-.console.theme-light .side nav button i { border-radius: 0; background: var(--green-soft); color: var(--green); }
-.console.theme-light .side .brand {
-  min-height: 84px;
-  padding: 16px 14px;
-  border-bottom: 1px solid var(--line);
-}
-.console.theme-light .nav-collapse-btn {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-}
-.console.theme-light .nav-collapse-btn:hover { border-color: var(--line-hover); color: var(--text); background: var(--green-soft); }
-.console.theme-light .nav-collapse-btn svg { width: 16px; height: 16px; }
-.console.theme-light .main { width: 100%; }
-.console.theme-light .top {
-  min-height: 84px;
-  height: auto;
-  padding: 14px clamp(16px, 3vw, 40px);
-  background: var(--bg);
-  border-bottom-color: var(--line);
-}
-.console.theme-light .top-title,
-.console.theme-light .shared-agent-picker,
-.console.theme-light .tools > button[aria-label="Refresh data"],
-.console.theme-light .tools > button[aria-label="View notifications"] { display: none; }
-.console.theme-light .tools { margin-left: auto; gap: 9px; }
-.console.theme-light .tools > button,
-.console.theme-light .tools > button:hover { border-radius: 0; }
-.console.theme-light .content { max-width: 1360px; padding: 34px 28px 72px; }
-.console.theme-light .content > * { max-width: 100%; }
-.console.theme-light h1,
-.console.theme-light h2,
-.console.theme-light h3,
-.console.theme-light h4,
-.console.theme-light h5,
-.console.theme-light h6,
-.console.theme-light b { color: var(--text); }
-.console.theme-light h1,
-.console.theme-light h2 { font-family: 'Barlow Condensed', sans-serif; letter-spacing: -.02em; }
-.console.theme-light .welcome h2 { font-size: clamp(38px, 4.2vw, 52px); line-height: .98; }
-.console.theme-light .overview-page .welcome .primary { display: none; }
-.console.theme-light .metrics { gap: 0; border: 1px solid var(--line); background: var(--panel); }
-.console.theme-light .metrics .metric {
-  min-height: 126px;
-  border: 0;
-  border-right: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-}
-.console.theme-light .metrics .metric:last-child { border-right: 0; }
-.console.theme-light .metric,
-.console.theme-light .panel,
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .integration-card,
-.console.theme-light .event-stream-card { border-radius: 0; }
-.console.theme-light .mock-posture-grid { gap: 24px; margin-bottom: 24px; }
-.console.theme-light .mock-posture-grid .panel { min-height: 360px; padding: 22px; }
-.console.theme-light .audit-packet-button {
-  min-width: 132px;
-  background: transparent;
-  color: var(--text);
-}
-.console.theme-light:has(.side.collapsed) { grid-template-columns: 72px 1fr; }
-.console.theme-light .side.collapsed { width: 72px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Keep the compact rail behavior identical in both console themes. */
 .console.theme-command-center .side.collapsed .brand {
@@ -7078,99 +6830,68 @@ h1, h2, h3, h4, b {
   padding-inline: 8px;
 }
 
-.console.theme-light .side.collapsed .brand {
-  justify-content: center;
-  padding-inline: 8px;
-}
+
 
 .console.theme-command-center .side.collapsed .brand b,
 .console.theme-command-center .side.collapsed .nav-group > small,
 .console.theme-command-center .side.collapsed .profile-name,
 .console.theme-command-center .side.collapsed nav button span,
-.console.theme-command-center .side.collapsed nav button i,
-.console.theme-light .side.collapsed .brand b,
-.console.theme-light .side.collapsed .nav-group > small,
-.console.theme-light .side.collapsed .profile-name,
-.console.theme-light .side.collapsed nav button span,
-.console.theme-light .side.collapsed nav button i {
+.console.theme-command-center .side.collapsed nav button i {
   display: none;
 }
 
-.console.theme-command-center .side.collapsed > nav:not(.account-nav),
-.console.theme-light .side.collapsed > nav:not(.account-nav) {
+.console.theme-command-center .side.collapsed > nav:not(.account-nav) {
   padding-inline: 8px;
 }
 
-.console.theme-command-center .side.collapsed .nav-group button,
-.console.theme-light .side.collapsed .nav-group button {
+.console.theme-command-center .side.collapsed .nav-group button {
   justify-content: center;
   padding-inline: 0;
 }
 
-.console.theme-command-center .side.collapsed .profile-btn,
-.console.theme-light .side.collapsed .profile-btn {
+.console.theme-command-center .side.collapsed .profile-btn {
   justify-content: center;
   padding-inline: 0;
 }
 
 @media (max-width: 960px) {
-  .console.theme-command-center .nav-collapse-btn,
-  .console.theme-light .nav-collapse-btn {
+  .console.theme-command-center .nav-collapse-btn {
     display: none;
   }
 
-  .console.theme-command-center .side.collapsed,
-  .console.theme-light .side.collapsed {
+  .console.theme-command-center .side.collapsed {
     width: 260px;
   }
 
-  .console.theme-command-center .side.collapsed .brand,
-  .console.theme-light .side.collapsed .brand {
+  .console.theme-command-center .side.collapsed .brand {
     justify-content: space-between;
     padding-inline: 14px;
   }
 
   .console.theme-command-center .side.collapsed .brand b,
-  .console.theme-command-center .side.collapsed .nav-group > small,
-  .console.theme-command-center .side.collapsed .profile-name,
-  .console.theme-command-center .side.collapsed nav button span,
-  .console.theme-command-center .side.collapsed nav button i,
-  .console.theme-light .side.collapsed .brand b,
-  .console.theme-light .side.collapsed .nav-group > small,
-  .console.theme-light .side.collapsed .profile-name,
-  .console.theme-light .side.collapsed nav button span,
-  .console.theme-light .side.collapsed nav button i {
+.console.theme-command-center .side.collapsed .nav-group > small,
+.console.theme-command-center .side.collapsed .profile-name,
+.console.theme-command-center .side.collapsed nav button span,
+.console.theme-command-center .side.collapsed nav button i {
     display: initial;
   }
 
-  .console.theme-command-center .side.collapsed > nav:not(.account-nav),
-  .console.theme-light .side.collapsed > nav:not(.account-nav) {
+  .console.theme-command-center .side.collapsed > nav:not(.account-nav) {
     padding-inline: 10px;
   }
 
-  .console.theme-command-center .side.collapsed .nav-group button,
-  .console.theme-light .side.collapsed .nav-group button {
+  .console.theme-command-center .side.collapsed .nav-group button {
     justify-content: flex-start;
     padding-inline: 12px;
   }
 
-  .console.theme-command-center .side.collapsed .profile-btn,
-  .console.theme-light .side.collapsed .profile-btn {
+  .console.theme-command-center .side.collapsed .profile-btn {
     justify-content: flex-start;
     padding-inline: 4px;
   }
 }
 
-@media (max-width: 760px) {
-  .console.theme-light { grid-template-columns: 1fr; }
-  .console.theme-light .side { position: fixed; width: 260px; transform: translateX(-100%); }
-  .console.theme-light .side.open { transform: translateX(0); }
-  .console.theme-light .content { padding: 26px 16px 56px; }
-  .console.theme-light .metrics { grid-template-columns: 1fr 1fr; }
-  .console.theme-light .metrics .metric:nth-child(2) { border-right: 0; }
-  .console.theme-light .metrics .metric:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
-  .console.theme-light .audit-packet-button { display: none; }
-}
+
 
 @media (max-width: 760px) {
   .console.theme-command-center .content { padding: 26px 16px 56px; }
@@ -7182,282 +6903,64 @@ h1, h2, h3, h4, b {
 
 /* Light theme surface pass: keep every secondary workspace, drawer, modal,
    table, and diagnostic pane on the same operator palette as the overview. */
-.console.theme-light {
-  /* Light inversion of the mock graphite hierarchy: page, panel, and
-     nested surfaces stay close in value instead of introducing white wells. */
-  --surface-strong: #e9e9ea;
-  --surface-subtle: #f2f2f3;
-  --surface-muted: #e3e3e4;
-  --code-surface: #e9e9ea;
-  --accent-soft: rgba(65, 97, 128, .12);
-  --shadow-light: 0 3px 10px rgba(43, 43, 45, .14);
-}
 
-.console.theme-light .modal-backdrop,
-.console.theme-light .device-detail-backdrop,
-.console.theme-light .agent-detail-backdrop,
-.console.theme-light .event-drawer-backdrop,
-.console.theme-light .opa-source-backdrop,
-.console.theme-light .redesigned-agent-detail {
-  background: rgba(20, 35, 61, .28);
-}
 
-.console.theme-light .modal-card,
-.console.theme-light .device-detail-drawer,
-.console.theme-light .agent-detail-drawer,
-.console.theme-light .event-drawer,
-.console.theme-light .opa-source-modal,
-.console.theme-light .device-detail-hero,
-.console.theme-light .agent-detail-hero,
-.console.theme-light .agent-detail-section,
-.console.theme-light .worker-action {
-  background: var(--surface-strong);
-  color: var(--text);
-  border-color: var(--line);
-  box-shadow: var(--shadow-light);
-}
 
-.console.theme-light .modal-header,
-.console.theme-light .opa-source-header,
-.console.theme-light .opa-source-footer,
-.console.theme-light .response-status-bar,
-.console.theme-light .snippet-tabs {
-  background: var(--surface-subtle);
-  border-color: var(--line);
-  color: var(--text);
-}
 
-.console.theme-light .form-group label,
-.console.theme-light .settings-card-title,
-.console.theme-light .modal-actions,
-.console.theme-light .opa-source-header h3,
-.console.theme-light .modal-title-wrap h3,
-.console.theme-light .deploy-panel-title h3,
-.console.theme-light .reasoning-hero h2,
-.console.theme-light .reasoning-stat-card .stat-val,
-.console.theme-light .event-subject-row .subject-target,
-.console.theme-light .event-card-actions button,
-.console.theme-light .empty-stream-state h4,
-.console.theme-light .policy-bundle-title {
-  color: var(--text);
-}
 
-.console.theme-light .form-group input,
-.console.theme-light .form-group select,
-.console.theme-light .body-editor,
-.console.theme-light .response-pane,
-.console.theme-light .response-json-box,
-.console.theme-light .code-snippets-section,
-.console.theme-light .pipeline-table,
-.console.theme-light .event-inline-json,
-.console.theme-light .agent-reasoning-callout,
-.console.theme-light .report-preview,
-.console.theme-light .opa-source-code,
-.console.theme-light .policy-rules-summary,
-.console.theme-light .stream-search-wrap,
-.console.theme-light .class-select,
-.console.theme-light .audit-event {
-  background: var(--code-surface);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .pipeline-table-head,
-.console.theme-light .response-status-bar,
-.console.theme-light .event-inline-json,
-.console.theme-light .snippet-tabs {
-  background: var(--surface-muted);
-}
 
-.console.theme-light .pipeline-row,
-.console.theme-light .event-row,
-.console.theme-light .hybrid-pair,
-.console.theme-light .hybrid-detail-panel,
-.console.theme-light .settings-readout,
-.console.theme-light .toggle-item,
-.console.theme-light .hermes-boundary-grid > div,
-.console.theme-light .memory-result,
-.console.theme-light .routing-node,
-.console.theme-light .reasoning-stat-card,
-.console.theme-light .event-stream-toolbar,
-.console.theme-light .event-stream-card,
-.console.theme-light .resource-card,
-.console.theme-light .catalog-card {
-  background: var(--surface-strong);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .form-select,
-.console.theme-light input:not([type='checkbox']):not([type='radio']),
-.console.theme-light select,
-.console.theme-light textarea {
-  background: var(--surface-strong);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .form-select:focus,
-.console.theme-light input:not([type='checkbox']):not([type='radio']):focus,
-.console.theme-light select:focus,
-.console.theme-light textarea:focus {
-  border-color: var(--green);
-  box-shadow: 0 0 0 2px var(--green-soft);
-  outline: none;
-}
 
-.console.theme-light .hybrid-architecture-card {
-  background: linear-gradient(135deg, #f7fafc, #e9f0f5);
-  border-color: var(--line);
-}
 
-.console.theme-light .hybrid-pair {
-  background: var(--surface-strong);
-}
 
-.console.theme-light .reasoning-hero {
-  background: linear-gradient(135deg, #f7fafc, #e9f0f5);
-  border-color: var(--line);
-  color: var(--text);
-}
 
-.console.theme-light .reasoning-stat-card,
-.console.theme-light .stream-search-wrap,
-.console.theme-light .class-select,
-.console.theme-light .event-inline-json,
-.console.theme-light .policy-rules-summary,
-.console.theme-light .agent-reasoning-callout {
-  box-shadow: none;
-}
 
-.console.theme-light .event-drawer,
-.console.theme-light .event-drawer pre,
-.console.theme-light .opa-source-code,
-.console.theme-light .response-json-box pre,
-.console.theme-light .event-inline-json pre,
-.console.theme-light .report-preview,
-.console.theme-light .developer-grid code {
-  color: #29445f;
-}
 
-.console.theme-light .event-drawer pre,
-.console.theme-light .opa-source-code,
-.console.theme-light .report-preview,
-.console.theme-light .response-json-box pre,
-.console.theme-light .event-inline-json pre {
-  background: var(--code-surface);
-}
 
-.console.theme-light .filter-chip,
-.console.theme-light .event-action-pill,
-.console.theme-light .severity-tag,
-.console.theme-light .event-class-tag,
-.console.theme-light .status-code-pill,
-.console.theme-light .action-badge,
-.console.theme-light .live-status-pill,
-.console.theme-light .status-badge {
-  border-color: var(--line);
-}
 
-.console.theme-light .filter-chip {
-  background: var(--surface-subtle);
-  color: var(--muted);
-}
 
-.console.theme-light .filter-chip:hover,
-.console.theme-light .filter-chip.active {
-  background: var(--accent-soft);
-  color: var(--text);
-  border-color: var(--line-hover);
-}
 
-.console.theme-light .event-stream-card.action-contain,
-.console.theme-light .event-action-pill.contain,
-.console.theme-light .action-badge.contain,
-.console.theme-light .severity-tag.sev-medium {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
 
-.console.theme-light .event-stream-card.action-deny,
-.console.theme-light .event-stream-card.action-blocked,
-.console.theme-light .event-action-pill.deny,
-.console.theme-light .event-action-pill.blocked,
-.console.theme-light .action-badge.deny,
-.console.theme-light .severity-tag.sev-high,
-.console.theme-light .severity-tag.sev-critical {
-  background: var(--red-soft);
-  color: var(--red);
-}
 
-.console.theme-light .event-stream-card.action-escalate,
-.console.theme-light .event-action-pill.escalate,
-.console.theme-light .action-badge.escalate {
-  background: rgba(112, 82, 145, .12);
-  color: #705291;
-  border-color: rgba(112, 82, 145, .3);
-}
 
-.console.theme-light .event-stream-card.action-allow,
-.console.theme-light .event-stream-card.action-allowed,
-.console.theme-light .event-action-pill.allow,
-.console.theme-light .event-action-pill.allowed,
-.console.theme-light .action-badge.allow {
-  background: var(--green-soft);
-  color: var(--green);
-}
 
-.console.theme-light .empty,
-.console.theme-light .empty-stream-state,
-.console.theme-light .empty-row {
-  background: var(--panel);
-  color: var(--muted);
-  border-color: var(--line);
-}
 
-.console.theme-light .btn-secondary,
-.console.theme-light .secondary-btn,
-.console.theme-light .detail-secondary-action,
-.console.theme-light .open-drawer-btn,
-.console.theme-light .toggle-raw-btn,
-.console.theme-light .close-modal-btn,
-.console.theme-light .drawer-close,
-.console.theme-light .agent-detail-close {
-  background: var(--surface-strong);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .primary-btn,
-.console.theme-light .detail-primary-action,
-.console.theme-light .deploy-button,
-.console.theme-light .integrations-view .primary-action-btn {
-  background: var(--green);
-  border-color: var(--green);
-  color: #ffffff;
-}
 
-.console.theme-light .primary-btn:hover,
-.console.theme-light .detail-primary-action:hover,
-.console.theme-light .deploy-button:hover:not(:disabled),
-.console.theme-light .integrations-view .primary-action-btn:hover {
-  background: var(--green-hover);
-  border-color: var(--green-hover);
-}
 
-.console.theme-light .api-alert,
-.console.theme-light .deploy-success-alert,
-.console.theme-light .deploy-error-alert,
-.console.theme-light .form-message {
-  border-color: var(--line);
-  background: var(--surface-subtle);
-  color: var(--text);
-}
 
-.console.theme-light .api-alert svg,
-.console.theme-light .form-message.success { color: var(--green); }
-.console.theme-light .form-message.error,
-.console.theme-light .deploy-error-alert { color: var(--red); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 .configuration-unified {
   display: grid;
@@ -7499,77 +7002,27 @@ h1, h2, h3, h4, b {
   line-height: 1.5;
 }
 
-.console.theme-light .configuration-section-heading h3,
-.console.theme-light .configuration-section-heading p:last-child {
-  color: var(--text);
-}
 
-.console.theme-light .configuration-section-heading p:last-child {
-  color: var(--muted);
-}
 
-.console.theme-light .settings-tab-btn:hover {
-  background: var(--accent-soft);
-  color: var(--text);
-}
 
-.console.theme-light .settings-tab-btn.active {
-  background: var(--green-soft);
-  color: var(--green);
-  border-color: var(--line-hover);
-}
 
-.console.theme-light .posture-option-card,
-.console.theme-light .posture-option-card.selected,
-.console.theme-light .active-token-row,
-.console.theme-light .token-reveal-row,
-.console.theme-light .session-props-grid > div,
-.console.theme-light .toggle-list .toggle-item,
-.console.theme-light .form-feedback-alert,
-.console.theme-light .minted-token-alert {
-  background: var(--surface-strong);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .posture-option-card.selected {
-  background: var(--green-soft);
-  border-color: var(--green);
-}
 
-.console.theme-light .option-title-row b,
-.console.theme-light .settings-tab-btn.active,
-.console.theme-light .token-info h4,
-.console.theme-light .session-props-grid dd,
-.console.theme-light .form-feedback-alert,
-.console.theme-light .minted-token-alert {
-  color: var(--text);
-}
 
-.console.theme-light .json-rows pre,
-.console.theme-light .evidence-runtime-strip span,
-.console.theme-light .signal-routing-map {
-  background: var(--code-surface);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .json-rows pre {
-  color: #29445f;
-}
 
-.console.theme-light .evidence-runtime-strip b,
-.console.theme-light .signal-stack strong,
-.console.theme-light .signal-center strong {
-  color: var(--text);
-}
 
-.console.theme-light .endpoint-nav-item:hover,
-.console.theme-light .endpoint-nav-item.active {
-  background: var(--accent-soft);
-  color: var(--text);
-  border-color: var(--line-hover);
-}
+
+
+
+
+
+
+
+
+
+
+
 
 /* Keep top-level windows visually distinct when a workspace renders a fragment. */
 .content > .settings-card + .settings-card,
@@ -7607,50 +7060,14 @@ h1, h2, h3, h4, b {
 
 /* The reference console uses technical window frames rather than rounded cards:
    a flat 1px rule with short registration marks at each corner. */
-.console.theme-light .metric,
-.console.theme-light .panel,
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .outbox-status-card,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .integration-card,
-.console.theme-light .event-stream-card,
-.console.theme-light .api-explorer-layout,
-.console.theme-light .agent-detail-section,
-.console.theme-light .evidence-reference-metrics,
-.console.theme-light .evidence-reference-grid > .resource {
-  border-radius: 0;
-  border-color: var(--line);
-  box-shadow: none;
-  background-image:
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)),
-    linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted));
-  background-repeat: no-repeat;
-  background-size: 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px, 11px 1px, 1px 11px;
-  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
-}
 
-.console.theme-light .hermes-boundary-grid > div,
-.console.theme-light .evidence-runtime-strip span,
-.console.theme-light .report-preview,
-.console.theme-light .pipeline-table,
-.console.theme-light .pipeline-table-head,
-.console.theme-light .event-inline-json {
-  background: var(--surface-strong);
-  color: var(--text);
-  border-color: var(--line);
-}
 
-.console.theme-light .settings-card-title {
-  color: var(--text);
-}
+
+
+
 
 /* Final cascade guard: the namespace selector is a required operator control. */
-.console.theme-light .shared-agent-picker,
+
 .console.theme-command-center .shared-agent-picker {
   display: flex;
 }
@@ -7702,16 +7119,14 @@ h1, h2, h3, h4, b {
   border-color: var(--line);
 }
 
-.console.theme-command-center .responder-card,
-.console.theme-light .responder-card {
+.console.theme-command-center .responder-card {
   background: var(--panel-elevated);
   border-color: var(--line);
   border-radius: 0;
 }
 
 /* Final typography pass: keep component text on the shared theme scale. */
-.console.theme-command-center,
-.console.theme-light {
+.console.theme-command-center {
   --text-primary: var(--text);
   --text-secondary: var(--muted);
   --text-tertiary: var(--dim);
@@ -7722,13 +7137,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center h3,
 .console.theme-command-center h4,
 .console.theme-command-center h5,
-.console.theme-command-center h6,
-.console.theme-light h1,
-.console.theme-light h2,
-.console.theme-light h3,
-.console.theme-light h4,
-.console.theme-light h5,
-.console.theme-light h6 {
+.console.theme-command-center h6 {
   color: var(--text-primary);
 }
 
@@ -7745,21 +7154,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .reasoning-rationale,
 .console.theme-command-center .event-device-tag,
 .console.theme-command-center .event-time-meta time,
-.console.theme-command-center .audit-event small,
-.console.theme-light .field-hint,
-.console.theme-light .settings-card-desc,
-.console.theme-light .panel-title p,
-.console.theme-light .resource-header p,
-.console.theme-light .empty-state,
-.console.theme-light .transaction-note,
-.console.theme-light .agent-footer-note,
-.console.theme-light .responder-card p,
-.console.theme-light .integration-card p,
-.console.theme-light .policy-bundle-desc,
-.console.theme-light .reasoning-rationale,
-.console.theme-light .event-device-tag,
-.console.theme-light .event-time-meta time,
-.console.theme-light .audit-event small {
+.console.theme-command-center .audit-event small {
   color: var(--text-secondary);
 }
 
@@ -7768,13 +7163,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center dt,
 .console.theme-command-center .evidence-label,
 .console.theme-command-center .metric > div,
-.console.theme-command-center .evidence-runtime-strip b,
-.console.theme-light .eyebrow,
-.console.theme-light .section-kicker,
-.console.theme-light dt,
-.console.theme-light .evidence-label,
-.console.theme-light .metric > div,
-.console.theme-light .evidence-runtime-strip b {
+.console.theme-command-center .evidence-runtime-strip b {
   color: var(--text-tertiary);
 }
 
@@ -7783,24 +7172,14 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .subject-target,
 .console.theme-command-center .settings-readout,
 .console.theme-command-center .hybrid-pair dd,
-.console.theme-command-center .hybrid-detail-values code,
-.console.theme-light code,
-.console.theme-light pre,
-.console.theme-light .subject-target,
-.console.theme-light .settings-readout,
-.console.theme-light .hybrid-pair dd,
-.console.theme-light .hybrid-detail-values code {
+.console.theme-command-center .hybrid-detail-values code {
   color: var(--text-primary);
 }
 
 .console.theme-command-center .event-id-ref,
 .console.theme-command-center .subject-label,
 .console.theme-command-center .matched-rule-tag,
-.console.theme-command-center .guardrail-tier,
-.console.theme-light .event-id-ref,
-.console.theme-light .subject-label,
-.console.theme-light .matched-rule-tag,
-.console.theme-light .guardrail-tier {
+.console.theme-command-center .guardrail-tier {
   color: var(--text-tertiary);
 }
 
@@ -7818,21 +7197,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .code-snippets-section,
 .console.theme-command-center .pipeline-table,
 .console.theme-command-center .report-preview,
-.console.theme-command-center .modal-card,
-.console.theme-light .action-form,
-.console.theme-light .form-group input,
-.console.theme-light .form-group select,
-.console.theme-light .form-select,
-.console.theme-light .class-select,
-.console.theme-light .stream-search-wrap,
-.console.theme-light .policy-rules-summary,
-.console.theme-light .reasoning-stat-card,
-.console.theme-light .event-inline-json,
-.console.theme-light .response-json-box,
-.console.theme-light .code-snippets-section,
-.console.theme-light .pipeline-table,
-.console.theme-light .report-preview,
-.console.theme-light .modal-card {
+.console.theme-command-center .modal-card {
   background: var(--panel-elevated);
   border-color: var(--line);
   color: var(--text-primary);
@@ -7842,12 +7207,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .agent-reasoning-callout,
 .console.theme-command-center .event-inline-json pre,
 .console.theme-command-center .pipeline-table pre,
-.console.theme-command-center .response-json-box pre,
-.console.theme-light .subject-target,
-.console.theme-light .agent-reasoning-callout,
-.console.theme-light .event-inline-json pre,
-.console.theme-light .pipeline-table pre,
-.console.theme-light .response-json-box pre {
+.console.theme-command-center .response-json-box pre {
   background: var(--panel);
   border-color: var(--line);
   color: var(--text-primary);
@@ -7857,21 +7217,13 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .class-select label,
 .console.theme-command-center .config-tag b,
 .console.theme-command-center .response-status-bar,
-.console.theme-command-center .snippet-tabs,
-.console.theme-light .form-group label,
-.console.theme-light .class-select label,
-.console.theme-light .config-tag b,
-.console.theme-light .response-status-bar,
-.console.theme-light .snippet-tabs {
+.console.theme-command-center .snippet-tabs {
   color: var(--text-secondary);
 }
 
 .console.theme-command-center .form-group input,
 .console.theme-command-center .form-group select,
-.console.theme-command-center .form-select,
-.console.theme-light .form-group input,
-.console.theme-light .form-group select,
-.console.theme-light .form-select {
+.console.theme-command-center .form-select {
   color: var(--text-primary);
 }
 
@@ -7998,7 +7350,6 @@ h1, h2, h3, h4, b {
 .console .config-tag,
 .console .responder-status,
 .console .responder-gate,
-.console .theme-choice,
 .console .method-badge {
   border-radius: 0 !important;
 }
@@ -8029,24 +7380,20 @@ h1, h2, h3, h4, b {
 
 /* Mock-aligned console geometry at desktop widths. */
 @media (min-width: 961px) {
-  .console.theme-command-center,
-  .console.theme-light {
+  .console.theme-command-center {
     grid-template-columns: 220px 1fr;
   }
 
-  .console.theme-command-center .side,
-  .console.theme-light .side {
+  .console.theme-command-center .side {
     width: 220px;
   }
 
-  .console.theme-command-center .side .brand img,
-  .console.theme-light .side .brand img {
+  .console.theme-command-center .side .brand img {
     width: 38px;
     height: 38px;
   }
 
-  .console.theme-command-center .content,
-  .console.theme-light .content {
+  .console.theme-command-center .content {
     max-width: 1360px;
     padding-right: 42px;
     padding-left: 42px;
@@ -8102,8 +7449,7 @@ h1, h2, h3, h4, b {
 
 /* Reimagined command header: identity, scope, and operator controls have a
    stable two-row hierarchy instead of competing in one toolbar. */
-.console.theme-command-center .top,
-.console.theme-light .top {
+.console.theme-command-center .top {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto;
   grid-template-rows: 1fr;
@@ -8119,9 +7465,7 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .command-brand,
-.console.theme-light .command-brand,
-.console.theme-command-center .top-title,
-.console.theme-light .top-title {
+.console.theme-command-center .top-title {
   display: none !important;
 }
 
@@ -8161,8 +7505,7 @@ h1, h2, h3, h4, b {
   white-space: nowrap;
 }
 
-.console.theme-command-center .tools,
-.console.theme-light .tools {
+.console.theme-command-center .tools {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -8171,8 +7514,7 @@ h1, h2, h3, h4, b {
   gap: 8px;
 }
 
-.console.theme-command-center .connection,
-.console.theme-light .connection {
+.console.theme-command-center .connection {
   order: -2;
   min-height: 34px;
   padding: 0 10px;
@@ -8182,24 +7524,19 @@ h1, h2, h3, h4, b {
   color: var(--text);
 }
 
-.console.theme-command-center .shared-agent-picker,
-.console.theme-light .shared-agent-picker {
+.console.theme-command-center .shared-agent-picker {
   order: -1;
 }
 
-.console.theme-command-center .command-nav,
-.console.theme-light .command-nav {
+.console.theme-command-center .command-nav {
   display: none;
 }
 
 /* Navigation typography is shared across themes: condensed, readable labels
    with a quiet secondary state and a clear active rail. */
 .console.theme-command-center .side nav button,
-.console.theme-light .side nav button,
 .console.theme-command-center .profile-btn,
-.console.theme-light .profile-btn,
-.console.theme-command-center .account-nav button,
-.console.theme-light .account-nav button {
+.console.theme-command-center .account-nav button {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 16px;
   font-weight: 600;
@@ -8208,24 +7545,18 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .side nav button:hover,
-.console.theme-light .side nav button:hover,
 .console.theme-command-center .profile-btn:hover,
-.console.theme-light .profile-btn:hover,
-.console.theme-command-center .account-nav button:hover,
-.console.theme-light .account-nav button:hover {
+.console.theme-command-center .account-nav button:hover {
   color: var(--text);
 }
 
-.console.theme-command-center .side nav button.active,
-.console.theme-light .side nav button.active {
+.console.theme-command-center .side nav button.active {
   color: var(--text);
   font-weight: 700;
 }
 
 .console.theme-command-center .side .nav-group > small,
-.console.theme-light .side .nav-group > small,
-.console.theme-command-center .side nav > small,
-.console.theme-light .side nav > small {
+.console.theme-command-center .side nav > small {
   color: var(--dim);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 11px;
@@ -8233,20 +7564,17 @@ h1, h2, h3, h4, b {
   letter-spacing: .14em;
 }
 
-.console.theme-command-center .side nav button svg,
-.console.theme-light .side nav button svg {
+.console.theme-command-center .side nav button svg {
   color: var(--muted);
 }
 
-.console.theme-command-center .side nav button.active svg,
-.console.theme-light .side nav button.active svg {
+.console.theme-command-center .side nav button.active svg {
   color: var(--green);
 }
 
 /* Responder capabilities use the same hierarchy and flat window geometry as
    the rest of the Agent page. */
-.console.theme-command-center .responder-panel,
-.console.theme-light .responder-panel {
+.console.theme-command-center .responder-panel {
   display: grid;
   gap: 20px;
   margin: 20px 0 24px;
@@ -8257,8 +7585,7 @@ h1, h2, h3, h4, b {
   background-image: none;
 }
 
-.console.theme-command-center .responder-panel-heading,
-.console.theme-light .responder-panel-heading {
+.console.theme-command-center .responder-panel-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -8267,8 +7594,7 @@ h1, h2, h3, h4, b {
   border-bottom: 1px solid var(--line);
 }
 
-.console.theme-command-center .responder-panel-heading h3,
-.console.theme-light .responder-panel-heading h3 {
+.console.theme-command-center .responder-panel-heading h3 {
   margin: 6px 0 8px;
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
@@ -8276,8 +7602,7 @@ h1, h2, h3, h4, b {
   line-height: 1.05;
 }
 
-.console.theme-command-center .responder-panel-heading p:not(.eyebrow),
-.console.theme-light .responder-panel-heading p:not(.eyebrow) {
+.console.theme-command-center .responder-panel-heading p:not(.eyebrow) {
   max-width: 760px;
   margin: 0;
   color: var(--text-secondary);
@@ -8285,8 +7610,7 @@ h1, h2, h3, h4, b {
   line-height: 1.5;
 }
 
-.console.theme-command-center .responder-gate,
-.console.theme-light .responder-gate {
+.console.theme-command-center .responder-gate {
   flex: 0 0 auto;
   border: 1px solid var(--line);
   border-radius: 0;
@@ -8298,15 +7622,13 @@ h1, h2, h3, h4, b {
   text-transform: uppercase;
 }
 
-.console.theme-command-center .responder-grid,
-.console.theme-light .responder-grid {
+.console.theme-command-center .responder-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 0;
 }
 
-.console.theme-command-center .responder-card,
-.console.theme-light .responder-card {
+.console.theme-command-center .responder-card {
   min-height: 170px;
   padding: 16px;
   border: 1px solid var(--line);
@@ -8314,8 +7636,7 @@ h1, h2, h3, h4, b {
   background: var(--panel-elevated);
 }
 
-.console.theme-command-center .responder-card h4,
-.console.theme-light .responder-card h4 {
+.console.theme-command-center .responder-card h4 {
   margin: 14px 0 6px;
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
@@ -8323,16 +7644,14 @@ h1, h2, h3, h4, b {
   line-height: 1.1;
 }
 
-.console.theme-command-center .responder-card p,
-.console.theme-light .responder-card p {
+.console.theme-command-center .responder-card p {
   min-height: 58px;
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.45;
 }
 
-.console.theme-command-center .responder-note,
-.console.theme-light .responder-note {
+.console.theme-command-center .responder-note {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -8343,34 +7662,29 @@ h1, h2, h3, h4, b {
 }
 
 @media (max-width: 900px) {
-  .console.theme-command-center .responder-grid,
-  .console.theme-light .responder-grid {
+  .console.theme-command-center .responder-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 560px) {
-  .console.theme-command-center .responder-panel-heading,
-  .console.theme-light .responder-panel-heading {
+  .console.theme-command-center .responder-panel-heading {
     display: grid;
     gap: 14px;
   }
 
-  .console.theme-command-center .responder-grid,
-  .console.theme-light .responder-grid {
+  .console.theme-command-center .responder-grid {
     grid-template-columns: 1fr;
   }
 }
 
 /* Keep the rail toggle anchored to the header instead of letting it drift
    with the brand text when the rail collapses. */
-.console.theme-command-center .side > header,
-.console.theme-light .side > header {
+.console.theme-command-center .side > header {
   position: relative;
 }
 
-.console.theme-command-center .side > header .nav-collapse-btn,
-.console.theme-light .side > header .nav-collapse-btn {
+.console.theme-command-center .side > header .nav-collapse-btn {
   position: absolute;
   top: 26px;
   right: 8px;
@@ -8378,28 +7692,24 @@ h1, h2, h3, h4, b {
   margin: 0;
 }
 
-.console.theme-command-center .side.collapsed > header,
-.console.theme-light .side.collapsed > header {
+.console.theme-command-center .side.collapsed > header {
   min-height: 84px;
   padding: 12px 8px;
   align-items: flex-start;
 }
 
-.console.theme-command-center .side.collapsed > header .brand,
-.console.theme-light .side.collapsed > header .brand {
+.console.theme-command-center .side.collapsed > header .brand {
   justify-content: flex-start;
   width: 28px;
   padding: 0;
 }
 
-.console.theme-command-center .side.collapsed > header .brand img,
-.console.theme-light .side.collapsed > header .brand img {
+.console.theme-command-center .side.collapsed > header .brand img {
   width: 28px;
   height: 28px;
 }
 
-.console.theme-command-center .side.collapsed > header .nav-collapse-btn,
-.console.theme-light .side.collapsed > header .nav-collapse-btn {
+.console.theme-command-center .side.collapsed > header .nav-collapse-btn {
   position: absolute;
   top: 10px;
   right: 8px;
@@ -8408,22 +7718,16 @@ h1, h2, h3, h4, b {
   margin: 0;
 }
 
-.console.theme-command-center .side.collapsed > header .nav-collapse-btn svg,
-.console.theme-light .side.collapsed > header .nav-collapse-btn svg {
+.console.theme-command-center .side.collapsed > header .nav-collapse-btn svg {
   width: 14px;
   height: 14px;
 }
 
 .console.theme-command-center .agent-unified-section,
-.console.theme-light .agent-unified-section,
 .console.theme-command-center .evidence-unified-section,
-.console.theme-light .evidence-unified-section,
 .console.theme-command-center .decisions-policy-section,
-.console.theme-light .decisions-policy-section,
 .console.theme-command-center .decisions-approvals-section,
-.console.theme-light .decisions-approvals-section,
-.console.theme-command-center .configuration-section,
-.console.theme-light .configuration-section {
+.console.theme-command-center .configuration-section {
   width: 100%;
   max-width: 100%;
   overflow: hidden;
@@ -8438,15 +7742,13 @@ h1, h2, h3, h4, b {
 
 /* Shared page rhythm: every workspace uses the same heading, copy, label,
    spacing, and theme-token colors regardless of which route owns the card. */
-.console.theme-command-center .workspace-header,
-.console.theme-light .workspace-header {
+.console.theme-command-center .workspace-header {
   width: 100%;
   max-width: 100%;
   margin: 0 0 20px;
 }
 
-.console.theme-command-center .workspace-header h2,
-.console.theme-light .workspace-header h2 {
+.console.theme-command-center .workspace-header h2 {
   margin: 6px 0 8px;
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
@@ -8456,34 +7758,22 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .workspace-header > p:last-child,
-.console.theme-light .workspace-header > p:last-child,
 .console.theme-command-center .agent-unified-heading p:last-child,
-.console.theme-light .agent-unified-heading p:last-child,
 .console.theme-command-center .evidence-unified-heading p:last-child,
-.console.theme-light .evidence-unified-heading p:last-child,
 .console.theme-command-center .decisions-policy-heading p:last-child,
-.console.theme-light .decisions-policy-heading p:last-child,
 .console.theme-command-center .decisions-approvals-heading p:last-child,
-.console.theme-light .decisions-approvals-heading p:last-child,
-.console.theme-command-center .configuration-section-heading p:last-child,
-.console.theme-light .configuration-section-heading p:last-child {
+.console.theme-command-center .configuration-section-heading p:last-child {
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.5;
 }
 
 .console.theme-command-center .workspace-header .eyebrow,
-.console.theme-light .workspace-header .eyebrow,
 .console.theme-command-center .agent-unified-heading .eyebrow,
-.console.theme-light .agent-unified-heading .eyebrow,
 .console.theme-command-center .evidence-unified-heading .eyebrow,
-.console.theme-light .evidence-unified-heading .eyebrow,
 .console.theme-command-center .decisions-policy-heading .eyebrow,
-.console.theme-light .decisions-policy-heading .eyebrow,
 .console.theme-command-center .decisions-approvals-heading .eyebrow,
-.console.theme-light .decisions-approvals-heading .eyebrow,
-.console.theme-command-center .configuration-section-heading .eyebrow,
-.console.theme-light .configuration-section-heading .eyebrow {
+.console.theme-command-center .configuration-section-heading .eyebrow {
   color: var(--green);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: var(--type-eyebrow);
@@ -8493,15 +7783,10 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .agent-unified-heading h3,
-.console.theme-light .agent-unified-heading h3,
 .console.theme-command-center .evidence-unified-heading h3,
-.console.theme-light .evidence-unified-heading h3,
 .console.theme-command-center .decisions-policy-heading h3,
-.console.theme-light .decisions-policy-heading h3,
 .console.theme-command-center .decisions-approvals-heading h3,
-.console.theme-light .decisions-approvals-heading h3,
-.console.theme-command-center .configuration-section-heading h3,
-.console.theme-light .configuration-section-heading h3 {
+.console.theme-command-center .configuration-section-heading h3 {
   margin: 0;
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
@@ -8510,25 +7795,20 @@ h1, h2, h3, h4, b {
   line-height: 1.05;
 }
 
-.console.theme-command-center .workspace-tabs,
-.console.theme-light .workspace-tabs {
+.console.theme-command-center .workspace-tabs {
   width: 100%;
   max-width: 100%;
   margin: 0 0 20px;
 }
 
 .console.theme-command-center .settings-card-header,
-.console.theme-light .settings-card-header,
-.console.theme-command-center .panel-title,
-.console.theme-light .panel-title {
+.console.theme-command-center .panel-title {
   min-width: 0;
   gap: 12px;
 }
 
 .console.theme-command-center .settings-card-title h3,
-.console.theme-light .settings-card-title h3,
-.console.theme-command-center .panel-title h3,
-.console.theme-light .panel-title h3 {
+.console.theme-command-center .panel-title h3 {
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: var(--type-panel);
@@ -8537,11 +7817,8 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .settings-card-desc,
-.console.theme-light .settings-card-desc,
 .console.theme-command-center .panel-title p,
-.console.theme-light .panel-title p,
-.console.theme-command-center .field-hint,
-.console.theme-light .field-hint {
+.console.theme-command-center .field-hint {
   color: var(--text-secondary);
   font-size: var(--type-copy);
   line-height: 1.5;
@@ -8549,8 +7826,7 @@ h1, h2, h3, h4, b {
 
 /* Keep editable text windows compact and consistent across Network,
    Configuration, and Developer surfaces. */
-.console.theme-command-center textarea,
-.console.theme-light textarea {
+.console.theme-command-center textarea {
   min-height: 96px;
   max-height: 220px;
   line-height: 1.45;
@@ -8558,54 +7834,45 @@ h1, h2, h3, h4, b {
   overflow: auto;
 }
 
-.console.theme-command-center .body-editor,
-.console.theme-light .body-editor {
+.console.theme-command-center .body-editor {
   min-height: 124px;
   max-height: 220px;
 }
 
-.console.theme-command-center pre,
-.console.theme-light pre {
+.console.theme-command-center pre {
   max-height: 360px;
   overflow: auto;
 }
 
 /* Approval queue: status-first rows with clear action grouping. */
-.console.theme-command-center .change-queue-card,
-.console.theme-light .change-queue-card {
+.console.theme-command-center .change-queue-card {
   display: grid;
   gap: 18px;
 }
 
-.console.theme-command-center .change-queue-card .settings-card-title,
-.console.theme-light .change-queue-card .settings-card-title {
+.console.theme-command-center .change-queue-card .settings-card-title {
   align-items: flex-start;
 }
 
-.console.theme-command-center .change-queue-card .settings-card-title > div,
-.console.theme-light .change-queue-card .settings-card-title > div {
+.console.theme-command-center .change-queue-card .settings-card-title > div {
   display: grid;
   gap: 5px;
 }
 
-.console.theme-command-center .change-queue-card .settings-card-title .eyebrow,
-.console.theme-light .change-queue-card .settings-card-title .eyebrow {
+.console.theme-command-center .change-queue-card .settings-card-title .eyebrow {
   margin: 0;
 }
 
-.console.theme-command-center .change-queue-card .settings-card-title h3,
-.console.theme-light .change-queue-card .settings-card-title h3 {
+.console.theme-command-center .change-queue-card .settings-card-title h3 {
   margin: 0;
 }
 
-.console.theme-command-center .change-queue-list,
-.console.theme-light .change-queue-list {
+.console.theme-command-center .change-queue-list {
   display: grid;
   gap: 8px;
 }
 
-.console.theme-command-center .change-request-row,
-.console.theme-light .change-request-row {
+.console.theme-command-center .change-request-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8616,37 +7883,32 @@ h1, h2, h3, h4, b {
   background: var(--panel-elevated);
 }
 
-.console.theme-command-center .change-request-copy,
-.console.theme-light .change-request-copy {
+.console.theme-command-center .change-request-copy {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.console.theme-command-center .change-request-title,
-.console.theme-light .change-request-title {
+.console.theme-command-center .change-request-title {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.console.theme-command-center .change-request-title b,
-.console.theme-light .change-request-title b {
+.console.theme-command-center .change-request-title b {
   color: var(--text-primary);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 17px;
 }
 
-.console.theme-command-center .change-request-copy small,
-.console.theme-light .change-request-copy small {
+.console.theme-command-center .change-request-copy small {
   overflow-wrap: anywhere;
   color: var(--text-tertiary);
   font-size: var(--type-meta);
 }
 
-.console.theme-command-center .change-request-status,
-.console.theme-light .change-request-status {
+.console.theme-command-center .change-request-status {
   padding: 4px 7px;
   border: 1px solid var(--line);
   color: var(--text-secondary);
@@ -8657,26 +7919,22 @@ h1, h2, h3, h4, b {
   text-transform: uppercase;
 }
 
-.console.theme-command-center .change-request-status.pending,
-.console.theme-light .change-request-status.pending {
+.console.theme-command-center .change-request-status.pending {
   border-color: var(--amber);
   color: var(--amber);
 }
 
-.console.theme-command-center .change-request-status.approved,
-.console.theme-light .change-request-status.approved {
+.console.theme-command-center .change-request-status.approved {
   border-color: var(--green);
   color: var(--green);
 }
 
-.console.theme-command-center .change-request-status.rejected,
-.console.theme-light .change-request-status.rejected {
+.console.theme-command-center .change-request-status.rejected {
   border-color: var(--red);
   color: var(--red);
 }
 
-.console.theme-command-center .change-request-actions,
-.console.theme-light .change-request-actions {
+.console.theme-command-center .change-request-actions {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
@@ -8684,21 +7942,18 @@ h1, h2, h3, h4, b {
 }
 
 @media (max-width: 640px) {
-  .console.theme-command-center .change-request-row,
-  .console.theme-light .change-request-row {
+  .console.theme-command-center .change-request-row {
     align-items: stretch;
     flex-direction: column;
     gap: 12px;
   }
 
-  .console.theme-command-center .change-request-actions,
-  .console.theme-light .change-request-actions {
+  .console.theme-command-center .change-request-actions {
     width: 100%;
   }
 }
 
-.console.theme-command-center .telemetry-context-bar,
-.console.theme-light .telemetry-context-bar {
+.console.theme-command-center .telemetry-context-bar {
   display: none;
   grid-column: 1 / -1;
   grid-row: 1;
@@ -8707,8 +7962,7 @@ h1, h2, h3, h4, b {
 }
 
 @media (max-width: 760px) {
-  .console.theme-command-center .top,
-  .console.theme-light .top {
+  .console.theme-command-center .top {
     grid-template-columns: 1fr auto;
     height: auto;
     min-height: 106px;
@@ -8716,10 +7970,8 @@ h1, h2, h3, h4, b {
   }
 
   .header-identity strong { font-size: 21px; }
-  .console.theme-command-center .tools,
-  .console.theme-light .tools { gap: 6px; }
-  .console.theme-command-center .connection,
-  .console.theme-light .connection { display: none; }
+  .console.theme-command-center .tools { gap: 6px; }
+  .console.theme-command-center .connection { display: none; }
 }
 
 .console.theme-command-center h1,
@@ -8733,8 +7985,7 @@ h1, h2, h3, h4, b {
 }
 
 /* Canonical cross-page type and window rhythm. */
-.console.theme-command-center,
-.console.theme-light {
+.console.theme-command-center {
   --type-display: 52px;
   --type-page: 34px;
   --type-section: 26px;
@@ -8845,9 +8096,7 @@ h1, h2, h3, h4, b {
 
 /* Unified tab language across every workspace and settings surface. */
 .console.theme-command-center .workspace-tabs,
-.console.theme-light .workspace-tabs,
-.console.theme-command-center .settings-tabs-bar,
-.console.theme-light .settings-tabs-bar {
+.console.theme-command-center .settings-tabs-bar {
   gap: 0;
   margin-bottom: 20px;
   padding-bottom: 0;
@@ -8857,9 +8106,7 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .workspace-tabs button,
-.console.theme-light .workspace-tabs button,
-.console.theme-command-center .settings-tab-btn,
-.console.theme-light .settings-tab-btn {
+.console.theme-command-center .settings-tab-btn {
   flex: 0 0 auto;
   min-height: 40px;
   padding: 9px 14px;
@@ -8873,18 +8120,14 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .workspace-tabs button:hover,
-.console.theme-light .workspace-tabs button:hover,
-.console.theme-command-center .settings-tab-btn:hover,
-.console.theme-light .settings-tab-btn:hover {
+.console.theme-command-center .settings-tab-btn:hover {
   border-bottom-color: var(--line-hover);
   background: var(--panel-elevated);
   color: var(--text);
 }
 
 .console.theme-command-center .workspace-tabs button.active,
-.console.theme-light .workspace-tabs button.active,
-.console.theme-command-center .settings-tab-btn.active,
-.console.theme-light .settings-tab-btn.active {
+.console.theme-command-center .settings-tab-btn.active {
   border-color: transparent;
   border-bottom-color: var(--green);
   border-radius: 0;
@@ -8892,21 +8135,18 @@ h1, h2, h3, h4, b {
   color: var(--text);
 }
 
-.console.theme-command-center .workspace-tabs button span,
-.console.theme-light .workspace-tabs button span {
+.console.theme-command-center .workspace-tabs button span {
   color: var(--green);
 }
 
-.console.theme-command-center .snippet-tabs,
-.console.theme-light .snippet-tabs {
+.console.theme-command-center .snippet-tabs {
   gap: 0;
   padding: 0;
   background: var(--panel-elevated);
   border-bottom-color: var(--line);
 }
 
-.console.theme-command-center .snippet-tab-btn,
-.console.theme-light .snippet-tab-btn {
+.console.theme-command-center .snippet-tab-btn {
   min-height: 32px;
   padding: 7px 10px;
   border: 0;
@@ -8915,22 +8155,19 @@ h1, h2, h3, h4, b {
   color: var(--muted);
 }
 
-.console.theme-command-center .snippet-tab-btn:hover,
-.console.theme-light .snippet-tab-btn:hover {
+.console.theme-command-center .snippet-tab-btn:hover {
   background: var(--panel);
   color: var(--text);
 }
 
-.console.theme-command-center .snippet-tab-btn.active,
-.console.theme-light .snippet-tab-btn.active {
+.console.theme-command-center .snippet-tab-btn.active {
   border-bottom-color: var(--green);
   background: var(--panel);
   color: var(--text);
 }
 
 /* Decisions summary window: flat shared surface, consistent metric cards. */
-.console.theme-command-center .reasoning-hero,
-.console.theme-light .reasoning-hero {
+.console.theme-command-center .reasoning-hero {
   background: var(--panel);
   background-image: none;
   border-color: var(--line);
@@ -8938,29 +8175,23 @@ h1, h2, h3, h4, b {
   color: var(--text-primary);
 }
 
-.console.theme-command-center .reasoning-hero h2,
-.console.theme-light .reasoning-hero h2 {
+.console.theme-command-center .reasoning-hero h2 {
   color: var(--text-primary);
 }
 
-.console.theme-command-center .reasoning-stat-card,
-.console.theme-light .reasoning-stat-card {
+.console.theme-command-center .reasoning-stat-card {
   background: var(--panel-elevated);
   border-color: var(--line);
   border-radius: 0;
 }
 
-.console.theme-command-center .reasoning-stat-card .stat-val,
-.console.theme-light .reasoning-stat-card .stat-val {
+.console.theme-command-center .reasoning-stat-card .stat-val {
   color: var(--text-primary);
 }
 
-.console.theme-command-center .reasoning-stat-card .stat-val.text-green,
-.console.theme-light .reasoning-stat-card .stat-val.text-green { color: var(--green); }
-.console.theme-command-center .reasoning-stat-card .stat-val.text-amber,
-.console.theme-light .reasoning-stat-card .stat-val.text-amber { color: var(--amber); }
-.console.theme-command-center .reasoning-stat-card .stat-val.text-red,
-.console.theme-light .reasoning-stat-card .stat-val.text-red { color: var(--red); }
+.console.theme-command-center .reasoning-stat-card .stat-val.text-green { color: var(--green); }
+.console.theme-command-center .reasoning-stat-card .stat-val.text-amber { color: var(--amber); }
+.console.theme-command-center .reasoning-stat-card .stat-val.text-red { color: var(--red); }
 
 /* Decisions event stream: one compact observation, with detail kept on demand. */
 .event-observation-summary {
@@ -9009,8 +8240,7 @@ h1, h2, h3, h4, b {
   text-transform: uppercase;
 }
 
-.console.theme-command-center .event-observation-summary,
-.console.theme-light .event-observation-summary {
+.console.theme-command-center .event-observation-summary {
   border-color: var(--line);
   background: var(--panel-elevated);
 }
@@ -9297,23 +8527,20 @@ h1, h2, h3, h4, b {
 }
 
 /* Final cross-page fit corrections from the visual audit. */
-.console.theme-command-center .side > header .brand,
-.console.theme-light .side > header .brand {
+.console.theme-command-center .side > header .brand {
   min-width: 0;
   max-width: calc(100% - 42px);
   overflow: hidden;
 }
 
-.console.theme-command-center .side > header .brand b,
-.console.theme-light .side > header .brand b {
+.console.theme-command-center .side > header .brand b {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.console.theme-command-center .side.collapsed > header .brand,
-.console.theme-light .side.collapsed > header .brand {
+.console.theme-command-center .side.collapsed > header .brand {
   max-width: 28px;
 }
 
@@ -9321,26 +8548,22 @@ h1, h2, h3, h4, b {
    42px) cap above was clipping "Xibalba Shield" by a few px. Only the
    collapsed rail (handled above, and by .collapsed .brand b's display:none)
    needs to shrink to the logo alone. */
-.console.theme-command-center .side:not(.collapsed) > header .brand,
-.console.theme-light .side:not(.collapsed) > header .brand {
+.console.theme-command-center .side:not(.collapsed) > header .brand {
   max-width: none;
   overflow: visible;
 }
 
-.console.theme-command-center .side:not(.collapsed) > header .brand b,
-.console.theme-light .side:not(.collapsed) > header .brand b {
+.console.theme-command-center .side:not(.collapsed) > header .brand b {
   overflow: visible;
   text-overflow: clip;
 }
 
-.console.theme-command-center .side > header .brand img,
-.console.theme-light .side > header .brand img {
+.console.theme-command-center .side > header .brand img {
   width: 38px;
   height: 38px;
 }
 
-.console.theme-command-center .side > header .brand b,
-.console.theme-light .side > header .brand b {
+.console.theme-command-center .side > header .brand b {
   font-size: 17px;
   letter-spacing: 0;
 }
@@ -9379,64 +8602,47 @@ h1, h2, h3, h4, b {
   background-color: var(--bg);
 }
 
-.console.theme-command-center .overview-page .responder-grid,
-.console.theme-light .overview-page .responder-grid {
+.console.theme-command-center .overview-page .responder-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.console.theme-command-center .overview-page .responder-card,
-.console.theme-light .overview-page .responder-card {
+.console.theme-command-center .overview-page .responder-card {
   min-height: 150px;
 }
 
-.console.theme-command-center .agent-unified-section > .agent-workspace > header,
-.console.theme-light .agent-unified-section > .agent-workspace > header {
+.console.theme-command-center .agent-unified-section > .agent-workspace > header {
   display: none;
 }
 
 .console.theme-command-center .agent-unified-workspace,
-.console.theme-light .agent-unified-workspace,
 .console.theme-command-center .evidence-unified-workspace,
-.console.theme-light .evidence-unified-workspace,
 .console.theme-command-center .decisions-policy-workspace,
-.console.theme-light .decisions-policy-workspace,
 .console.theme-command-center .decisions-approvals-workspace,
-.console.theme-light .decisions-approvals-workspace,
-.console.theme-command-center .configuration-unified,
-.console.theme-light .configuration-unified {
+.console.theme-command-center .configuration-unified {
   gap: 22px;
 }
 
 .console.theme-command-center .agent-unified-section,
-.console.theme-light .agent-unified-section,
 .console.theme-command-center .evidence-unified-section,
-.console.theme-light .evidence-unified-section,
 .console.theme-command-center .decisions-policy-section,
-.console.theme-light .decisions-policy-section,
 .console.theme-command-center .decisions-approvals-section,
-.console.theme-light .decisions-approvals-section,
-.console.theme-command-center .configuration-section,
-.console.theme-light .configuration-section {
+.console.theme-command-center .configuration-section {
   gap: 12px;
   padding-top: 18px;
 }
 
-.console.theme-command-center .empty-stream-state,
-.console.theme-light .empty-stream-state {
+.console.theme-command-center .empty-stream-state {
   min-height: 0;
   padding: 32px 20px;
 }
 
-.console.theme-command-center .evidence-reference-metrics article,
-.console.theme-light .evidence-reference-metrics article {
+.console.theme-command-center .evidence-reference-metrics article {
   padding: 14px;
 }
 
 .console.theme-command-center .evidence-reference-metrics span,
-.console.theme-light .evidence-reference-metrics span,
-.console.theme-command-center .evidence-reference-metrics small,
-.console.theme-light .evidence-reference-metrics small {
+.console.theme-command-center .evidence-reference-metrics small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9470,7 +8676,6 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .device-detail-summary,
 .console.theme-command-center .transaction-result,
 .console.theme-command-center .approval-panel,
-.console.theme-command-center .theme-choice,
 .console.theme-command-center .snippet-body,
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item,
@@ -9510,7 +8715,6 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .device-detail-summary,
 .console.theme-command-center .transaction-result,
 .console.theme-command-center .approval-panel,
-.console.theme-command-center .theme-choice,
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item {
   border: 1px solid var(--line);
@@ -9629,57 +8833,15 @@ h1, h2, h3, h4, b {
   color: var(--muted);
 }
 
-.console.theme-light .event-stream-toolbar,
-.console.theme-light .event-stream-card,
-.console.theme-light .event-stream-card.event-ledger-row,
-.console.theme-light .event-inline-json,
-.console.theme-light .event-detail-grid,
-.console.theme-light .event-detail-grid > div,
-.console.theme-light .event-action-pill,
-.console.theme-light .severity-tag,
-.console.theme-light .event-class-tag,
-.console.theme-light .filter-chip,
-.console.theme-light .status-code-pill,
-.console.theme-light .action-badge {
-  background: var(--bg) !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
-}
 
-.console.theme-light .event-stream-card:hover,
-.console.theme-light .event-stream-card.event-ledger-row:hover {
-  background: var(--bg) !important;
-  border-color: var(--line-hover) !important;
-}
 
-.console.theme-light .event-stream-card.action-contain,
-.console.theme-light .event-stream-card.action-deny,
-.console.theme-light .event-stream-card.action-blocked,
-.console.theme-light .event-stream-card.action-escalate,
-.console.theme-light .event-stream-card.action-allow,
-.console.theme-light .event-stream-card.action-allowed,
-.console.theme-light .event-stream-card.event-ledger-row::before,
-.console.theme-light .event-stream-card.event-ledger-row.action-contain::before,
-.console.theme-light .event-stream-card.event-ledger-row.action-deny::before,
-.console.theme-light .event-stream-card.event-ledger-row.action-blocked::before,
-.console.theme-light .event-stream-card.event-ledger-row.action-escalate::before,
-.console.theme-light .event-stream-card.event-ledger-row.action-allow::before,
-.console.theme-light .event-stream-card.event-ledger-row.action-allowed::before {
-  border-left-color: var(--line) !important;
-  background: var(--line) !important;
-}
 
-.console.theme-light .event-action-pill .dot,
-.console.theme-light .severity-tag::before {
-  background: var(--dim) !important;
-}
 
-.console.theme-light .event-inline-json pre,
-.console.theme-light .event-observation-summary,
-.console.theme-light .event-row {
-  background: var(--bg) !important;
-  color: var(--muted);
-}
+
+
+
+
+
 
 /* Final audit pass: an observation is one surface, not a stack of competing
    fills. Keep the row, summary, expanded details, and raw payload on the same
@@ -9689,13 +8851,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .event-observation-summary,
 .console.theme-command-center .event-detail-panel,
 .console.theme-command-center .event-inline-json,
-.console.theme-command-center .event-inline-json pre,
-.console.theme-light .event-stream-card,
-.console.theme-light .event-row,
-.console.theme-light .event-observation-summary,
-.console.theme-light .event-detail-panel,
-.console.theme-light .event-inline-json,
-.console.theme-light .event-inline-json pre {
+.console.theme-command-center .event-inline-json pre {
   background: var(--panel) !important;
   background-image: none !important;
   color: var(--text) !important;
@@ -9703,24 +8859,11 @@ h1, h2, h3, h4, b {
 
 /* Detail drawers use the same graphite/light surface hierarchy as the page,
    including the nested fact grid and routing nodes. */
-.console.theme-light .agent-detail-drawer,
-.console.theme-light .agent-detail-section,
-.console.theme-light .agent-detail-action,
-.console.theme-light .agent-detail-facts,
-.console.theme-light .agent-fact,
-.console.theme-light .routing-node,
-.console.theme-light .memory-result {
-  background: var(--panel) !important;
-  color: var(--text) !important;
-}
 
-.console.theme-light .agent-detail-hero {
-  background: var(--panel-elevated) !important;
-}
 
-.console.theme-light .agent-detail-facts {
-  background: var(--line) !important;
-}
+
+
+
 
 /* Side drawers do not have a separate backdrop element. The spread shadow
    supplies the same readable scrim as modal and agent-detail overlays. */
@@ -9728,9 +8871,7 @@ h1, h2, h3, h4, b {
   box-shadow: -100vw 0 0 100vw rgba(5, 8, 9, .72), 0 18px 48px rgba(0, 0, 0, .28) !important;
 }
 
-.console.theme-light .event-drawer {
-  box-shadow: -100vw 0 0 100vw rgba(20, 35, 61, .28), 0 18px 48px rgba(43, 43, 45, .22) !important;
-}
+
 
 /* Use the full Evidence window instead of leaving a large unused right half
    beside the remediation form. */
@@ -9766,9 +8907,7 @@ h1, h2, h3, h4, b {
    canvas on the same theme background so no light or dark bands appear
    between the policy, connector, OPA, and developer sections. */
 .console.theme-command-center .configuration-unified,
-.console.theme-command-center .configuration-section,
-.console.theme-light .configuration-unified,
-.console.theme-light .configuration-section {
+.console.theme-command-center .configuration-section {
   background-color: var(--bg) !important;
 }
 
@@ -9786,9 +8925,7 @@ h1, h2, h3, h4, b {
   backdrop-filter: blur(4px);
 }
 
-.console.theme-light .drawer-backdrop {
-  background: rgba(20, 35, 61, .28);
-}
+
 
 .console .evidence-drawer {
   width: min(620px, 100vw);
@@ -9800,10 +8937,7 @@ h1, h2, h3, h4, b {
   box-shadow: -24px 0 70px rgba(0, 0, 0, .36);
 }
 
-.console.theme-light .evidence-drawer {
-  background: var(--panel);
-  box-shadow: -24px 0 70px rgba(43, 43, 45, .22);
-}
+
 
 .console .evidence-drawer-header {
   position: sticky;
@@ -9926,17 +9060,11 @@ h1, h2, h3, h4, b {
 /* Final navigation typography lock: the mock uses the same condensed label
    metrics in both themes, including the visible label spans and operator row. */
 .console.theme-command-center .side nav button,
-.console.theme-light .side nav button,
 .console.theme-command-center .side nav button span,
-.console.theme-light .side nav button span,
 .console.theme-command-center .account-nav button,
-.console.theme-light .account-nav button,
 .console.theme-command-center .account-nav button span,
-.console.theme-light .account-nav button span,
 .console.theme-command-center .profile-btn,
-.console.theme-light .profile-btn,
-.console.theme-command-center .profile-btn .profile-name,
-.console.theme-light .profile-btn .profile-name {
+.console.theme-command-center .profile-btn .profile-name {
   font-family: 'Barlow Condensed', sans-serif !important;
   font-size: 16px !important;
   font-weight: 600 !important;
@@ -9945,9 +9073,7 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center .side .nav-group > small,
-.console.theme-light .side .nav-group > small,
-.console.theme-command-center .side nav > small,
-.console.theme-light .side nav > small {
+.console.theme-command-center .side nav > small {
   font-family: 'Barlow Condensed', sans-serif !important;
   font-size: 11px !important;
   font-weight: 700 !important;
@@ -10002,47 +9128,6 @@ h1, h2, h3, h4, b {
   .transaction-form, .change-queue-card, .appearance-card,
   .operator-panel, .routing-section, .integrations-section,
   .contracts-section, .event-detail-panel, .modal-card
-  ) *),
-.console.theme-light :is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource
-):not(:is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource,
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
   ) *) {
   position: relative !important;
   border-radius: 0 !important;
@@ -10050,47 +9135,6 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center :is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource
-):not(:is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource,
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-  ) *)::before,
-.console.theme-light :is(
   .metric, .panel, .resource, .settings-card, .action-form,
   .resource-card, .agent-card, .responder-card, .responder-panel,
   .policy-bundle-card, .policy-deploy-panel, .approval-panel,
@@ -10192,40 +9236,6 @@ h1, h2, h3, h4, b {
   .transaction-form, .change-queue-card, .appearance-card,
   .operator-panel, .routing-section, .integrations-section,
   .contracts-section, .event-detail-panel, .modal-card
-  ) *),
-.console.theme-light :is(
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-):not(:is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource,
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
   ) *) {
   position: relative !important;
   border-radius: 0 !important;
@@ -10234,40 +9244,6 @@ h1, h2, h3, h4, b {
 }
 
 .console.theme-command-center :is(
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-):not(:is(
-  .metric, .panel, .resource, .settings-card, .action-form,
-  .resource-card, .agent-card, .responder-card, .responder-panel,
-  .policy-bundle-card, .policy-deploy-panel, .approval-panel,
-  .transaction-result, .integration-card, .network-card, .opa-card,
-  .developer-view, .api-explorer-layout, .event-stream-toolbar,
-  .event-stream-card, .event-inline-json, .audit-event, .pipeline-table,
-  .pipeline-row, .response-pane, .response-json-box,
-  .code-snippets-section, .opa-source-code, .report-preview,
-  .body-editor, .policy-rules-summary, .agent-reasoning-callout,
-  .settings-readout, .toggle-item, .hybrid-architecture-card,
-  .hybrid-pair, .hybrid-detail-panel, .outbox-status-card, .routing-node,
-  .memory-result, .agent-fact, .device-detail-summary, .theme-choice,
-  .snippet-body, .endpoint-item, .readiness-row, .sensor, .contract-card,
-  .catalog-card, .signal-routing-map, .pipeline-health-rail, .evidence-runtime-strip, .telemetry-chart,
-  .evidence-reference-metrics, .evidence-reference-grid > .resource,
-  .agent-toolbar, .agent-grid, .agent-unified-section,
-  .evidence-unified-section, .decisions-approvals-section,
-  .decisions-policy-section, .policy-enforcement-panel,
-  .posture-runtime-panel, .readiness-panel, .live-telemetry-panel,
-  .hermes-hero-card, .hermes-agent-view, .guardrails-panel,
-  .transaction-form, .change-queue-card, .appearance-card,
-  .operator-panel, .routing-section, .integrations-section,
-  .contracts-section, .event-detail-panel, .modal-card
-  ) *)::before,
-.console.theme-light :is(
   .agent-toolbar, .agent-grid, .agent-unified-section,
   .evidence-unified-section, .decisions-approvals-section,
   .decisions-policy-section, .policy-enforcement-panel,
@@ -10369,53 +9345,9 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .device-detail-summary,
 .console.theme-command-center .transaction-result,
 .console.theme-command-center .approval-panel,
-.console.theme-command-center .theme-choice,
 .console.theme-command-center .contract-card,
 .console.theme-command-center .endpoint-item,
-.console.theme-command-center .outcome-ledger .outcome-row,
-.console.theme-light .panel,
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .action-form,
-.console.theme-light .event-stream-card,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .integration-card,
-.console.theme-light .network-card,
-.console.theme-light .opa-card,
-.console.theme-light .developer-view,
-.console.theme-light .responder-panel,
-.console.theme-light .responder-card,
-.console.theme-light .agent-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .hybrid-pair,
-.console.theme-light .outbox-status-card,
-.console.theme-light .evidence-reference-metrics,
-.console.theme-light .evidence-reference-grid > .resource,
-.console.theme-light .device-detail-drawer,
-.console.theme-light .agent-detail-drawer,
-.console.theme-light .event-drawer,
-.console.theme-light .opa-source-modal,
-.console.theme-light .modal-card,
-.console.theme-light .agent-detail-section,
-.console.theme-light .agent-detail-action,
-.console.theme-light .agent-detail-facts,
-.console.theme-light .routing-section,
-.console.theme-light .api-explorer-layout,
-.console.theme-light .response-pane,
-.console.theme-light .event-inline-json,
-.console.theme-light .policy-history-row,
-.console.theme-light .event-stream-toolbar,
-.console.theme-light .agent-fact,
-.console.theme-light .routing-node,
-.console.theme-light .memory-result,
-.console.theme-light .device-detail-summary,
-.console.theme-light .transaction-result,
-.console.theme-light .approval-panel,
-.console.theme-light .theme-choice,
-.console.theme-light .contract-card,
-.console.theme-light .endpoint-item,
-.console.theme-light .outcome-ledger .outcome-row {
+.console.theme-command-center .outcome-ledger .outcome-row {
   border: 1px solid var(--line) !important;
 }
 
@@ -10478,33 +9410,25 @@ h1, h2, h3, h4, b {
   background-color: var(--bg) !important;
 }
 
-.console.theme-command-center .workspace-header,
-.console.theme-light .workspace-header {
+.console.theme-command-center .workspace-header {
   margin-bottom: 20px;
 }
 
 .console.theme-command-center .agent-unified-workspace,
-.console.theme-light .agent-unified-workspace,
 .console.theme-command-center .evidence-unified-workspace,
-.console.theme-light .evidence-unified-workspace,
 .console.theme-command-center .decisions-policy-workspace,
-.console.theme-light .decisions-policy-workspace,
 .console.theme-command-center .decisions-approvals-workspace,
-.console.theme-light .decisions-approvals-workspace,
-.console.theme-command-center .configuration-unified,
-.console.theme-light .configuration-unified {
+.console.theme-command-center .configuration-unified {
   gap: var(--window-gap);
 }
 
-.console.theme-command-center .side nav button.active,
-.console.theme-light .side nav button.active {
+.console.theme-command-center .side nav button.active {
   border-left: 2px solid var(--green);
   background: var(--panel-elevated);
   color: var(--text);
 }
 
-.console.theme-command-center .side nav button.active svg,
-.console.theme-light .side nav button.active svg {
+.console.theme-command-center .side nav button.active svg {
   color: var(--green);
 }
 
@@ -10512,12 +9436,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .policy-history-row:hover,
 .console.theme-command-center .policy-history-row.selected,
 .console.theme-command-center .event-stream-card:hover,
-.console.theme-command-center .pipeline-row:hover,
-.console.theme-light .agent-card:hover,
-.console.theme-light .policy-history-row:hover,
-.console.theme-light .policy-history-row.selected,
-.console.theme-light .event-stream-card:hover,
-.console.theme-light .pipeline-row:hover {
+.console.theme-command-center .pipeline-row:hover {
   background-color: var(--bg) !important;
   border-color: var(--line-hover);
 }
@@ -10564,54 +9483,9 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .device-detail-summary,
 .console.theme-command-center .transaction-result,
 .console.theme-command-center .approval-panel,
-.console.theme-command-center .theme-choice,
 .console.theme-command-center .snippet-body,
 .console.theme-command-center .contract-card,
-.console.theme-command-center .endpoint-item,
-.console.theme-light .panel,
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .action-form,
-.console.theme-light .metric,
-.console.theme-light .event-stream-card,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .integration-card,
-.console.theme-light .network-card,
-.console.theme-light .opa-card,
-.console.theme-light .developer-view,
-.console.theme-light .responder-panel,
-.console.theme-light .responder-card,
-.console.theme-light .agent-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .hybrid-pair,
-.console.theme-light .outbox-status-card,
-.console.theme-light .evidence-reference-metrics,
-.console.theme-light .settings-readout,
-.console.theme-light .audit-event,
-.console.theme-light .policy-rules-summary,
-.console.theme-light .agent-reasoning-callout,
-.console.theme-light .response-pane,
-.console.theme-light .response-json-box,
-.console.theme-light .code-snippets-section,
-.console.theme-light .pipeline-table,
-.console.theme-light .pipeline-row,
-.console.theme-light .event-inline-json,
-.console.theme-light .opa-source-code,
-.console.theme-light .report-preview,
-.console.theme-light .body-editor,
-.console.theme-light .readiness-row,
-.console.theme-light .sensor,
-.console.theme-light .agent-fact,
-.console.theme-light .routing-node,
-.console.theme-light .memory-result,
-.console.theme-light .device-detail-summary,
-.console.theme-light .transaction-result,
-.console.theme-light .approval-panel,
-.console.theme-light .theme-choice,
-.console.theme-light .snippet-body,
-.console.theme-light .contract-card,
-.console.theme-light .endpoint-item {
+.console.theme-command-center .endpoint-item {
   background-color: var(--panel-solid) !important;
 }
 
@@ -10625,24 +9499,9 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .config-tag,
 .console.theme-command-center .responder-status,
 .console.theme-command-center .responder-gate,
-.console.theme-command-center .theme-choice,
 .console.theme-command-center .method-badge,
 .console.theme-command-center .status-pill,
-.console.theme-command-center .readiness-icon,
-.console.theme-light .status-badge,
-.console.theme-light .live-status-pill,
-.console.theme-light .policy-active-pill,
-.console.theme-light .event-action-pill,
-.console.theme-light .severity-tag,
-.console.theme-light .event-class-tag,
-.console.theme-light .filter-chip,
-.console.theme-light .config-tag,
-.console.theme-light .responder-status,
-.console.theme-light .responder-gate,
-.console.theme-light .theme-choice,
-.console.theme-light .method-badge,
-.console.theme-light .status-pill,
-.console.theme-light .readiness-icon {
+.console.theme-command-center .readiness-icon {
   background-color: transparent !important;
 }
 
@@ -10655,37 +9514,9 @@ h1, h2, h3, h4, b {
 
 /* Remaining light-mode neutral wells should read as part of the page field,
    not as unrelated white cards. */
-.console.theme-light input:not([type='checkbox']):not([type='radio']),
-.console.theme-light select,
-.console.theme-light textarea,
-.console.theme-light .form-select,
-.console.theme-light .toggle-item,
-.console.theme-light .resource-card,
-.console.theme-light .catalog-card,
-.console.theme-light .hybrid-detail-panel,
-.console.theme-light .audit-event,
-.console.theme-light .empty,
-.console.theme-light .empty-stream-state,
-.console.theme-light .empty-row,
-.console.theme-light .posture-option-card,
-.console.theme-light .active-token-row,
-.console.theme-light .token-reveal-row,
-.console.theme-light .session-props-grid > div,
-.console.theme-light .form-feedback-alert,
-.console.theme-light .minted-token-alert,
-.console.theme-light .json-rows pre,
-.console.theme-light .json-rows details,
-.console.theme-light .signal-routing-map {
-  background-color: transparent !important;
-  box-shadow: none;
-}
 
-.console.theme-light .form-select:focus,
-.console.theme-light input:not([type='checkbox']):not([type='radio']):focus,
-.console.theme-light select:focus,
-.console.theme-light textarea:focus {
-  background-color: transparent !important;
-}
+
+
 
 .console .audit-event,
 .console .toggle-item,
@@ -10699,9 +9530,7 @@ h1, h2, h3, h4, b {
   border-radius: 0 !important;
 }
 
-.console.theme-light .json-rows details {
-  border-radius: 0 !important;
-}
+
 
 .console .agent-unified-workspace .action-form,
 .console .agent-workspace .action-form {
@@ -10790,22 +9619,9 @@ h1, h2, h3, h4, b {
   background: rgba(5, 8, 9, .72);
 }
 
-.console.theme-light .device-detail-backdrop,
-.console.theme-light .agent-detail-backdrop,
-.console.theme-light .event-drawer-backdrop,
-.console.theme-light .modal-backdrop,
-.console.theme-light .opa-source-backdrop {
-  background: rgba(20, 35, 61, .28);
-}
 
-.console.theme-light .modal-card,
-.console.theme-light .device-detail-drawer,
-.console.theme-light .agent-detail-drawer,
-.console.theme-light .event-drawer,
-.console.theme-light .opa-source-modal {
-  background: var(--panel);
-  box-shadow: 0 18px 48px rgba(43, 43, 45, .22);
-}
+
+
 
 /* Outcome details use the same full-height right drawer as device and agent
    details, with no floating rounded card or mismatched code well. */
@@ -10826,10 +9642,7 @@ h1, h2, h3, h4, b {
   color: var(--text);
 }
 
-.console.theme-light .event-drawer pre {
-  background: transparent !important;
-  color: var(--text) !important;
-}
+
 
 /* Configuration is one continuous workspace: legacy feature wrappers must
    inherit the same flat windows and graphite surfaces as the policy area. */
@@ -10857,46 +9670,11 @@ h1, h2, h3, h4, b {
   background: transparent !important;
 }
 
-.console.theme-light .configuration-unified .integrations-view,
-.console.theme-light .configuration-unified .developer-view,
-.console.theme-light .configuration-unified .resource,
-.console.theme-light .configuration-unified .opa-card,
-.console.theme-light .configuration-unified .dev-auth-card,
-.console.theme-light .configuration-unified .api-explorer-layout,
-.console.theme-light .configuration-unified .api-endpoints-nav,
-.console.theme-light .configuration-unified .api-console-main,
-.console.theme-light .configuration-unified .response-pane,
-.console.theme-light .configuration-unified .contract-card,
-.console.theme-light .configuration-unified .pipeline-table,
-.console.theme-light .configuration-unified .pipeline-health-rail,
-.console.theme-light .configuration-unified .signal-routing-map,
-.console.theme-light .configuration-unified .catalog-card,
-.console.theme-light .configuration-unified .auth-prop code,
-.console.theme-light .configuration-unified .api-endpoints-nav button,
-.console.theme-light .configuration-unified .endpoint-nav-item,
-.console.theme-light .configuration-unified .code-snippets-section,
-.console.theme-light .configuration-unified .snippet-body,
-.console.theme-light .configuration-unified .response-json-box,
-.console.theme-light .configuration-unified .response-json-box pre,
-.console.theme-light .configuration-unified .api-console-main pre {
-  background: transparent !important;
-  color: var(--text) !important;
-}
 
-.console.theme-light .configuration-unified .pipeline-table-head,
-.console.theme-light .configuration-unified .pipeline-row,
-.console.theme-light .configuration-unified .connector-card,
-.console.theme-light .configuration-unified .catalog-card,
-.console.theme-light .configuration-unified .contract-card,
-.console.theme-light .configuration-unified .endpoint-item {
-  background: transparent !important;
-  border-color: var(--line) !important;
-}
 
-.console.theme-light .configuration-unified .developer-view > .view-header,
-.console.theme-light .configuration-unified [aria-labelledby='configuration-opa-title'] > .resource > header {
-  display: none;
-}
+
+
+
 
 .console .configuration-unified .integration-card,
 .console .configuration-unified .catalog-card,
@@ -10918,11 +9696,7 @@ h1, h2, h3, h4, b {
   box-shadow: none !important;
 }
 
-.console.theme-light .configuration-unified .pipeline-table.empty,
-.console.theme-light .configuration-unified .catalog-grid,
-.console.theme-light .configuration-unified .catalog-icon-box {
-  background: transparent !important;
-}
+
 
 /* Bring the older connector, OPA, and API fragments onto the workspace type
    scale instead of letting their local 10–12px defaults shrink the page. */
@@ -11029,32 +9803,9 @@ h1, h2, h3, h4, b {
   border-color: var(--green-hover) !important;
 }
 
-.console.theme-light .primary,
-.console.theme-light .primary-btn,
-.console.theme-light .primary-action-btn,
-.console.theme-light .deploy-button,
-.console.theme-light .detail-primary-action,
-.console.theme-light .save-btn,
-.console.theme-light .connect-btn,
-.console.theme-light .execute-btn,
-.console.theme-light .mint-token-btn {
-  background: var(--green) !important;
-  border-color: var(--green) !important;
-  color: #fff !important;
-}
 
-.console.theme-light .primary:hover:not(:disabled),
-.console.theme-light .primary-btn:hover:not(:disabled),
-.console.theme-light .primary-action-btn:hover:not(:disabled),
-.console.theme-light .deploy-button:hover:not(:disabled),
-.console.theme-light .detail-primary-action:hover:not(:disabled),
-.console.theme-light .save-btn:hover:not(:disabled),
-.console.theme-light .connect-btn:hover:not(:disabled),
-.console.theme-light .execute-btn:hover:not(:disabled),
-.console.theme-light .mint-token-btn:hover:not(:disabled) {
-  background: var(--green-hover) !important;
-  border-color: var(--green-hover) !important;
-}
+
+
 
 .console.theme-command-center .secondary,
 .console.theme-command-center .secondary-btn,
@@ -11065,17 +9816,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .inspect-btn,
 .console.theme-command-center .preview-schema-btn,
 .console.theme-command-center .close-modal-btn,
-.console.theme-command-center .drawer-close,
-.console.theme-light .secondary,
-.console.theme-light .secondary-btn,
-.console.theme-light .secondary-action,
-.console.theme-light .detail-secondary-action,
-.console.theme-light .open-drawer-btn,
-.console.theme-light .toggle-raw-btn,
-.console.theme-light .inspect-btn,
-.console.theme-light .preview-schema-btn,
-.console.theme-light .close-modal-btn,
-.console.theme-light .drawer-close {
+.console.theme-command-center .drawer-close {
   background: transparent !important;
   border-color: var(--line) !important;
   color: var(--text) !important;
@@ -11088,34 +9829,23 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .settings-tab-btn.active,
 .console.theme-command-center .status-pill.attention,
 .console.theme-command-center .agent-detail-action.attention,
-.console.theme-command-center .detail-state,
-.console.theme-light .routing-node.active,
-.console.theme-light .endpoint-item.active,
-.console.theme-light .workspace-tabs button.active,
-.console.theme-light .settings-tab-btn.active,
-.console.theme-light .status-pill.attention,
-.console.theme-light .agent-detail-action.attention,
-.console.theme-light .detail-state {
+.console.theme-command-center .detail-state {
   background-color: var(--green-soft) !important;
 }
 
 .console.theme-command-center .status-pill.attention,
-.console.theme-command-center .agent-detail-action.attention,
-.console.theme-light .status-pill.attention,
-.console.theme-light .agent-detail-action.attention {
+.console.theme-command-center .agent-detail-action.attention {
   background-color: var(--amber-soft) !important;
 }
 
-.console.theme-command-center .detail-state,
-.console.theme-light .detail-state {
+.console.theme-command-center .detail-state {
   background-color: var(--red-soft) !important;
 }
 
 /* Event Stream decision summary shares the page field; only its border and
    metric frames define the section. Avoid a second opaque panel behind the
    heading and summary text. */
-.console.theme-command-center .reasoning-hero,
-.console.theme-light .reasoning-hero {
+.console.theme-command-center .reasoning-hero {
   background: transparent !important;
   background-image: none !important;
   box-shadow: none !important;
@@ -11123,8 +9853,7 @@ h1, h2, h3, h4, b {
   border-radius: 0 !important;
 }
 
-.console.theme-command-center .reasoning-stat-card,
-.console.theme-light .reasoning-stat-card {
+.console.theme-command-center .reasoning-stat-card {
   background: transparent !important;
   background-image: none !important;
   box-shadow: none !important;
@@ -11220,12 +9949,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .reset-filters-btn,
 .console.theme-command-center .inspect-btn,
 .console.theme-command-center .copy-token-btn,
-.console.theme-command-center .responder-action,
-.console.theme-light .clear-search-btn,
-.console.theme-light .reset-filters-btn,
-.console.theme-light .inspect-btn,
-.console.theme-light .copy-token-btn,
-.console.theme-light .responder-action {
+.console.theme-command-center .responder-action {
   background: transparent !important;
   border: 1px solid var(--line) !important;
   color: var(--text) !important;
@@ -11235,12 +9959,7 @@ h1, h2, h3, h4, b {
 .console.theme-command-center .reset-filters-btn:hover,
 .console.theme-command-center .inspect-btn:hover,
 .console.theme-command-center .copy-token-btn:hover,
-.console.theme-command-center .responder-action:hover:not(:disabled),
-.console.theme-light .clear-search-btn:hover,
-.console.theme-light .reset-filters-btn:hover,
-.console.theme-light .inspect-btn:hover,
-.console.theme-light .copy-token-btn:hover,
-.console.theme-light .responder-action:hover:not(:disabled) {
+.console.theme-command-center .responder-action:hover:not(:disabled) {
   background: var(--green-soft) !important;
   border-color: var(--line-hover) !important;
   color: var(--text) !important;
@@ -11318,7 +10037,8 @@ h1, h2, h3, h4, b {
 .console .configuration-unified .deploy-button {
   background: var(--green) !important;
   border-color: var(--green) !important;
-  color: #fff !important;
+  /* the dark theme's accent is light, so its ink is dark; the light theme's accent is dark */
+  color: var(--on-green, #fff) !important;
 }
 
 .console .configuration-unified .primary:hover:not(:disabled),
@@ -11544,9 +10264,9 @@ h1, h2, h3, h4, b {
 
 /* Advisory inference form: an invalid field is marked by its message, not only by colour. */
 .field-error { color: #ff8a80; }
-.console.theme-light .field-error { color: #b3261e; }
+
 .settings-fields-grid > label input[aria-invalid="true"] { border-color: #ff8a80; }
-.console.theme-light .settings-fields-grid > label input[aria-invalid="true"] { border-color: #b3261e; }
+
 @media (max-width: 640px) {
   /* Two columns do not fit a phone: stack the form. */
   #settings-panel-inference .settings-fields-grid { grid-template-columns: 1fr; }
@@ -11577,19 +10297,6 @@ body {
 .console.theme-command-center .event-stream-card,
 .console.theme-command-center .api-explorer-layout,
 .console.theme-command-center .agent-detail-section,
-.console.theme-light .metric,
-.console.theme-light .panel,
-.console.theme-light .resource,
-.console.theme-light .settings-card,
-.console.theme-light .hybrid-architecture-card,
-.console.theme-light .outbox-status-card,
-.console.theme-light .policy-bundle-card,
-.console.theme-light .policy-deploy-panel,
-.console.theme-light .integration-card,
-.console.theme-light .event-stream-card,
-.console.theme-light .api-explorer-layout,
-.console.theme-light .agent-detail-section,
-.console.theme-light .evidence-reference-metrics,
 .agent-workspace > .agent-toolbar,
 .agent-workspace > .agent-grid {
   background-image: none;
@@ -11599,8 +10306,7 @@ body {
    The frame rule above overrode the stripe's image and inset but not its 3px width, so neither
    the stripe's colour nor a cross showed. */
 /* :not(#_) lifts this over the frame rule's :is()/:not() specificity; both are !important. */
-.console.theme-command-center .event-stream-card.event-ledger-row:not(#_)::before,
-.console.theme-light .event-stream-card.event-ledger-row:not(#_)::before {
+.console.theme-command-center .event-stream-card.event-ledger-row:not(#_)::before {
   inset: 0 auto 0 0 !important;
   width: 3px;
   background-image: none !important;
@@ -11608,8 +10314,7 @@ body {
 
 /* A framed section that clips its content also clipped its own crosses, which sit 4px outside
    its border: clip instead of hiding, with room for the marks. */
-.console.theme-command-center :is(.agent-unified-section, .evidence-unified-section, .decisions-policy-section, .decisions-approvals-section, .configuration-section, .api-explorer-layout),
-.console.theme-light :is(.agent-unified-section, .evidence-unified-section, .decisions-policy-section, .decisions-approvals-section, .configuration-section, .api-explorer-layout) {
+.console.theme-command-center :is(.agent-unified-section, .evidence-unified-section, .decisions-policy-section, .decisions-approvals-section, .configuration-section, .api-explorer-layout) {
   overflow: clip;
   overflow-clip-margin: 6px;
 }
@@ -11745,6 +10450,11 @@ body {
 }
 .console.theme-command-center :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) {
   font-size: 13px;
+}
+
+/* Ink on a filled accent: dark on the dark theme's light accent (9.0:1). */
+.console.theme-command-center {
+  --on-green: var(--ink-on-accent);
 }
 
 /* Eyebrows carry the product accent. */
