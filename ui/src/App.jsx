@@ -16,13 +16,6 @@ export default function App() {
   const [connection, setConnection] = useState(() =>
     JSON.parse(readSession('shield-connection', '{}'))
   )
-  // Dark ("command-center") is the default and the fallback: only an explicit
-  // 'light' selects the light ground, so a stale or unrecognised stored value
-  // can never start the console in light mode.
-  const [consoleTheme, setConsoleTheme] = useState(
-    () => (readSession('shield-console-theme', 'command-center') === 'light' ? 'light' : 'command-center')
-  )
-
   const connect = (conn) => {
     setConnection(conn)
     writeSession('shield-connection', JSON.stringify(conn))
@@ -62,5 +55,5 @@ export default function App() {
     return <SignIn back={() => setView('landing')} connect={connect} />
   }
 
-  return <Dashboard connection={connection} logout={logout} theme={consoleTheme} onThemeChange={setConsoleTheme} />
+  return <Dashboard connection={connection} logout={logout} />
 }

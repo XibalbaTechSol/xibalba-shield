@@ -339,7 +339,7 @@ function EvidenceWorkspace({ data, api }) {
   </>
 }
 
-function ConfigurationWorkspace({ connection, logout, theme, onThemeChange, data, api, refresh }) {
+function ConfigurationWorkspace({ connection, logout, data, api, refresh }) {
   return <>
     <WorkspaceHeader eyebrow="CONFIGURATION" title="What is the fleet configured to do?" copy="Signed policy bundles, response boundaries, guardrails, and destinations. Containment and guardrail changes go through two-step approval and can be rolled back." />
     <div className="configuration-unified">
@@ -379,13 +379,13 @@ function ConfigurationWorkspace({ connection, logout, theme, onThemeChange, data
   </>
 }
 
-export function ResourceView({ view, data, api, refresh, connection, logout, theme, onThemeChange, timeRange }) {
+export function ResourceView({ view, data, api, refresh, connection, logout, timeRange }) {
   if (view === 'agent') return <AgentWorkspace data={data} api={api} refresh={refresh} />
   if (view === 'network') return <NetworkWorkspace api={api} />
   if (view === 'decisions') return <DecisionsWorkspace data={data} api={api} refresh={refresh} timeRange={timeRange} />
   if (view === 'evidence') return <EvidenceWorkspace data={data} api={api} />
-  if (view === 'settings') return <SettingsView connection={connection} logout={logout} data={data} theme={theme} onThemeChange={onThemeChange} />
-  if (view === 'configuration') return <ConfigurationWorkspace connection={connection} logout={logout} theme={theme} onThemeChange={onThemeChange} data={data} api={api} refresh={refresh} />
+  if (view === 'settings') return <SettingsView connection={connection} logout={logout} data={data} />
+  if (view === 'configuration') return <ConfigurationWorkspace connection={connection} logout={logout} data={data} api={api} refresh={refresh} />
   return <Resource title="Evidence" copy="Authenticated evidence records"><JsonRows rows={data.exporter} /></Resource>
 }
 

@@ -224,13 +224,12 @@ export function SettingsChangeQueue({ api }) {
   )
 }
 
-export function SettingsView({ connection, logout, data = {}, theme = 'command-center', onThemeChange, embedded = false }) {
+export function SettingsView({ connection, logout, data = {}, embedded = false }) {
   const account = connection.account || {}
   const [activeTab, setActiveTab] = useState('posture')
   const [message, setMessage] = useState('')
   const [sessions, setSessions] = useState([])
   const [copiedKey, setCopiedKey] = useState(null)
-  const [themeMessage, setThemeMessage] = useState('')
 
   // Security Posture Settings
   const [savedPosture, setSavedPosture] = useState(() => { try { return JSON.parse(readSession('shield-posture', '{}')) } catch { return {} } })
@@ -333,14 +332,6 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
       setPostureSaved('')
       setMessage(error instanceof Error ? `Could not save settings: ${error.message}` : 'Could not save settings.')
     }
-  }
-
-  const handleThemeChange = (event) => {
-    const nextTheme = event.target.value
-    writeSession('shield-console-theme', nextTheme)
-    onThemeChange?.(nextTheme)
-    setThemeMessage(nextTheme === 'command-center' ? 'Dark Command Center theme applied.' : 'Light theme applied.')
-    window.setTimeout(() => setThemeMessage(''), 3000)
   }
 
   const exporterRows = data.exporter || []
@@ -531,26 +522,6 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
       {activeTab === 'posture' && (
         <div className="settings-tab-pane" role="tabpanel" id="settings-panel-posture" aria-labelledby="settings-tab-posture">
           <form onSubmit={handleSavePosture} className="posture-settings-form">
-            <article className="settings-card appearance-card">
-              <div className="settings-card-header">
-                <div className="settings-card-title"><Sliders size={18} /><h3>Console appearance</h3></div>
-                <span className="live-status-pill">Operator preference</span>
-              </div>
-              <p className="settings-card-desc">Choose how the Shield console is presented. This changes the UI theme only; it does not change endpoint policy, telemetry, or enforcement behavior.</p>
-              <div className="theme-choice-grid" role="radiogroup" aria-label="Console theme">
-                <label className={`theme-choice ${theme === 'light' ? '' : 'selected'}`}>
-                  <input type="radio" name="consoleTheme" value="command-center" checked={theme !== 'light'} onChange={handleThemeChange} />
-                  <span className="theme-swatch theme-swatch-command" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Dark Command Center</b><small>Dark industrial control plane · default</small></span>
-                </label>
-                <label className={`theme-choice ${theme === 'light' ? 'selected' : ''}`}>
-                  <input type="radio" name="consoleTheme" value="light" checked={theme === 'light'} onChange={handleThemeChange} />
-                  <span className="theme-swatch theme-swatch-light" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Light</b><small>Bright operator workspace</small></span>
-                </label>
-              </div>
-              {themeMessage && <p className="form-message" role="status" aria-live="polite">{themeMessage}</p>}
-            </article>
             <article className="settings-card">
               <div className="settings-card-header">
                 <div className="settings-card-title">
