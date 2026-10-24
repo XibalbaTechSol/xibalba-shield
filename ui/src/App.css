@@ -84,7 +84,10 @@
   --accent: var(--accent-400);
   --accent-hover: var(--accent-300);
   --accent-pressed: var(--accent-500);
-  --accent-strong: var(--accent-300); /* brighter steel for emphasis (formerly --accent-strong) */
+  --accent-strong: var(--accent-300); /* brighter steel for emphasis (formerly --cyan) */
+  /* Accent text at paragraph size. On this ground the accent clears 4.5:1
+     (9.05:1), so it is the same token; on the light ground it is not. */
+  --accent-text: var(--accent);
   --accent-soft: rgba(148, 188, 227, 0.16);
   --accent-glow: rgba(148, 188, 227, 0.2);
   --ink-on-accent: #14171a;
@@ -119,12 +122,15 @@
   --line-faint: color-mix(in srgb, #1d1f20 8%, transparent);
   --text: #1d1f20;
   --muted: var(--neutral-700);
-  --dim: var(--neutral-600);
+  --dim: #6a6a6d; /* neutral-600 #7a7a7d is only 3.82:1 here; this is 4.82:1 */
 
   --accent: #5980a6;
   --accent-hover: var(--accent-600);
   --accent-pressed: var(--accent-700);
-  --accent-strong: var(--accent-700); /* deeper steel for emphasis (formerly --accent-strong) */
+  --accent-strong: var(--accent-700); /* deeper steel for emphasis (formerly --cyan) */
+  /* #5980a6 here is 3.71:1 -- Industry's own caveat: enough for icons, large
+     text and chrome, not for body copy. accent-700 is 5.78:1. */
+  --accent-text: var(--accent-700);
   --accent-soft: color-mix(in srgb, #5980a6 12%, transparent);
   --accent-glow: color-mix(in srgb, #5980a6 20%, transparent);
   --ink-on-accent: #f2f2f3;

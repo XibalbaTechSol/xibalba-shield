@@ -226,4 +226,36 @@ test.describe('Industry design system conformance', () => {
       expect(report.overflow).toBeLessThanOrEqual(1)
     })
   }
+
+  /* Contrast. Industry warns that the accent-to-ground pair is tuned to 3:1 --
+     fine for icons, large text and chrome, not for body copy -- so --accent-text
+     exists for paragraph-size accent text and must clear 4.5:1 in both themes. */
+  for (const theme of ['command-center', 'light'] as const) {
+    test(`text tokens clear WCAG AA on the ${theme} ground`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        sessionStorage.setItem('shield-session', '1')
+        sessionStorage.setItem('shield-console-theme', t)
+        sessionStorage.setItem('shield-connection', JSON.stringify({
+          baseUrl: window.location.origin, tenant: 'tenant-a', token: 'test-token',
+        }))
+      }, theme)
+      await page.route('**/api/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
+      await page.goto('/')
+      await expect(page.locator('main.console')).toBeVisible()
+      const t = await tokens(page, ['--bg', '--text', '--muted', '--dim', '--accent-text', '--amber', '--red'])
+      const rgb = (v: string) => (/(\d+), (\d+), (\d+)/.exec(v) ?? []).slice(1).map(Number)
+      const lum = (c: number[]) => {
+        const f = c.map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
+        return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+      }
+      const ratio = (a: string, b: string) => {
+        const [la, lb] = [lum(rgb(a)), lum(rgb(b))]
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+      }
+      for (const name of ['--text', '--muted', '--dim', '--accent-text', '--amber', '--red']) {
+        const r = ratio(t[name], t['--bg'])
+        expect(r, `${name} on --bg is ${r.toFixed(2)}:1, below AA 4.5:1`).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+  }
 })
