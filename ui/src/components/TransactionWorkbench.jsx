@@ -57,7 +57,7 @@ export function TransactionWorkbench({ api }) {
   return <section className="resource transaction-workbench">
     <header>
       <p className="eyebrow">TRANSACTION GOVERNANCE</p>
-      <h2>Transaction & Approval Workbench</h2>
+      <h2>Transaction & approval workbench</h2>
       <span>Simulate a device-authenticated intent before broadcast. Shield never signs or broadcasts from this console.</span>
       <small className="evidence-label">Device credentials are used only for this request and are never persisted.</small>
     </header>

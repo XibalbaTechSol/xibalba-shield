@@ -65,7 +65,7 @@ const CATALOG_PROVIDERS = [
   },
   {
     kind: 'webhook',
-    name: 'Generic SOAR Webhook',
+    name: 'Generic SOAR webhook',
     badge: 'RAW JSON / REST',
     desc: 'Forward raw cryptographic decision objects and receipt hashes to custom SOAR receivers, Cortex, or Torq playbooks.',
     defaultConfig: {
@@ -342,7 +342,7 @@ export function IntegrationsView({ data, api, refresh }) {
                   onClick={() => setInspectPayload(provider.samplePayload)}
                 >
                   <Terminal size={13} />
-                  <span>Sample Payload</span>
+                  <span>Sample payload</span>
                 </button>
 
                 <button
@@ -366,7 +366,7 @@ export function IntegrationsView({ data, api, refresh }) {
             <div className="modal-header">
               <div className="modal-title-wrap">
                 <Radio size={18} className="pulse-icon" />
-                <h3>Connect SIEM / SOAR Pipeline</h3>
+                <h3>Connect SIEM / SOAR pipeline</h3>
               </div>
               <button
                 type="button"
@@ -380,7 +380,7 @@ export function IntegrationsView({ data, api, refresh }) {
 
             <form onSubmit={handleCreate} className="integration-form">
               <div className="form-group">
-                <label>Integration Identifier</label>
+                <label>Integration identifier</label>
                 <input
                   type="text"
                   required
@@ -392,7 +392,7 @@ export function IntegrationsView({ data, api, refresh }) {
               </div>
 
               <div className="form-group">
-                <label>Target Ecosystem</label>
+                <label>Target ecosystem</label>
                 <select
                   value={formKind}
                   onChange={(e) => {
@@ -408,13 +408,13 @@ export function IntegrationsView({ data, api, refresh }) {
                   <option value="splunk">Splunk Enterprise & Cloud (HEC)</option>
                   <option value="elastic">Elasticsearch & Elastic Security (ECS 8.0)</option>
                   <option value="webhook">Generic SOAR Webhook (POST)</option>
-                  <option value="slack">Slack / Teams Incident Alerts</option>
+                  <option value="slack">Slack / Teams incident alerts</option>
                   <option value="syslog">Syslog / RFC 5424 (TLS)</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label>Destination Endpoint / URL</label>
+                <label>Destination endpoint / URL</label>
                 <input
                   type="text"
                   required
@@ -425,7 +425,7 @@ export function IntegrationsView({ data, api, refresh }) {
               </div>
 
               <div className="form-group">
-                <label>Event Filter Scope</label>
+                <label>Event filter scope</label>
                 <select
                   value={formFilter}
                   onChange={(e) => setFormFilter(e.target.value)}

@@ -152,7 +152,7 @@ export function EventStreamView({ data, timeRange = '24h' }) {
 
         <div className="reasoning-stats-row">
           <div className="reasoning-stat-card">
-            <span className="stat-label">Intercepted Events</span>
+            <span className="stat-label">Intercepted events</span>
             <b className="stat-val">{counts.total}</b>
             <small>{rawEvents.some((event) => event.source === 'observation_rollup') ? 'Live Shield observations; rollups are loss-bounded' : 'Waiting for Shield observations'}</small>
           </div>
@@ -162,17 +162,17 @@ export function EventStreamView({ data, timeRange = '24h' }) {
             <small>{counts.containFallbacks ? `${counts.contained - counts.containFallbacks} direct · ${counts.containFallbacks} fail-closed fallback` : 'Policy-approved workload freezes'}</small>
           </div>
           <div className="reasoning-stat-card">
-            <span className="stat-label">Policy Denials</span>
+            <span className="stat-label">Policy denials</span>
             <b className="stat-val text-red">{counts.denied}</b>
             <small>Unauthorized attempts blocked</small>
           </div>
           <div className="reasoning-stat-card">
-            <span className="stat-label">Verified Benign</span>
+            <span className="stat-label">Verified benign</span>
             <b className="stat-val text-green">{counts.allowed}</b>
             <small>Authenticated execution</small>
           </div>
           <div className="reasoning-stat-card">
-            <span className="stat-label">Agent Events</span>
+            <span className="stat-label">Agent events</span>
             <b className="stat-val">{counts.agent}</b>
             <small>{counts.agent ? 'Authenticated agent hooks' : 'No agent-attributed events'}</small>
           </div>
@@ -185,6 +185,7 @@ export function EventStreamView({ data, timeRange = '24h' }) {
           <Search size={15} />
           <input
             type="search"
+            aria-label="Search decisions"
             placeholder="Search by rule, process, reason, device, or event ID…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -203,7 +204,7 @@ export function EventStreamView({ data, timeRange = '24h' }) {
               className={`filter-chip ${actionFilter === 'all' ? 'active' : ''}`}
               onClick={() => setActionFilter('all')}
             >
-              All Actions ({counts.total})
+              All actions ({counts.total})
             </button>
             <button
               type="button"
@@ -248,12 +249,13 @@ export function EventStreamView({ data, timeRange = '24h' }) {
               value={classFilter}
               onChange={(e) => setClassFilter(e.target.value)}
               className="class-select"
+              aria-label="Event type"
             >
-              <option value="all">All Event Types</option>
-              <option value="process_activity">Process Activity</option>
-              <option value="network_flow">Network Flow</option>
-              <option value="agent_event">Agent Event</option>
-              <option value="system_event">System Event</option>
+              <option value="all">All event types</option>
+              <option value="process_activity">Process activity</option>
+              <option value="network_flow">Network flow</option>
+              <option value="agent_event">Agent event</option>
+              <option value="system_event">System event</option>
             </select>
           </div>
         </div>
@@ -283,7 +285,7 @@ export function EventStreamView({ data, timeRange = '24h' }) {
                 setClassFilter('all')
               }}
             >
-              Reset Filters
+              Reset filters
             </button>
           </div>
         ) : (
@@ -364,7 +366,7 @@ export function EventStreamView({ data, timeRange = '24h' }) {
                     className="open-drawer-btn"
                     onClick={() => setSelectedEvent(evt.raw)}
                   >
-                    <ExternalLink size={13} /> Open in Evidence Drawer
+                    <ExternalLink size={13} /> Open in evidence drawer
                   </button>
                 </div>
 
@@ -404,7 +406,7 @@ export function EventStreamView({ data, timeRange = '24h' }) {
               <p className="eyebrow">
                 <Brain size={12} /> AGENT DECISION EVIDENCE
               </p>
-              <h3>Event Record Details</h3>
+              <h3>Event record details</h3>
             </div>
             <button
               type="button"

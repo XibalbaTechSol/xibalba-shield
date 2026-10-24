@@ -224,13 +224,12 @@ export function SettingsChangeQueue({ api }) {
   )
 }
 
-export function SettingsView({ connection, logout, data = {}, theme = 'command-center', onThemeChange, embedded = false }) {
+export function SettingsView({ connection, logout, data = {}, embedded = false }) {
   const account = connection.account || {}
   const [activeTab, setActiveTab] = useState('posture')
   const [message, setMessage] = useState('')
   const [sessions, setSessions] = useState([])
   const [copiedKey, setCopiedKey] = useState(null)
-  const [themeMessage, setThemeMessage] = useState('')
 
   // Security Posture Settings
   const [savedPosture, setSavedPosture] = useState(() => { try { return JSON.parse(readSession('shield-posture', '{}')) } catch { return {} } })
@@ -335,14 +334,6 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
     }
   }
 
-  const handleThemeChange = (event) => {
-    const nextTheme = event.target.value
-    writeSession('shield-console-theme', nextTheme)
-    onThemeChange?.(nextTheme)
-    setThemeMessage(nextTheme === 'command-center' ? 'Dark Command Center theme applied.' : 'Light mock theme applied.')
-    window.setTimeout(() => setThemeMessage(''), 3000)
-  }
-
   const exporterRows = data.exporter || []
   const liveRow = exporterRows.find((row) => row.status)
   const tlsEnabled = String(connection.baseUrl || '').startsWith('https://')
@@ -424,7 +415,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           <Sliders size={13} className="pulse-icon" />
           <span>ENTERPRISE CONTROL PLANE</span>
         </div>
-        <h2>Settings & Security Posture</h2>
+        <h2>Settings & security posture</h2>
         <span>
           Configure autonomous containment modes, cryptographic tokens, alert routing, and tenant administrative controls.
         </span>
@@ -438,7 +429,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           onClick={() => setActiveTab('posture')}
         >
           <Shield size={15} />
-          <span>Security Posture</span>
+          <span>Security posture</span>
         </button>
 
         <button
@@ -456,7 +447,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           onClick={() => setActiveTab('control-plane')}
         >
           <Wifi size={15} />
-          <span>Control Plane</span>
+          <span>Control plane</span>
         </button>
 
         <button
@@ -465,7 +456,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           onClick={() => setActiveTab('tokens')}
         >
           <Key size={15} />
-          <span>API Access & Tokens</span>
+          <span>API access & tokens</span>
         </button>
 
         <button
@@ -474,7 +465,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           onClick={() => setActiveTab('alerts')}
         >
           <Bell size={15} />
-          <span>Alerts & Dispatch</span>
+          <span>Alerts & dispatch</span>
         </button>
 
         <button
@@ -483,7 +474,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           onClick={() => setActiveTab('inference')}
         >
           <Brain size={15} />
-          <span>Advisory Inference</span>
+          <span>Advisory inference</span>
         </button>
 
         <button
@@ -492,7 +483,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           onClick={() => setActiveTab('profile')}
         >
           <User size={15} />
-          <span>Operator Profile</span>
+          <span>Operator profile</span>
         </button>
       </div>
 
@@ -531,35 +522,15 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
       {activeTab === 'posture' && (
         <div className="settings-tab-pane" role="tabpanel" id="settings-panel-posture" aria-labelledby="settings-tab-posture">
           <form onSubmit={handleSavePosture} className="posture-settings-form">
-            <article className="settings-card appearance-card">
-              <div className="settings-card-header">
-                <div className="settings-card-title"><Sliders size={18} /><h3>Console appearance</h3></div>
-                <span className="live-status-pill">Operator preference</span>
-              </div>
-              <p className="settings-card-desc">Choose how the Shield console is presented. This changes the UI theme only; it does not change endpoint policy, telemetry, or enforcement behavior.</p>
-              <div className="theme-choice-grid" role="radiogroup" aria-label="Console theme">
-                <label className={`theme-choice ${theme === 'command-center' ? 'selected' : ''}`}>
-                  <input type="radio" name="consoleTheme" value="command-center" checked={theme === 'command-center'} onChange={handleThemeChange} />
-                  <span className="theme-swatch theme-swatch-command" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Dark Command Center</b><small>Dark industrial control plane</small></span>
-                </label>
-                <label className={`theme-choice ${theme === 'light' ? 'selected' : ''}`}>
-                  <input type="radio" name="consoleTheme" value="light" checked={theme === 'light'} onChange={handleThemeChange} />
-                  <span className="theme-swatch theme-swatch-light" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Light</b><small>Bright operator workspace</small></span>
-                </label>
-              </div>
-              {themeMessage && <p className="form-message" role="status" aria-live="polite">{themeMessage}</p>}
-            </article>
             <article className="settings-card">
               <div className="settings-card-header">
                 <div className="settings-card-title">
                   <ShieldAlert size={18} />
-                  <h3>Autonomous Containment Posture</h3>
+                  <h3>Autonomous containment posture</h3>
                 </div>
                 <span className="live-status-pill">
                   <span className="status-dot green" />
-                  <span>Kernel Enforcement Active</span>
+                  <span>Kernel enforcement active</span>
                 </span>
               </div>
               <p className="settings-card-desc">
@@ -596,7 +567,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                   />
                   <div className="option-content">
                     <div className="option-title-row">
-                      <b>Audit & Observation Only</b>
+                      <b>Audit & observation only</b>
                       <span className="badge amber">PASSIVE</span>
                     </div>
                     <p>
@@ -615,7 +586,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                   />
                   <div className="option-content">
                     <div className="option-title-row">
-                      <b>Strict Zero-Trust Air-Gap</b>
+                      <b>Strict zero-trust air-gap</b>
                       <span className="badge red">LOCKDOWN</span>
                     </div>
                     <p>
@@ -636,8 +607,8 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
 
               <div className="settings-fields-grid">
                 <div className="field-group">
-                  <label>Default Governance Tier</label>
-                  <select
+                  <label>Default governance tier</label>
+                  <select aria-label="Default governance tier"
                     value={governanceTier}
                     onChange={(e) => setGovernanceTier(e.target.value)}
                     className="form-select"
@@ -649,8 +620,8 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                 </div>
 
                 <div className="field-group">
-                  <label>Ring Buffer Flush Cadence</label>
-                  <select
+                  <label>Ring buffer flush cadence</label>
+                  <select aria-label="Ring buffer flush cadence"
                     value={ringBufferInterval}
                     onChange={(e) => setRingBufferInterval(e.target.value)}
                     className="form-select"
@@ -663,8 +634,8 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                 </div>
 
                 <div className="field-group">
-                  <label>Evidence Retention Period</label>
-                  <select
+                  <label>Evidence retention period</label>
+                  <select aria-label="Evidence retention period"
                     value={retentionDays}
                     onChange={(e) => setRetentionDays(e.target.value)}
                     className="form-select"
@@ -679,7 +650,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
 
               <div className="settings-actions-footer">
                 <button type="submit" className="primary-btn">
-                  Save Security Posture
+                  Save security posture
                 </button>
                 {postureSaved && (
                   <span className="save-feedback-pill">
@@ -703,7 +674,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
             <div className="settings-card-header">
               <div className="settings-card-title">
                 <Key size={18} />
-                <h3>Tenant Admin Token Credentials</h3>
+                <h3>Tenant admin token credentials</h3>
               </div>
               <button
                 type="button"
@@ -719,7 +690,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                 ) : (
                   <>
                     <Plus size={13} />
-                    <span>Mint New Admin Token</span>
+                    <span>Mint new admin token</span>
                   </>
                 )}
               </button>
@@ -733,7 +704,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
               <div className="minted-token-alert">
                 <div className="minted-token-header">
                   <X size={16} />
-                  <b>New Tenant Admin Token Generated</b>
+                  <b>New tenant admin token generated</b>
                 </div>
                 <p>Copy this token immediately. For security, newly minted tokens cannot be viewed again once dismissed.</p>
                 <div className="token-reveal-row">
@@ -761,7 +732,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
               <div className="token-info">
                 <span className="token-scope-badge">TENANT ADMIN</span>
                 <div>
-                  <h4>Active Console Session Token</h4>
+                  <h4>Active console session token</h4>
                   <p>Granted full policy deployment, containment override, and exporter administration privileges for <code>{connection.tenant}</code>.</p>
                 </div>
               </div>
@@ -783,40 +754,40 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
             <div className="settings-card-header">
               <div className="settings-card-title">
                 <Server size={18} />
-                <h3>Active Browser Session Details</h3>
+                <h3>Active browser session details</h3>
               </div>
             </div>
 
             <dl className="session-props-grid">
               <div>
-                <dt>Control Plane Endpoint</dt>
+                <dt>Control plane endpoint</dt>
                 <dd><code>{connection.baseUrl}</code></dd>
               </div>
               <div>
-                <dt>Active Tenant ID</dt>
+                <dt>Active tenant ID</dt>
                 <dd><code>{connection.tenant}</code></dd>
               </div>
               <div>
-                <dt>Authentication Credential</dt>
+                <dt>Authentication credential</dt>
                 <dd>{account.id ? 'Account-issued session token' : 'Master admin bearer token'}</dd>
               </div>
               <div>
-                <dt>Session Expiration</dt>
+                <dt>Session expiration</dt>
                 <dd>{account.session_expires_at || 'Persistent until revoked'}</dd>
               </div>
               <div>
-                <dt>Local Storage Security</dt>
+                <dt>Local storage security</dt>
                 <dd>Encrypted browser sessionStorage (destroyed on tab close)</dd>
               </div>
               <div>
-                <dt>Active Sessions</dt>
+                <dt>Active sessions</dt>
                 <dd>{sessions.length ? `${sessions.length} recorded session(s)` : '1 active session'}</dd>
               </div>
             </dl>
 
             <div className="session-danger-row">
               <button type="button" className="danger-action-btn" onClick={logout}>
-                Sign Out & Revoke Local Session
+                Sign out & revoke local session
               </button>
             </div>
           </article>
@@ -830,7 +801,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
             <div className="settings-card-header">
               <div className="settings-card-title">
                 <Bell size={18} />
-                <h3>Security Event Notification Triggers</h3>
+                <h3>Security event notification triggers</h3>
               </div>
             </div>
             <p className="settings-card-desc">
@@ -852,7 +823,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                   onChange={(e) => setNotifyContain(e.target.checked)}
                 />
                 <div>
-                  <b>Autonomous Workload Containment</b>
+                  <b>Autonomous workload containment</b>
                   <p>Dispatches whenever Shield quarantines a process or isolates container execution.</p>
                 </div>
               </label>
@@ -864,7 +835,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                   onChange={(e) => setNotifyDeny(e.target.checked)}
                 />
                 <div>
-                  <b>High-Risk Policy Denials</b>
+                  <b>High-risk policy denials</b>
                   <p>Triggers when an unauthorized agent tool call, shadow AI model, or PHI data-access is denied.</p>
                 </div>
               </label>
@@ -958,7 +929,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                 ) : (
                   <>
                     <Send size={13} />
-                    <span>Send Test Alert Email</span>
+                    <span>Send test alert email</span>
                   </>
                 )}
               </button>
@@ -977,19 +948,19 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
               <p className="eyebrow">OPERATOR PROFILE</p>
               <h3>{account.display_name || 'Shield Operator'}</h3>
               <dl className="operator-dl">
-                <dt>Email Address</dt>
+                <dt>Email address</dt>
                 <dd>{account.email || 'Admin Token Session'}</dd>
-                <dt>Access Role</dt>
+                <dt>Access role</dt>
                 <dd>{account.role || 'Tenant Administrator'}</dd>
                 <dt>Account ID</dt>
                 <dd><code>{account.id || '—'}</code></dd>
-                <dt>Enrolled Date</dt>
+                <dt>Enrolled date</dt>
                 <dd>{account.created_at || 'Active'}</dd>
               </dl>
 
               {account.email && (
                 <form className="password-update-form" onSubmit={changePassword}>
-                  <h4>Change Account Password</h4>
+                  <h4>Change account password</h4>
                   <div className="field-group">
                     <label>Current password</label>
                     <input name="currentPassword" type="password" required />
@@ -999,7 +970,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
                     <input name="newPassword" type="password" minLength={10} required />
                   </div>
                   <button type="submit" className="primary-btn">
-                    Update Password
+                    Update password
                   </button>
                   {message && <p className="form-message" aria-live="polite">{message}</p>}
                 </form>

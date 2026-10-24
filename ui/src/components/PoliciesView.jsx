@@ -58,7 +58,7 @@ const PRESELECTED_POLICIES = [
   },
   {
     id: 'professional-services',
-    name: 'Professional Services & Client Data',
+    name: 'Professional services & client data',
     version: 'professional-services-2026.08',
     category: 'Corporate Governance',
     description: 'Balanced policy for consulting and client data confidentiality. Denies unregistered agents, restricts unapproved LLM endpoints, and flags client contract or financial attachment.',
@@ -112,7 +112,7 @@ const PRESELECTED_POLICIES = [
   },
   {
     id: 'regulated',
-    name: 'Regulated Enterprise & Healthcare',
+    name: 'Regulated enterprise & healthcare',
     version: 'regulated-2026.08',
     category: 'Zero Trust & Strict Compliance',
     description: 'High-assurance posture for healthcare, PHI, and financial institutions. Enforces PHI data-source denial, blocks unregistered agents, denies high-risk output releases, and audits sensitive writes.',
@@ -354,7 +354,7 @@ export function PoliciesView({ data, api, refresh }) {
           <div className="deploy-controls-row">
             <div className="deploy-field">
               <label htmlFor="target-device-select">
-                <HardDrive size={14} /> Target Endpoint Device
+                <HardDrive size={14} /> Target endpoint device
               </label>
               <select
                 id="target-device-select"
@@ -395,7 +395,7 @@ export function PoliciesView({ data, api, refresh }) {
             <div className="deploy-success-alert">
               <X size={16} />
               <div>
-                <b>Policy Deployed Successfully</b>
+                <b>Policy deployed successfully</b>
                 <p>
                   Version: <code>{deployResult.policy_version}</code> · Hash: <code>{deployResult.policy_hash}</code> ({deployResult.rules} rules active)
                 </p>
@@ -415,7 +415,7 @@ export function PoliciesView({ data, api, refresh }) {
       <section className="resource" style={{ marginTop: '24px' }}>
         <header>
           <p className="eyebrow">REVERSION CONTROLS</p>
-          <h2>Rollback a Policy</h2>
+          <h2>Rollback a policy</h2>
           <span>Restores the most recent prior policy version from cryptographic history for <code>{targetDevice}</code>.</span>
         </header>
         <form className="action-form" onSubmit={handleRollback}>
@@ -431,7 +431,7 @@ export function PoliciesView({ data, api, refresh }) {
           </label>
           <button type="submit" className="primary">
             <RotateCcw size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-            Load & Rollback to Previous
+            Load & rollback to previous
           </button>
           <button type="button" className="secondary-btn" onClick={loadHistory}>Load version timeline</button>
           {rollbackMsg && (

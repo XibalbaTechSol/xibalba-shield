@@ -1,20 +1,20 @@
 :root {
   /* Color Palette - Premium Dark Theme */
-  --bg-main: #0b0c10;
+  --bg-main: var(--ground);
   --bg-panel: rgba(31, 33, 40, 0.7);
   --bg-card: rgba(43, 47, 58, 0.6);
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-muted);
+  --text-muted: var(--ink-dim);
   
-  --accent-primary: #3b82f6;
-  --accent-secondary: #60a5fa;
-  --accent-glow: rgba(59, 130, 246, 0.5);
+  --accent-primary: var(--shield-accent);
+  --accent-secondary: var(--shield-accent-hover);
+  --accent-glow: var(--shield-accent-glow);
 
-  --status-success: #10b981;
-  --status-warning: #f59e0b;
-  --status-danger: #ef4444;
-  --status-info: #3b82f6;
+  --status-success: var(--status-anchored);
+  --status-warning: var(--status-review);
+  --status-danger: var(--status-conflict);
+  --status-info: var(--status-anchored);
 
   /* Glassmorphism */
   --glass-border: 1px solid rgba(255, 255, 255, 0.08);

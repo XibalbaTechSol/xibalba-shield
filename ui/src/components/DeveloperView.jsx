@@ -323,7 +323,7 @@ func main() {
           <Code2 size={13} className="pulse-icon" />
           <span>AUTHENTICATED API SURFACE</span>
         </div>
-        <h2>Developer Contract & API Explorer</h2>
+        <h2>Developer contract & API explorer</h2>
         <span>
           Test live control plane endpoints, inspect schemas, generate client code, and review cryptographic contracts.
         </span>
@@ -334,7 +334,7 @@ func main() {
         <div className="dev-auth-header">
           <div className="dev-auth-title">
             <Key size={16} />
-            <h4>Active Client Session</h4>
+            <h4>Active client session</h4>
           </div>
           <span className="auth-badge authenticated">Authenticated</span>
         </div>
@@ -422,7 +422,7 @@ func main() {
               ) : (
                 <>
                   <Play size={14} />
-                  <span>Execute Request</span>
+                  <span>Execute request</span>
                 </>
               )}
             </button>
@@ -505,7 +505,7 @@ func main() {
                 onClick={() => copyToClipboard(snippets[activeSnippetTab], 'snippet-copy')}
               >
                   {copiedKey === 'snippet-copy' ? <X size={12} /> : <Copy size={12} />}
-                <span>{copiedKey === 'snippet-copy' ? 'Copied' : 'Copy Code'}</span>
+                <span>{copiedKey === 'snippet-copy' ? 'Copied' : 'Copy code'}</span>
               </button>
             </div>
 
@@ -518,7 +518,7 @@ func main() {
 
       {/* Architectural Security Contracts */}
       <section className="contracts-section">
-        <h3>Shield Security Architecture & Verification Contracts</h3>
+        <h3>Shield security architecture & verification contracts</h3>
         <p className="section-desc">
           Core primitives underpinning our zero-trust endpoint interceptor and autonomous reasoning engine.
         </p>
@@ -528,7 +528,7 @@ func main() {
             <div className="contract-icon-box blue">
               <Shield size={20} />
             </div>
-            <h4>Cryptographic Policy Bundles</h4>
+            <h4>Cryptographic policy bundles</h4>
             <p>
               Signed OPA Rego policies compiled into immutable SHA-256 hash chains. Every decision is cryptographically evaluated against a published hash, ensuring zero unauthorized policy drift.
             </p>
@@ -539,7 +539,7 @@ func main() {
             <div className="contract-icon-box green">
               <Cpu size={20} />
             </div>
-            <h4>Kernel-Level eBPF Telemetry</h4>
+            <h4>Kernel-level eBPF telemetry</h4>
             <p>
               Ring-buffer monitored kernel probes and policy evaluation feed the decision stream. Verified local containment currently uses SIGSTOP for eligible process decisions; destructive kill and network actions require separate runtime proofs.
             </p>
