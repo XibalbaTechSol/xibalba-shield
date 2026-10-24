@@ -3,7 +3,7 @@ import { Activity, LockKeyhole, ShieldCheck, TriangleAlert, Unplug, Cpu, Databas
 import { Metric, PanelTitle } from './Common'
 import { OutcomeTable } from './OutcomeTable'
 
-function Sparkline({ values, color, label, unit = '' }) {
+function Sparkline({ values, label, unit = '' }) {
   const points = values.filter((value) => Number.isFinite(value))
   if (points.length === 0) return <div className="sparkline-empty">Collecting live samples…</div>
   const min = Math.min(...points)
@@ -15,7 +15,7 @@ function Sparkline({ values, color, label, unit = '' }) {
     return { x, y }
   })
   const path = coordinates.map(({ x, y }) => `${x},${y}`).join(' ')
-  return <div className="sparkline-wrap"><svg className="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${label} live graph`}><line x1="0" y1="25" x2="100" y2="25" className="sparkline-grid" /><line x1="0" y1="50" x2="100" y2="50" className="sparkline-grid" /><line x1="0" y1="75" x2="100" y2="75" className="sparkline-grid" /><polyline points={path} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />{coordinates.map(({ x, y }, index) => <circle key={`${x}-${index}`} cx={x} cy={y} r="2" fill={color} vectorEffect="non-scaling-stroke" />)}</svg><small>{points.at(-1).toFixed(1)}{unit} now · range {min.toFixed(1)}–{max.toFixed(1)}{unit}</small></div>
+  return <div className="sparkline-wrap"><svg className="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${label} live graph`}><line x1="0" y1="25" x2="100" y2="25" className="sparkline-grid" /><line x1="0" y1="50" x2="100" y2="50" className="sparkline-grid" /><line x1="0" y1="75" x2="100" y2="75" className="sparkline-grid" /><polyline points={path} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />{coordinates.map(({ x, y }, index) => <circle key={`${x}-${index}`} cx={x} cy={y} r="2" fill="currentColor" vectorEffect="non-scaling-stroke" />)}</svg><small>{points.at(-1).toFixed(1)}{unit} now · range {min.toFixed(1)}–{max.toFixed(1)}{unit}</small></div>
 }
 
 export function Overview({ data, protectedCount, openView, preview: _preview = false }) {
@@ -156,9 +156,9 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
       <section className="panel live-telemetry-panel" aria-label="Live runtime telemetry">
         <PanelTitle title="Live runtime telemetry" copy={`${history.length} samples · refreshes every 5 seconds`} status={resource.sampled_at ? 'Streaming' : 'Waiting'} />
         <div className="live-telemetry-grid">
-          <article className="telemetry-chart"><div className="telemetry-chart-heading"><span><Cpu size={15} /> CPU</span><b>{resource.cpu_percent == null ? '—' : `${resource.cpu_percent.toFixed(1)}%`}</b></div><Sparkline values={history.map((sample) => sample.cpu)} color="#4ed08a" label="CPU utilization" unit="%" /></article>
-          <article className="telemetry-chart"><div className="telemetry-chart-heading"><span><Database size={15} /> Runtime RSS</span><b>{resource.rss_bytes == null ? '—' : `${(resource.rss_bytes / 1024 / 1024).toFixed(1)} MB`}</b></div><Sparkline values={history.map((sample) => sample.memory)} color="#7aa2f7" label="Runtime resident set" unit=" MB" /><small className="telemetry-scope-note">Local process sample aggregate; not Shield service RSS.</small></article>
-          <article className="telemetry-chart"><div className="telemetry-chart-heading"><span><Activity size={15} /> Observations</span><b>{Number.isFinite(eventRate) ? eventRate.toFixed(1) : '—'}</b></div><Sparkline values={history.map((sample) => sample.events)} color="#f0b35b" label="Observation rate" unit="/s" /></article>
+          <article className="telemetry-chart"><div className="telemetry-chart-heading"><span><Cpu size={15} /> CPU</span><b>{resource.cpu_percent == null ? '—' : `${resource.cpu_percent.toFixed(1)}%`}</b></div><Sparkline values={history.map((sample) => sample.cpu)} label="CPU utilization" unit="%" /></article>
+          <article className="telemetry-chart"><div className="telemetry-chart-heading"><span><Database size={15} /> Runtime RSS</span><b>{resource.rss_bytes == null ? '—' : `${(resource.rss_bytes / 1024 / 1024).toFixed(1)} MB`}</b></div><Sparkline values={history.map((sample) => sample.memory)} label="Runtime resident set" unit=" MB" /><small className="telemetry-scope-note">Local process sample aggregate; not Shield service RSS.</small></article>
+          <article className="telemetry-chart"><div className="telemetry-chart-heading"><span><Activity size={15} /> Observations</span><b>{Number.isFinite(eventRate) ? eventRate.toFixed(1) : '—'}</b></div><Sparkline values={history.map((sample) => sample.events)} label="Observation rate" unit="/s" /></article>
           <article className="resource-widget" aria-label="CPU cores and memory usage">
             <div className="telemetry-chart-heading"><span><Cpu size={15} /> CPU / memory</span><b>{cpuCores.length === 4 ? '4 cores' : 'Waiting'}</b></div>
             <div className="resource-widget-section">

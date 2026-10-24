@@ -10,14 +10,24 @@ export function MermaidDiagram({ chart, label }) {
   useEffect(() => {
     let active = true
     renderQueue = renderQueue.then(() => import('mermaid')).then(({ default: mermaid }) => {
+      // Take the diagram's palette from the live design tokens rather than
+      // repeating hex values here, so it follows whichever theme is applied.
+      const scope = document.querySelector('.console') ?? document.documentElement
+      const token = (name, fallback) =>
+        getComputedStyle(scope).getPropertyValue(name).trim() || fallback
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: 'strict',
         theme: 'base',
         themeVariables: {
-          background: '#1b1f23', primaryColor: '#262b30', primaryTextColor: '#eef0f1',
-          primaryBorderColor: '#64717c', lineColor: '#9fc3df', secondaryColor: '#1b1f23',
-          tertiaryColor: '#14171a', fontFamily: 'Barlow, system-ui, sans-serif',
+          background: token('--panel', '#1b1f23'),
+          primaryColor: token('--panel-elevated', '#262b30'),
+          primaryTextColor: token('--text', '#eef0f1'),
+          primaryBorderColor: token('--neutral-700', '#5d5d60'),
+          lineColor: token('--accent', '#94bce3'),
+          secondaryColor: token('--panel', '#1b1f23'),
+          tertiaryColor: token('--bg', '#14171a'),
+          fontFamily: 'Barlow, system-ui, sans-serif',
         },
         flowchart: { curve: 'basis', htmlLabels: true, nodeSpacing: 28, rankSpacing: 42 },
       })

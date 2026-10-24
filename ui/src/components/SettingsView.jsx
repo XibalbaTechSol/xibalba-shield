@@ -339,7 +339,7 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
     const nextTheme = event.target.value
     writeSession('shield-console-theme', nextTheme)
     onThemeChange?.(nextTheme)
-    setThemeMessage(nextTheme === 'command-center' ? 'Dark Command Center theme applied.' : 'Light mock theme applied.')
+    setThemeMessage(nextTheme === 'command-center' ? 'Dark Command Center theme applied.' : 'Light theme applied.')
     window.setTimeout(() => setThemeMessage(''), 3000)
   }
 
@@ -538,10 +538,10 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
               </div>
               <p className="settings-card-desc">Choose how the Shield console is presented. This changes the UI theme only; it does not change endpoint policy, telemetry, or enforcement behavior.</p>
               <div className="theme-choice-grid" role="radiogroup" aria-label="Console theme">
-                <label className={`theme-choice ${theme === 'command-center' ? 'selected' : ''}`}>
-                  <input type="radio" name="consoleTheme" value="command-center" checked={theme === 'command-center'} onChange={handleThemeChange} />
+                <label className={`theme-choice ${theme === 'light' ? '' : 'selected'}`}>
+                  <input type="radio" name="consoleTheme" value="command-center" checked={theme !== 'light'} onChange={handleThemeChange} />
                   <span className="theme-swatch theme-swatch-command" aria-hidden="true"><i /><i /><i /></span>
-                  <span><b>Dark Command Center</b><small>Dark industrial control plane</small></span>
+                  <span><b>Dark Command Center</b><small>Dark industrial control plane · default</small></span>
                 </label>
                 <label className={`theme-choice ${theme === 'light' ? 'selected' : ''}`}>
                   <input type="radio" name="consoleTheme" value="light" checked={theme === 'light'} onChange={handleThemeChange} />

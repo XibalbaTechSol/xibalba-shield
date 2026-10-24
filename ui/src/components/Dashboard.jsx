@@ -220,7 +220,7 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
   }
 
   return (
-    <main className={`console ${theme === 'command-center' ? 'theme-command-center' : 'theme-light'}`}>
+    <main className={`console ${theme === 'light' ? 'theme-light' : 'theme-command-center'}`}>
       <aside className={`side${menu ? ' open' : ''}${navCollapsed ? ' collapsed' : ''}`} aria-label="Console navigation">
         <header>
           <Brand />
