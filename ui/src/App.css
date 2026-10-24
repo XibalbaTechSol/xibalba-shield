@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@500;600;700;800&display=swap');
+@import './consoleTokens.css';
 
 :root {
   --bg: #080b0f;
@@ -1488,25 +1489,26 @@ h1, h2, h3, h4, b {
 .command-nav { display: none; }
 
 .console.theme-command-center {
-  --bg: #0d0f11;
-  --bg-gradient: #0d0f11;
-  --panel: #0d0f11;
-  --panel-solid: #0d0f11;
-  --panel-elevated: #262b30;
-  --line: rgba(255, 255, 255, .24);
-  --line-hover: rgba(255, 255, 255, .4);
-  --text: #eef0f1;
-  --muted: #b7bcc1;
-  --dim: #9aa1a8;
-  --green: #5980a6;
-  --green-hover: #416180;
-  --green-soft: rgba(159, 195, 223, .16);
-  --green-glow: rgba(159, 195, 223, .2);
-  --cyan: #9fc3df;
-  --amber: #d7aa6c;
-  --amber-soft: rgba(215, 170, 108, .16);
-  --red: #d88383;
-  --red-soft: rgba(216, 131, 131, .16);
+  /* the shared chassis (consoleTokens.css); see its header for the 7e36a2d drift */
+  --bg: var(--ground);
+  --bg-gradient: var(--ground);
+  --panel: var(--ground);
+  --panel-solid: var(--ground);
+  --panel-elevated: var(--elevated);
+  --line: var(--hairline);
+  --line-hover: var(--hairline-strong);
+  --text: var(--ink);
+  --muted: var(--ink-muted);
+  --dim: var(--ink-dim);
+  --green: var(--shield-accent);
+  --green-hover: var(--shield-accent-hover);
+  --green-soft: var(--shield-accent-soft);
+  --green-glow: var(--shield-accent-glow);
+  --cyan: var(--status-anchored);
+  --amber: var(--status-review);
+  --amber-soft: var(--status-review-soft);
+  --red: var(--status-conflict);
+  --red-soft: var(--status-conflict-soft);
   grid-template-columns: 1fr;
   background: var(--bg);
   color: var(--text);
@@ -3092,14 +3094,14 @@ h1, h2, h3, h4, b {
    use the same flat industrial system as the Console reference. */
 .landing,
 .auth {
-  --mock-bg: #0d0f11;
-  --mock-panel: #0d0f11;
-  --mock-elevated: #262b30;
-  --mock-line: rgba(255,255,255,.22);
-  --mock-text: #eef0f1;
-  --mock-muted: #b7bcc1;
-  --mock-accent: #5980a6;
-  --mock-amber: #d7aa6c;
+  --mock-bg: var(--ground);
+  --mock-panel: var(--ground);
+  --mock-elevated: var(--elevated);
+  --mock-line: var(--hairline);
+  --mock-text: var(--ink);
+  --mock-muted: var(--ink-muted);
+  --mock-accent: var(--shield-accent);
+  --mock-amber: var(--status-review);
   background: var(--mock-bg);
   color: var(--mock-text);
   font-family: 'Barlow', var(--font-body), sans-serif;
@@ -3131,7 +3133,7 @@ h1, h2, h3, h4, b {
 .landing .primary,
 .auth .primary { border-radius: 0; border-color: var(--mock-accent); background: var(--mock-accent); color: #14171a; box-shadow: none; }
 .landing .primary:hover,
-.auth .primary:hover { background: #597ea3; }
+.auth .primary:hover { background: var(--shield-accent-hover); }
 .landing .hero { max-width: 1240px; min-height: 600px; padding: 88px 24px; gap: 72px; }
 .landing .hero h1 { max-width: 640px; font-size: clamp(46px, 5vw, 66px); line-height: .98; letter-spacing: -.015em; }
 .landing .hero h1 em,
@@ -3590,7 +3592,7 @@ h1, h2, h3, h4, b {
 
 .select-bundle-btn.active {
   background: var(--green);
-  color: #080b0f;
+  color: var(--ink-on-accent);
   border-color: var(--green);
 }
 
@@ -3652,7 +3654,7 @@ h1, h2, h3, h4, b {
   align-items: center;
   gap: 8px;
   background: var(--green);
-  color: #080b0f;
+  color: var(--ink-on-accent);
   font-weight: 700;
   font-size: 13px;
   padding: 10px 22px;
@@ -8054,25 +8056,26 @@ h1, h2, h3, h4, b {
 /* Canonical mock tokens. Keep the rendered console tied to the reference
    implementation even when older component rules appear earlier in this file. */
 .console.theme-command-center {
-  --bg: #0d0f11;
-  --bg-gradient: #0d0f11;
-  --panel: #0d0f11;
-  --panel-solid: #0d0f11;
-  --panel-elevated: #262b30;
-  --line: rgba(255, 255, 255, .24);
-  --line-hover: rgba(255, 255, 255, .4);
-  --text: #eef0f1;
-  --muted: #b7bcc1;
-  --dim: #9aa1a8;
-  --green: #5980a6;
-  --green-hover: #416180;
-  --green-soft: rgba(159, 195, 223, .16);
-  --green-glow: rgba(159, 195, 223, .2);
-  --cyan: #9fc3df;
-  --amber: #d7aa6c;
-  --amber-soft: rgba(215, 170, 108, .16);
-  --red: #d88383;
-  --red-soft: rgba(216, 131, 131, .16);
+  /* the shared chassis (consoleTokens.css); see its header for the 7e36a2d drift */
+  --bg: var(--ground);
+  --bg-gradient: var(--ground);
+  --panel: var(--ground);
+  --panel-solid: var(--ground);
+  --panel-elevated: var(--elevated);
+  --line: var(--hairline);
+  --line-hover: var(--hairline-strong);
+  --text: var(--ink);
+  --muted: var(--ink-muted);
+  --dim: var(--ink-dim);
+  --green: var(--shield-accent);
+  --green-hover: var(--shield-accent-hover);
+  --green-soft: var(--shield-accent-soft);
+  --green-glow: var(--shield-accent-glow);
+  --cyan: var(--status-anchored);
+  --amber: var(--status-review);
+  --amber-soft: var(--status-review-soft);
+  --red: var(--status-conflict);
+  --red-soft: var(--status-conflict-soft);
   --font-heading: 'Barlow Condensed', sans-serif;
   --font-body: 'Barlow', sans-serif;
   background: var(--bg);
@@ -11164,21 +11167,21 @@ h1, h2, h3, h4, b {
   min-height: 36px;
   border: 1px solid var(--mock-accent);
   background: var(--mock-accent);
-  color: #14171a;
+  color: var(--ink-on-accent);
 }
 
 .landing .primary:hover:not(:disabled),
 .landing .cta-btn:hover,
 .auth .primary.submit:hover:not(:disabled) {
-  background: #597ea3;
-  border-color: #597ea3;
+  background: var(--shield-accent-hover);
+  border-color: var(--shield-accent-hover);
 }
 
 .landing .primary:active:not(:disabled),
 .landing .cta-btn:active,
 .auth .primary.submit:active:not(:disabled) {
-  background: #416180;
-  border-color: #416180;
+  background: var(--shield-accent);
+  border-color: var(--shield-accent);
 }
 
 .auth .local-connect,
@@ -11547,4 +11550,204 @@ h1, h2, h3, h4, b {
 @media (max-width: 640px) {
   /* Two columns do not fit a phone: stack the form. */
   #settings-panel-inference .settings-fields-grid { grid-template-columns: 1fr; }
+}
+
+/* The page behind every surface is the shared ground, as in Cortex (html, body). */
+html,
+body {
+  background: var(--ground);
+}
+
+/* ==========================================================================
+   Registration crosses: one mechanism, as in Cortex (.xc-win::before)
+   ========================================================================== */
+
+/* Crosses are drawn ONLY by the ::before frame above, which straddles the border and is
+   suppressed inside another window (marks never nest). These rules also painted marks on the
+   element's own background, inside the border, so a nested card showed four "L" brackets. */
+.console.theme-command-center .metric,
+.console.theme-command-center .panel,
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .outbox-status-card,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .api-explorer-layout,
+.console.theme-command-center .agent-detail-section,
+.console.theme-light .metric,
+.console.theme-light .panel,
+.console.theme-light .resource,
+.console.theme-light .settings-card,
+.console.theme-light .hybrid-architecture-card,
+.console.theme-light .outbox-status-card,
+.console.theme-light .policy-bundle-card,
+.console.theme-light .policy-deploy-panel,
+.console.theme-light .integration-card,
+.console.theme-light .event-stream-card,
+.console.theme-light .api-explorer-layout,
+.console.theme-light .agent-detail-section,
+.console.theme-light .evidence-reference-metrics,
+.agent-workspace > .agent-toolbar,
+.agent-workspace > .agent-grid {
+  background-image: none;
+}
+
+/* A ledger row is a row inside a list, not a window: its ::before is the 3px severity stripe.
+   The frame rule above overrode the stripe's image and inset but not its 3px width, so neither
+   the stripe's colour nor a cross showed. */
+/* :not(#_) lifts this over the frame rule's :is()/:not() specificity; both are !important. */
+.console.theme-command-center .event-stream-card.event-ledger-row:not(#_)::before,
+.console.theme-light .event-stream-card.event-ledger-row:not(#_)::before {
+  inset: 0 auto 0 0 !important;
+  width: 3px;
+  background-image: none !important;
+}
+
+/* A framed section that clips its content also clipped its own crosses, which sit 4px outside
+   its border: clip instead of hiding, with room for the marks. */
+.console.theme-command-center :is(.agent-unified-section, .evidence-unified-section, .decisions-policy-section, .decisions-approvals-section, .configuration-section, .api-explorer-layout),
+.console.theme-light :is(.agent-unified-section, .evidence-unified-section, .decisions-policy-section, .decisions-approvals-section, .configuration-section, .api-explorer-layout) {
+  overflow: clip;
+  overflow-clip-margin: 6px;
+}
+
+/* ==========================================================================
+   Chassis parity with Cortex (xibalba-cortex viewer/src/console/console.css)
+   The Xibalba Console design system: the chassis is shared, the accent names the product.
+   ========================================================================== */
+
+/* Windows are told apart by frame and crosses, never by fill or shadow. A window's rule is the
+   faint frame-line; the brighter hairline belongs to controls. */
+.console.theme-command-center :is(.panel, .resource, .settings-card, .responder-panel, .policy-bundle-card, .policy-deploy-panel, .integration-card, .event-stream-card) {
+  border-color: var(--frame-line);
+}
+.console.theme-command-center .metric,
+.console.theme-command-center .panel,
+.console.theme-command-center .resource,
+.console.theme-command-center .settings-card,
+.console.theme-command-center .hybrid-architecture-card,
+.console.theme-command-center .outbox-status-card,
+.console.theme-command-center .policy-bundle-card,
+.console.theme-command-center .policy-deploy-panel,
+.console.theme-command-center .integration-card,
+.console.theme-command-center .event-stream-card,
+.console.theme-command-center .api-explorer-layout,
+.console.theme-command-center .agent-detail-section {
+  box-shadow: none;
+}
+
+/* The rail: Cortex's .xc-rail-shell. */
+.console.theme-command-center .side {
+  padding: 18px 14px 14px;
+  border-right: 1px solid var(--hairline);
+  background: var(--ground);
+  scrollbar-width: none;
+}
+.console.theme-command-center .side::-webkit-scrollbar {
+  display: none;
+}
+.console.theme-command-center .side .nav-group > small {
+  margin: 16px 0 4px 10px;
+  color: var(--ink-dim);
+  font: 700 11px var(--font-console);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.console.theme-command-center .side .nav-group:first-child > small {
+  margin-top: 0;
+}
+.console.theme-command-center .side nav button {
+  height: auto;
+  min-height: var(--control-height);
+  padding: 9px 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-muted);
+  font: 600 17px/1.2 var(--font-condensed);
+}
+.console.theme-command-center .side nav button:hover,
+.console.theme-command-center .side nav button.active {
+  border-left-color: var(--shield-accent);
+  background: var(--shield-accent-soft);
+  color: var(--ink);
+}
+.console.theme-command-center .side nav button svg {
+  width: 15px;
+  height: 15px;
+}
+.console.theme-command-center .side nav button.active svg {
+  color: var(--shield-accent);
+}
+/* A short window fits the rail instead of scrolling it (the mock's nav never shows a scrollbar). */
+@media (max-height: 760px) {
+  .console.theme-command-center .side { padding-top: 12px; padding-bottom: 10px; }
+  .console.theme-command-center .side .brand img { width: 40px; height: 40px; }
+  .console.theme-command-center .side .nav-group > small { margin-top: 10px; }
+  .console.theme-command-center .side nav button { min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
+}
+
+/* Controls: Cortex's .xc-btn, .xc-input and .xc-tab. Square, 38px, hairline borders. */
+.console.theme-command-center :is(.primary-btn, .secondary-btn, button.primary) {
+  min-height: var(--control-height);
+  border-radius: 0;
+  font: 600 13px/1.2 var(--font-console);
+}
+.console.theme-command-center :is(.primary-btn, button.primary) {
+  border: 1px solid var(--shield-accent);
+  background: var(--shield-accent);
+  color: var(--ink-on-accent);
+}
+.console.theme-command-center :is(.primary-btn, button.primary):hover:not(:disabled) {
+  border-color: var(--shield-accent-hover);
+  background: var(--shield-accent-hover);
+  color: var(--ink-on-accent);
+}
+.console.theme-command-center .secondary-btn {
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+}
+.console.theme-command-center .secondary-btn:hover:not(:disabled) {
+  border-color: var(--hairline-strong);
+  background: transparent;
+}
+.console.theme-command-center :is(.primary-btn, .secondary-btn, button.primary):disabled {
+  opacity: 0.6;
+}
+.console.theme-command-center :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) {
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  background-color: var(--elevated);
+  color: var(--ink);
+}
+.console.theme-command-center :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select) {
+  min-height: var(--control-height);
+}
+.console.theme-command-center :is(input, select, textarea):hover:not(:disabled) {
+  border-color: var(--hairline-strong);
+}
+
+/* The design system's nav size is 17px (16px at 760px and below); the earlier "navigation
+   typography lock" pins 16px with !important, so this matches its weight. */
+.console.theme-command-center .side nav:not(.account-nav) button,
+.console.theme-command-center .side nav:not(.account-nav) button span {
+  font-size: 17px !important;
+}
+@media (max-width: 760px) {
+  .console.theme-command-center .side nav:not(.account-nav) button,
+  .console.theme-command-center .side nav:not(.account-nav) button span {
+    font-size: 16px !important;
+  }
+}
+.console.theme-command-center :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) {
+  font-size: 13px;
+}
+
+/* Eyebrows carry the product accent. */
+.console.theme-command-center .eyebrow {
+  color: var(--shield-accent);
 }

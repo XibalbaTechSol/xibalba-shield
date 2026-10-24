@@ -1,0 +1,53 @@
+/* Shared console chassis tokens -- the same values as xibalba-cortex
+ * viewer/src/console/tokens.css.
+ *
+ * Source: the "Xibalba Console" design system (tokens.json), which follows the Industry mock as
+ * measured in docs/audits/UI_MOCK_COMPARISON_MATRIX.md. Commit 7e36a2d hand-edited the dark
+ * palette away from that measurement (#0d0f11 ground, .24 lines, #5980a6 accent); these tokens
+ * restore it, so Shield and Cortex share one chassis and differ only in product accent.
+ *
+ * The chassis is shared. The accent identifies the product. The status vocabulary is identical.
+ * Keep this file in step with Cortex's copy; never use cortex-accent as chrome here.
+ */
+:root {
+  /* surfaces: one graphite for the page, every window and the top bar */
+  --ground: #14171a;
+  --elevated: #262b30;
+
+  /* rules */
+  --hairline: rgba(255, 255, 255, 0.14);
+  --hairline-strong: rgba(255, 255, 255, 0.35);
+  --hairline-faint: rgba(255, 255, 255, 0.08);
+  --frame-line: rgba(92, 100, 106, 0.28);
+  --frame-tick: rgba(171, 181, 188, 0.72);
+
+  /* ink */
+  --ink: #eef0f1;
+  --ink-muted: #b7bcc1;
+  --ink-dim: #9aa1a8;
+  --ink-on-accent: #102027;
+
+  /* Shield accent: the mock's --green. Hover LIGHTENS on dark. Ink on it is 9.0:1. */
+  --shield-accent: #9fc3df;
+  --shield-accent-hover: #cfe4f3;
+  --shield-accent-soft: rgba(159, 195, 223, 0.16);
+  --shield-accent-glow: rgba(159, 195, 223, 0.2);
+
+  /* shared status vocabulary: identical in Shield and Cortex */
+  --status-anchored: #9fc3df;
+  --status-anchored-soft: rgba(159, 195, 223, 0.12);
+  --status-review: #d7aa6c;
+  --status-review-soft: rgba(215, 170, 108, 0.16);
+  --status-conflict: #d88383;
+  --status-conflict-soft: rgba(216, 131, 131, 0.16);
+
+  /* type */
+  --font-condensed: 'Barlow Condensed', sans-serif;
+  --font-console: 'Barlow', system-ui, -apple-system, sans-serif;
+
+  /* geometry */
+  --window-padding: 20px;
+  --window-gap: 20px;
+  --control-height: 38px;
+  --tab-height: 40px;
+}
