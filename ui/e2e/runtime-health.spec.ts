@@ -11,6 +11,17 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
   await expect(page.getByText(/events 2026-09-08T19:44:16Z/)).toBeVisible()
   await expect(page.getByText('0 lost events', { exact: true })).toBeVisible()
 
+  /* Posture values that used to be hardcoded. Every string below is derived from the fixture's
+     `did_preflight` / `responders` payload, and each one contradicts the literal it replaced, so
+     this fails if the panels go back to printing fixed text. */
+  await expect(page.getByText('0 spooled · DID loaded · oracle unreachable · middleware unreachable')).toBeVisible()
+  await expect(page.getByText('2 of 4 ready', { exact: true })).toBeVisible()
+  await expect(page.getByText('1 missing proof · operator_approval', { exact: true })).toBeVisible()
+  await expect(page.getByText('2 missing proofs · kernel_probe_verified · policy_signature_verified', { exact: true })).toBeVisible()
+  // freeze_cgroup is ready in the payload; the old table asserted it needed two proofs.
+  await expect(page.getByText('policy-driven · no outstanding proofs', { exact: true })).toHaveCount(2)
+  await expect(page.getByText('DID readback pending')).toHaveCount(0)
+
   // Decisions > Event stream: durable decisions from the control plane, filterable by action.
   await page.getByRole('button', { name: 'Decisions', exact: true }).click()
   await page.getByRole('tab', { name: 'Event stream' }).click()
@@ -28,7 +39,12 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Responder interface' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Freeze process' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Kill process' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Unavailable until validated' })).toHaveCount(3)
+  /* Two, not three: the fixture now reports `capabilities.freeze_cgroup: true` alongside
+     freeze_process, and this grid reads those capabilities, so only kill_process and block_flow
+     stay gated. The count moved because the fixture gained real responder data, not because the
+     grid changed. */
+  await expect(page.getByRole('button', { name: 'Unavailable until validated' })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Policy-driven' })).toHaveCount(2)
   await expect(page.getByRole('heading', { name: 'Hermes Shield agent' })).toBeVisible()
   await expect(page.getByText('11 acknowledged', { exact: false })).toBeVisible()
   await expect(page.getByText('Analysis only · enforced', { exact: true })).toBeVisible()
