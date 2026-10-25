@@ -27,7 +27,6 @@ export class ShieldApi {
   authEvents(email = '') { return this.request(`/api/shield/auth/events${email ? `?email=${encodeURIComponent(email)}` : ''}`) }
   testEvents(agentId = '') { return this.request(`/api/shield/test-events${agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ''}`) }
   changePassword(email, currentPassword, newPassword) { return this.request('/api/shield/auth/password', { method: 'POST', body: { tenant_id: this.tenantId, email, current_password: currentPassword, new_password: newPassword }, tenant: false }) }
-  health() { return this.request('/api/shield/health', { tenant: false }) }
   dashboard() { return this.request('/api/shield/dashboard-summary') }
   devices() { return this.request('/api/shield/devices') }
   agents() { return this.request('/api/shield/agents') }
@@ -49,7 +48,6 @@ export class ShieldApi {
   networkConfigChangeRequests() { return this.request('/api/shield/network/config/change-requests') }
   decideNetworkConfigChange(requestId, action, actorId = 'tenant-admin') { return this.request(`/api/shield/network/config/change-requests/${encodeURIComponent(requestId)}`, { method: 'POST', body: { tenant_id: this.tenantId, action, approver_id: actorId, actor_id: actorId }, tenant: false }) }
   saveSettings(settings) { return this.request('/api/shield/settings', { method: 'POST', body: { tenant_id: this.tenantId, settings }, tenant: false }) }
-  settingsAudit() { return this.request('/api/shield/settings/audit') }
   settingsChangeRequests() { return this.request('/api/shield/settings/change-requests') }
   createSettingsChangeRequest(category, settings, requestedBy = 'tenant-admin') {
     return this.request('/api/shield/settings/change-requests', { method: 'POST', body: { tenant_id: this.tenantId, category, settings, requested_by: requestedBy }, tenant: false })
@@ -70,16 +68,8 @@ export class ShieldApi {
   enrollDevice(deviceId, deviceRole = 'workstation') { return this.request('/api/shield/enroll', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, device_role: deviceRole }, tenant: false }) }
   createIntegration(integrationId, kind, config) { return this.request('/api/shield/integrations', { method: 'POST', body: { tenant_id: this.tenantId, integration_id: integrationId, kind, config }, tenant: false }) }
   testIntegration(integrationId) { return this.request('/api/shield/integrations/test', { method: 'POST', body: { tenant_id: this.tenantId, integration_id: integrationId }, tenant: false }) }
-  evaluateOpa(policy, input) { return this.request('/api/shield/opa/evaluate', { method: 'POST', body: { tenant_id: this.tenantId, policy, input }, tenant: false }) }
-  transactionIntent(deviceId, intent, deviceToken) { return this.request('/api/shield/transaction-intents', { method: 'POST', body: { ...intent, tenant_id: this.tenantId, device_id: deviceId }, tenant: false, token: deviceToken }) }
   transactionSimulation(deviceId, intent, deviceToken) { return this.request('/api/shield/transaction-simulations', { method: 'POST', body: { ...intent, tenant_id: this.tenantId, device_id: deviceId }, tenant: false, token: deviceToken }) }
   createApproval(body) { return this.request('/api/shield/transaction-approvals', { method: 'POST', body: { ...body, tenant_id: this.tenantId }, tenant: false }) }
   consumeApproval(body) { return this.request('/api/shield/transaction-approvals/consume', { method: 'POST', body: { ...body, tenant_id: this.tenantId }, tenant: false }) }
   verifyApproval(deviceId, intentHash, deviceToken) { return this.request('/api/shield/transaction-approvals/verify', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, intent_hash: intentHash }, tenant: false, token: deviceToken }) }
-  issueApproval(body) { return this.request('/api/shield/transaction-approvals', { method: 'POST', body: { ...body, tenant_id: this.tenantId }, tenant: false }) }
-
-  // Backwards-compatible names used by the initial UI.
-  getDashboardSummary() { return this.dashboard() }
-  getDevices() { return this.devices() }
-  getEnforcementOutcomes(deviceId = '') { return this.enforcementOutcomes(deviceId) }
 }
