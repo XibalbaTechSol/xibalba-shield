@@ -9,12 +9,29 @@
     # Replace with a real domain (Caddy auto-provisions Let's Encrypt) for a public deployment.
     tls internal
 
-    root * /srv/shield/ui/dist
-    file_server
+    # A `route` block, not bare directives: Caddy's automatic directive sorting runs
+    # `try_files` (the SPA fallback) *before* `reverse_proxy`, so a proxied path was
+    # rewritten to /index.html before the proxy matcher ever saw it. A route executes in
+    # the order written instead.
+    route {
+        # 8765 is shield-backend's own default port (shield/backend/api.py's --port,
+        # SHIELD_BACKEND_PORT). A host that overrides that env var must change it here too.
+        reverse_proxy /api/* 127.0.0.1:8765
 
-    try_files {path} /index.html
+        # The Cortex namespace selector in the operator console reads Cortex's agent
+        # roster directly (ui/src/components/Dashboard.jsx's fetchCortexNamespaces).
+        # `handle_path` strips the /cortex-api prefix, matching the rewrite the Vite dev
+        # proxy already does, so the same URL works in both. Without this the request was
+        # served the console's own HTML, and because the call sits in a Promise.allSettled
+        # the JSON parse failed silently and the selector simply rendered empty.
+        handle_path /cortex-api/* {
+            reverse_proxy 127.0.0.1:8420
+        }
 
-    reverse_proxy /api/* 127.0.0.1:8765
+        root * /srv/shield/ui/dist
+        try_files {path} /index.html
+        file_server
+    }
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
