@@ -18,7 +18,10 @@
 #   4. Requires `uv pip check` to be fully clean, a zero-change dry run against the lock,
 #      and an import smoke test.
 #   5. Restarts the sensor, the Cortex outbox worker and the Hermes analyst; each must be
-#      stable, and a /tmp containment canary must be stopped by Shield.
+#      stable, and a containment canary -- a sleep copy under a path the enforced policy's
+#      contain rule actually matches -- must be stopped by Shield. The canary is checked
+#      against OPA first, so a stale canary cannot masquerade as a sensor that stopped
+#      enforcing (that confusion cost a live outage on 2026-10-24).
 # Any failure in 3–5 restores the snapshot and restarts the services.
 set -euo pipefail
 [[ "$(id -u)" -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
@@ -30,6 +33,7 @@ SDK=$STAGE/integrity-core/integrity-sdk
 VENV=/opt/xibalba-shield/venv
 PY=$VENV/bin/python
 UV=/home/xibalba/.local/bin/uv
+OPA_URL=${SHIELD_OPA_URL:-http://127.0.0.1:8181}
 STAMP=$(date +%Y%m%dT%H%M%S)
 SNAP=$VENV.bak-$STAMP
 REQ=$(mktemp /root/shield-lock-req.XXXXXX)
@@ -55,21 +59,56 @@ rollback() {
   exit 1
 }
 
-canary() {  # echo the final state of a /tmp sleep copy run as xibalba (T* = contained)
-  local path=/tmp/c6-venv-canary-$STAMP state="" child="" runner
-  install -m 0755 -o xibalba -g xibalba /bin/sleep "$path"
-  runuser -u xibalba -- "$path" 120 >/dev/null 2>&1 &
+# The enforced contain rule keys on the executable's PATH, not on it living in /tmp.
+# shield/policies/rego/smb.rego's only contain rule (smb-contain-shadow-ai-processes) is
+# `match_glob_array(input.event.process.exe_path, ["*/ai/*", "*/llm-tools/*",
+# "*/shadow-agent/*"])`, and match_glob_array passes no delimiters, so each `*` spans `/`.
+# This canary used a plain /tmp/c6-venv-canary-$STAMP copy of /bin/sleep, which matches none
+# of those globs: OPA returns log_only, the process is correctly left alone, and step 5 then
+# reported "not contained" and rolled back a perfectly good deploy. The `/ai/` directory
+# component is what makes this a canary, so it has to stay under one of those globs.
+CANARY_DIR=/tmp/c6-venv-canary-$STAMP/ai
+CANARY_PATH=$CANARY_DIR/sleep
+
+# What the ENFORCED policy says it would do to that path. This exists so a canary that stops
+# matching the policy can never again be mistaken for a sensor that stopped enforcing -- the
+# two look identical from the outside, and telling them apart cost a live sensor outage.
+canary_expected_action() {
+  "$PY" - "$OPA_URL" "$CANARY_PATH" <<'PYEOF'
+import json, sys, urllib.request
+
+url, exe_path = sys.argv[1], sys.argv[2]
+payload = {"input": {"event": {"process": {"exe_path": exe_path}}, "ctx": {"registered_agent_ids": {}}}}
+request = urllib.request.Request(
+    url.rstrip("/") + "/v1/data/shield/policy", data=json.dumps(payload).encode("utf-8"), method="POST",
+)
+request.add_header("Content-Type", "application/json")
+# A sidecar query must never be routed through an egress proxy (same reason as OpaClient's).
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+try:
+    with opener.open(request, timeout=5) as response:
+        print((json.loads(response.read()).get("result") or {}).get("action") or "undefined")
+except Exception as exc:  # noqa: BLE001 -- any failure here means "cannot tell", not "not contained"
+    print(f"unreachable ({exc})")
+PYEOF
+}
+
+canary() {  # echo the final state of a sleep copy run as xibalba from a contained path (T* = contained)
+  local state="" child="" runner
+  install -d -m 0755 -o xibalba -g xibalba "$CANARY_DIR"
+  install -m 0755 -o xibalba -g xibalba /bin/sleep "$CANARY_PATH"
+  runuser -u xibalba -- "$CANARY_PATH" 120 >/dev/null 2>&1 &
   runner=$!
   for _ in $(seq 1 20); do
     sleep 1
-    child=$(pgrep -f "^$path 120" | head -1 || true)
+    child=$(pgrep -f "^$CANARY_PATH 120" | head -1 || true)
     [[ -n "$child" ]] && state=$(ps -o stat= -p "$child" | tr -d ' ')
     [[ "$state" == T* ]] && break
   done
   [[ -n "$child" ]] && kill -KILL "$child" 2>/dev/null || true
   kill -KILL "$runner" 2>/dev/null || true
   wait "$runner" 2>/dev/null || true
-  rm -f "$path"
+  rm -rf "${CANARY_DIR%/ai}"
   echo "${state:-gone}"
 }
 
@@ -111,6 +150,14 @@ fi
 echo "== 5/5 restart and prove"
 systemctl restart "${SERVICES[@]}"
 for u in "${SERVICES[@]}"; do stable "$u" 20 || { echo "$u unstable" >&2; rollback; }; echo "$u stable"; done
+EXPECTED=$(canary_expected_action)
+if [[ "$EXPECTED" != contain ]]; then
+  echo "the canary path $CANARY_PATH is not contained by the ENFORCED policy (OPA said '$EXPECTED')." >&2
+  echo "That is a stale canary, not a failed deploy. Point it at a path smb.rego's contain rule" >&2
+  echo "actually matches (*/ai/*, */llm-tools/*, */shadow-agent/*); do not weaken this gate." >&2
+  rollback
+fi
+echo "enforced policy would contain $CANARY_PATH"
 STATE=$(canary)
 [[ "$STATE" == T* ]] || { echo "containment canary not contained (state '$STATE')" >&2; rollback; }
 echo "containment canary contained (state $STATE)"
