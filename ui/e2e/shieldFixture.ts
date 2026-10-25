@@ -99,6 +99,20 @@ export async function stubShieldApi(page: Page, theme?: 'command-center' | 'ligh
               lost_events: 0,
             },
             exporter: { export_failures: 0, spool_pending: 0 },
+            /* Deliberately disagrees with the literals the Posture panels used to print
+               ("DID readback pending", and a table claiming freeze_cgroup needed "2 missing
+               proofs · runtime probe · device identity"). freeze_cgroup is ready here and
+               kill_process is short exactly one named proof, so an assertion on those strings
+               can only pass if the panel reads this payload. Revert the panel to literals and
+               the runtime-health spec fails. */
+            did_preflight: { did_loaded: true, oracle_configured: true, oracle_reachable: false, bcc_middleware_reachable: false },
+            responders: {
+              capabilities: { freeze_process: true, freeze_cgroup: true, kill_process: false, block_flow: false },
+              readiness: {
+                ready: { freeze_cgroup: true, kill_process: false, block_flow: false },
+                missing: { kill_process: ['operator_approval'], block_flow: ['kernel_probe_verified', 'policy_signature_verified'] },
+              },
+            },
           } },
         ],
       },

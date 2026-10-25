@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
-  Bell,
   Gauge,
   HardDrive,
   LogOut,
@@ -332,9 +331,6 @@ export function Dashboard({ connection, logout }) {
               disabled={refreshing}
             >
               <Activity className={refreshing ? 'spinning' : ''} aria-hidden="true" />
-            </button>
-            <button aria-label="View notifications" title="Notifications" type="button">
-              <Bell aria-hidden="true" />
             </button>
             <span
               className={`connection ${status.state}`}

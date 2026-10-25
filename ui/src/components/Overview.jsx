@@ -3,6 +3,16 @@ import { Activity, LockKeyhole, ShieldCheck, TriangleAlert, Unplug, Cpu, Databas
 import { Metric, PanelTitle } from './Common'
 import { OutcomeTable } from './OutcomeTable'
 
+// Same keys and order as AgentView's own responder grid, so the two surfaces cannot drift apart.
+// The descriptions are static because they describe what a responder does; every piece of *state*
+// comes from `exporter-status`.
+const RESPONDER_DEFINITIONS = [
+  { key: 'freeze_process', label: 'Freeze process', description: 'Pause a policy-matched process with SIGSTOP.' },
+  { key: 'freeze_cgroup', label: 'Freeze cgroup', description: 'Pause a workload boundary after cgroup runtime proof.' },
+  { key: 'kill_process', label: 'Kill process', description: 'Terminate only after an explicit destructive-action gate.' },
+  { key: 'block_flow', label: 'Block network flow', description: 'Install a scoped network block after kernel runtime proof.' },
+]
+
 function Sparkline({ values, label, unit = '' }) {
   const points = values.filter((value) => Number.isFinite(value))
   if (points.length === 0) return <div className="sparkline-empty">Collecting live samples…</div>
@@ -29,6 +39,46 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
   const sensors = latestStatus.sensors || {}
   const exporter = latestStatus.exporter || {}
   const probeMode = sensors.attach_mode || (sensors.attached === true ? 'direct probe' : 'not attached')
+  // `exporter-status` already reports the DID preflight and the responder gates per device. This
+  // panel used to state both as literal strings -- "DID readback pending", and a four-row table
+  // whose proof counts disagreed with what the device actually reported -- so a reader could not
+  // tell a gated responder from a ready one. Everything below is read from the payload.
+  const didPreflight = latestStatus.did_preflight || {}
+  const didDetail = didPreflight.did_loaded === undefined
+    ? 'no DID preflight reported'
+    : [
+      didPreflight.did_loaded ? 'DID loaded' : 'no DID loaded',
+      didPreflight.oracle_configured === false
+        ? 'oracle not configured'
+        : didPreflight.oracle_reachable
+          ? (didPreflight.oracle_registered === true ? 'registered' : didPreflight.oracle_registered === false ? 'not registered' : 'registration unread')
+          : 'oracle unreachable',
+      didPreflight.bcc_middleware_reachable ? 'middleware reachable' : 'middleware unreachable',
+    ].join(' · ')
+  const responderStatus = latestStatus.responders || {}
+  const responderReady = responderStatus.readiness?.ready || {}
+  const responderMissing = responderStatus.readiness?.missing || {}
+  const responderCapabilities = responderStatus.capabilities || {}
+  // `ready` covers only the gated responders; freeze_process is policy-capable without a gate, so
+  // its own capability flag is what says whether it can act.
+  const responderRows = RESPONDER_DEFINITIONS.map(({ key, label, description }) => {
+    const missing = Array.isArray(responderMissing[key]) ? responderMissing[key] : []
+    const ready = key in responderReady ? responderReady[key] === true : responderCapabilities[key] === true
+    const reported = key in responderReady || key in responderCapabilities
+    return {
+      key,
+      label,
+      description,
+      detail: !reported
+        ? 'not reported'
+        : missing.length
+          ? `${missing.length} missing ${missing.length === 1 ? 'proof' : 'proofs'} · ${missing.join(' · ')}`
+          : ready ? 'policy-driven · no outstanding proofs' : 'gated · no proofs reported',
+      state: !reported ? 'Unverified' : ready ? 'Ready' : 'Proof required',
+    }
+  })
+  const respondersReported = responderRows.some((row) => row.state !== 'Unverified')
+  const respondersReadyCount = responderRows.filter((row) => row.state === 'Ready').length
   const bridgeDetail = sensors.last_heartbeat_at
     ? `heartbeat ${sensors.last_heartbeat_at}`
     : sensors.last_event_at
@@ -100,11 +150,16 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
           detail="recorded decisions"
           tone="green"
         />
+        {/* This tile used to read `spool_pending == null ? '—' : '—'`, so it rendered an em-dash
+            whatever the device reported. `exporter-status` carries no positive "exported" total to
+            put there -- only failure and queue counters -- so the tile now reports the failures,
+            which were otherwise invisible in the console while the spool sat at zero. */}
         <Metric
           Icon={X}
-          label="Evidence exported"
-          value={exporter.spool_pending == null ? '—' : '—'}
-          detail="signed evidence"
+          label="Evidence failures"
+          value={exporter.backend_evidence?.publish_failures ?? exporter.export_failures ?? '—'}
+          detail="failed publications"
+          tone={(exporter.backend_evidence?.publish_failures ?? exporter.export_failures ?? 0) > 0 ? 'amber' : 'green'}
         />
         <Metric
           Icon={TriangleAlert}
@@ -125,7 +180,7 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
               ['Probe', sensors.attached, probeMode],
               ['Bridge', sensors.attached, bridgeDetail],
               ['Lost events', sensors.lost_events === 0, `${sensors.lost_events ?? 0} lost events`],
-              ['Evidence exporter', exporter.export_failures === 0, `${exporter.spool_pending ?? 0} spooled · DID readback pending`]
+              ['Evidence exporter', exporter.export_failures === 0, `${exporter.spool_pending ?? 0} spooled · ${didDetail}`]
             ].map(([name, healthy, detail]) => (
               <div className="sensor" key={`posture-${name}`}>
                 <span><Activity aria-hidden="true" /></span>
@@ -136,17 +191,16 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
           </div>
         </article>
         <article className="panel responder-panel">
-          <PanelTitle title="Responder readiness" copy="Live agent report" status="Ready" />
+          <PanelTitle
+            title="Responder readiness"
+            copy="Live agent report"
+            status={respondersReported ? `${respondersReadyCount} of ${responderRows.length} ready` : 'Unverified'}
+          />
           <p className="responder-copy">Destructive responders cannot be enabled from the UI without runtime proof.</p>
           <div className="responder-grid">
-            {[
-              ['Freeze process', 'Pause a policy-matched process with SIGSTOP.', 'Reversible · policy-driven', 'Ready'],
-              ['Freeze cgroup', 'Pause a workload boundary after cgroup runtime proof.', '2 missing proofs · runtime probe · device identity', 'Proof required'],
-              ['Kill process', 'Terminate only after an explicit destructive-action gate.', '2 missing proofs · operator approval · live gate', 'Proof required'],
-              ['Block network flow', 'Install a scoped network block after kernel runtime proof.', '1 missing proof · runtime probe', 'Proof required'],
-            ].map(([name, description, detail, state]) => (
-              <div className="responder-item" key={name}>
-                <b>{name}</b><span>{description}</span><small>{detail}</small><strong className={state === 'Ready' ? 'ready' : ''}>{state}</strong>
+            {responderRows.map(({ key, label, description, detail, state }) => (
+              <div className="responder-item" key={key}>
+                <b>{label}</b><span>{description}</span><small>{detail}</small><strong className={state === 'Ready' ? 'ready' : ''}>{state}</strong>
               </div>
             ))}
           </div>
