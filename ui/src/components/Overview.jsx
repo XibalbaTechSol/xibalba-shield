@@ -55,6 +55,13 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
           : 'oracle unreachable',
       didPreflight.bcc_middleware_reachable ? 'middleware reachable' : 'middleware unreachable',
     ].join(' · ')
+  // Prefer the backend publication counter and say so; fall back to the device-side exporter's own
+  // failures only when the backend has not reported, and label that differently.
+  const evidenceFailures = exporter.backend_evidence?.publish_failures != null
+    ? { value: exporter.backend_evidence.publish_failures, label: 'backend publications' }
+    : exporter.export_failures != null
+      ? { value: exporter.export_failures, label: 'device exports' }
+      : { value: null, label: 'not reported' }
   const responderStatus = latestStatus.responders || {}
   const responderReady = responderStatus.readiness?.ready || {}
   const responderMissing = responderStatus.readiness?.missing || {}
@@ -153,13 +160,16 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
         {/* This tile used to read `spool_pending == null ? '—' : '—'`, so it rendered an em-dash
             whatever the device reported. `exporter-status` carries no positive "exported" total to
             put there -- only failure and queue counters -- so the tile now reports the failures,
-            which were otherwise invisible in the console while the spool sat at zero. */}
+            which were otherwise invisible in the console while the spool sat at zero.
+            `backend_evidence.publish_failures` and `export_failures` are *different* counters
+            (213 and 45 on this host), so the detail line names which one is on screen rather than
+            letting the number change meaning per device without saying so. */}
         <Metric
           Icon={X}
           label="Evidence failures"
-          value={exporter.backend_evidence?.publish_failures ?? exporter.export_failures ?? '—'}
-          detail="failed publications"
-          tone={(exporter.backend_evidence?.publish_failures ?? exporter.export_failures ?? 0) > 0 ? 'amber' : 'green'}
+          value={evidenceFailures.value ?? '—'}
+          detail={evidenceFailures.label}
+          tone={(evidenceFailures.value ?? 0) > 0 ? 'amber' : 'green'}
         />
         <Metric
           Icon={TriangleAlert}
