@@ -2,6 +2,20 @@
 
 Baseline captured 2026-09-28 after the nested-surface and complete-border pass.
 
+> **Correction, 2026-10-24.** Several rows below recorded `PASS` against values the
+> stylesheet never carried. `ui/src/App.css` defined `--bg: #080b0f` (not the `#14171a`
+> the "App background" row claimed), `--line` at `.08`/`.24` (not `.14`), and Manrope /
+> DM Sans rather than Barlow Condensed / Barlow; `index.css` restyled every `button`
+> blue in Inter. Those rows were aspirational, not measured, and the `/tmp/*.png`
+> references they rest on are gone.
+>
+> The drift is now corrected in code and, more importantly, **enforced**: the matrix is
+> no longer the evidence. `ui/e2e/design-system.spec.ts` asserts the canonical token
+> values, the type pairing, square geometry, the absence of neutral light fills and
+> zero horizontal overflow from *computed* styles, on every route, in both themes. Read
+> that spec as the authority; treat the tables below as design intent, and re-verify any
+> row against the spec before citing it.
+
 ## Reference set
 
 | Reference | Location / evidence | Use |
@@ -113,3 +127,22 @@ The route audit confirms rendering, geometry, and browser health. Remaining stat
 ## Acceptance gate
 
 The UI is mock-equivalent when every row is `PASS`, every page has a same-state screenshot pair, no surface lacks its frame, no non-semantic fill differs from the mock, and the browser audit reports zero console errors and zero horizontal overflow.
+
+A row may only be marked `PASS` on evidence that can be re-run. A screenshot in `/tmp`
+is not such evidence. Prefer an assertion in `ui/e2e/design-system.spec.ts`, which fails
+the build when a value drifts, over a prose claim in this file.
+
+## Design-system source of truth
+
+The palette, type and geometry come from the **Industry** design system (`styles.css` /
+`readme.md`): one steel accent and no decorative colour beyond it, Barlow Condensed over
+Barlow, square components, hover/pressed taken from the accent ramp, a 2px accent
+`:focus-visible` ring, and disabled controls at 45% opacity. Industry ships one light
+ground; the dark ground is its derived counterpart and is shared verbatim with the
+Cortex console (`xibalba-cortex/viewer/src/console/tokens.css`), so the two products
+read as one system. Dark is the default theme in both; only an explicit `light` selects
+the light ground.
+
+Documented deviations: a two-colour semantic status set (`--amber`, `--red`) that
+Industry's mono palette does not provide but a security console needs, and JetBrains
+Mono for hashes, DIDs and JSON.

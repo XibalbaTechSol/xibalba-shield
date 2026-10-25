@@ -1,29 +1,16 @@
-:root {
-  /* Color Palette - Premium Dark Theme */
-  --bg-main: #0b0c10;
-  --bg-panel: rgba(31, 33, 40, 0.7);
-  --bg-card: rgba(43, 47, 58, 0.6);
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  
-  --accent-primary: #3b82f6;
-  --accent-secondary: #60a5fa;
-  --accent-glow: rgba(59, 130, 246, 0.5);
-
-  --status-success: #10b981;
-  --status-warning: #f59e0b;
-  --status-danger: #ef4444;
-  --status-info: #3b82f6;
-
-  /* Glassmorphism */
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --glass-blur: backdrop-filter: blur(12px);
-
-  /* Typography */
-  --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-}
+/* Global reset and element base for the Shield console.
+ *
+ * App.css owns the design tokens and every component. This file keeps the
+ * structural rules the app has always relied on -- the universal reset, and
+ * the base geometry of `button`, the form controls and `table` -- and takes
+ * every colour, font and radius from the tokens instead of the blue/Inter
+ * glass palette it used to carry, which had drifted off the design system and
+ * leaked into any control App.css did not fully override.
+ *
+ * Structure here is deliberately unchanged from the pre-audit file; only
+ * colour, type and radius move. The one exception is the heading scale, which
+ * is Industry's and is part of what this audit is correcting.
+ */
 
 * {
   box-sizing: border-box;
@@ -33,13 +20,10 @@
 
 body {
   margin: 0;
-  font-family: var(--font-family);
-  background-color: var(--bg-main);
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.05), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.03), transparent 25%);
-  color: var(--text-primary);
-  line-height: 1.5;
+  font-family: var(--font-body);
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
@@ -47,203 +31,156 @@ body {
 
 a {
   font-weight: 500;
-  color: var(--accent-secondary);
+  color: var(--accent-text);
   text-decoration: inherit;
+  text-underline-offset: 3px;
   transition: color 0.25s;
 }
+
 a:hover {
-  color: var(--accent-primary);
+  color: var(--accent-hover);
 }
 
+/* Industry's fixed heading scale -- Barlow Condensed, tight leading.
+   Components that set their own size keep it; this is the base. */
 h1, h2, h3, h4, h5, h6 {
-  color: var(--text-primary);
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
   margin-bottom: 0.5rem;
 }
 
-h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
+h1 { font-size: 42px; }
+h2 { font-size: 32px; }
+h3 { font-size: 25px; }
+h4 { font-size: 20px; }
+h5 { font-size: 16px; }
+h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
 
-h2 {
-  font-size: 1.8rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
+img { display: block; max-width: 100%; }
 
-/* Glassmorphism Utilities */
-.glass-panel {
-  background: var(--bg-panel);
-  border: var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 16px;
-}
+code, kbd, pre, samp { font-family: var(--font-mono); }
 
-.glass-card {
-  background: var(--bg-card);
-  border: var(--glass-border);
-  border-radius: 12px;
-  padding: 1.5rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.glass-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
-  border-color: rgba(255,255,255,0.15);
-}
-
-/* Form Elements */
+/* Form elements */
 input, select, textarea {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+  background: var(--panel-elevated);
+  border: 1px solid var(--line);
+  color: var(--text);
   padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-family: var(--font-family);
+  border-radius: 0;
+  font-family: var(--font-body);
   font-size: 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
   outline: none;
 }
 
 input:focus, select:focus, textarea:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 button {
-  background: var(--accent-primary);
-  color: #fff;
-  border: none;
+  background: var(--accent-fill);
+  color: var(--ink-on-accent);
+  border: 1px solid var(--accent-fill);
   padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-family: var(--font-family);
+  border-radius: 0;
+  font-family: var(--font-heading);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: var(--heading-weight);
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  transition: background-color 0.2s;
 }
 
-button:hover {
-  background: var(--accent-secondary);
-}
-
-button:active {
-  transform: scale(0.98);
-}
+button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button:active { background: var(--accent-pressed); border-color: var(--accent-pressed); }
 
 button.secondary {
   background: transparent;
-  border: 1px solid var(--text-muted);
-  color: var(--text-primary);
+  border: 1px solid var(--line);
+  color: var(--text);
 }
 
 button.secondary:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: var(--line-hover);
 }
 
-/* Layout Utilities */
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+/* Themed interaction states -- never the browser defaults. */
+:focus { outline: none; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.flex {
-  display: flex;
-}
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 
-.flex-col {
-  flex-direction: column;
-}
+:disabled, [aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
 
-.items-center {
-  align-items: center;
-}
+/* Layout utilities still referenced by markup */
+.container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 
-.justify-between {
-  justify-content: space-between;
-}
+/* Table styles */
+table { width: 100%; border-collapse: collapse; text-align: left; }
 
-.gap-2 { gap: 0.5rem; }
-.gap-4 { gap: 1rem; }
-.gap-6 { gap: 1.5rem; }
-.gap-8 { gap: 2rem; }
-
-.mt-2 { margin-top: 0.5rem; }
-.mt-4 { margin-top: 1rem; }
-.mt-6 { margin-top: 1.5rem; }
-.mt-8 { margin-top: 2rem; }
-
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-4 { margin-bottom: 1rem; }
-.mb-6 { margin-bottom: 1.5rem; }
-.mb-8 { margin-bottom: 2rem; }
-
-.text-center { text-align: center; }
-.text-sm { font-size: 0.875rem; }
-.text-lg { font-size: 1.125rem; }
-.text-xl { font-size: 1.25rem; }
-.font-bold { font-weight: 700; }
-.font-semibold { font-weight: 600; }
-
-.text-muted { color: var(--text-muted); }
-.text-success { color: var(--status-success); }
-.text-warning { color: var(--status-warning); }
-.text-danger { color: var(--status-danger); }
-.text-info { color: var(--status-info); }
-
-/* Table Styles */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-
-th, td {
-  padding: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
+th, td { padding: 1rem; border-bottom: 1px solid var(--line-faint); }
 
 th {
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  color: var(--muted);
   text-transform: uppercase;
   font-size: 0.75rem;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
-tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
-}
+tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
 
-/* Badge */
+/* A square status label. `.badge` carries `green` / `amber` / `red`
+   modifiers from SettingsView; the mono palette maps "green" to the accent. */
 .badge {
   display: inline-block;
   padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
+  border: 1px solid var(--line);
+  border-radius: 0;
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.badge-success { background: rgba(16, 185, 129, 0.2); color: var(--status-success); }
-.badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--status-warning); }
-.badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--status-danger); }
-.badge-info { background: rgba(59, 130, 246, 0.2); color: var(--status-info); }
+.badge.green {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent-text);
+}
+
+.badge.amber {
+  border-color: color-mix(in srgb, var(--amber) 35%, transparent);
+  background: color-mix(in srgb, var(--amber) 15%, transparent);
+  color: var(--amber);
+}
+
+.badge.red {
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  color: var(--red);
+}
+
 .hero-logo {
   width: clamp(180px, 26vw, 320px);
   height: clamp(180px, 26vw, 320px);
-  border-radius: 28px;
+  border-radius: 0;
   object-fit: cover;
   margin-bottom: 24px;
   display: block;
 }
+
+/* Kept verbatim from the pre-audit file: this overrides App.css's 32px brand
+   mark. It is a geometry rule, not a colour one, so this audit leaves it. */
 .brand img {
   width: 48px !important;
   height: 48px !important;
