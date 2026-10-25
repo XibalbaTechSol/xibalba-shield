@@ -358,12 +358,14 @@ h1, h2, h3, h4, b {
   flex-direction: column;
 }
 
+/* The mark is a 0.926:1 illustration, so it is sized by width and left to find
+   its own height -- a square box would crop it. No shadow and no radius: the
+   art already carries its own edge, and the system has no rounded corners. */
 .hero-logo {
-  width: clamp(180px, 26vw, 320px);
-  height: clamp(180px, 26vw, 320px);
-  border-radius: 0;
-  margin-bottom: 28px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  width: clamp(168px, 17vw, 232px);
+  height: auto;
+  display: block;
+  margin: 0 0 28px;
 }
 
 .hero h1 {
@@ -3144,7 +3146,9 @@ h1, h2, h3, h4, b {
 .auth .primary { border-radius: 0; border-color: var(--accent); background: var(--accent-fill); color: var(--ink-on-accent); box-shadow: none; }
 .landing .primary:hover,
 .auth .primary:hover { background: var(--accent-hover); }
-.landing .hero { max-width: 1240px; min-height: 600px; padding: 88px 24px; gap: 72px; }
+.landing .hero { max-width: 1240px; min-height: 600px; padding: 88px 24px; gap: 72px; align-items: start; }
+/* The logo makes the copy column much the taller of the two, so centring the
+   preview left a void above it. Both columns start at the same line instead. */
 .landing .hero h1 { max-width: 640px; font-size: clamp(46px, 5vw, 66px); line-height: .98; letter-spacing: -.015em; }
 .landing .hero h1 em,
 .landing .landing-section-copy h2 em { color: var(--accent-text); }

@@ -55,6 +55,13 @@ export function Landing({ next }) {
 
       <section className="hero" id="top">
         <div className="hero-copy">
+          <img
+            className="hero-logo"
+            src="/shield-logo-large.webp"
+            alt=""
+            width="640"
+            height="691"
+          />
           <p className="eyebrow">
             <span aria-hidden="true" /> LINUX-FIRST AGENT SECURITY
           </p>
