@@ -170,15 +170,6 @@ tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   color: var(--red);
 }
 
-.hero-logo {
-  width: clamp(180px, 26vw, 320px);
-  height: clamp(180px, 26vw, 320px);
-  border-radius: 0;
-  object-fit: cover;
-  margin-bottom: 24px;
-  display: block;
-}
-
 /* Kept verbatim from the pre-audit file: this overrides App.css's 32px brand
    mark. It is a geometry rule, not a colour one, so this audit leaves it. */
 .brand img {

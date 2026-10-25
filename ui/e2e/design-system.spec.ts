@@ -701,3 +701,38 @@ test.describe('Industry grammar in the rendered console', () => {
     })
   }
 })
+
+test.describe('the landing hero leads with the mark', () => {
+  // The mark is the only illustration on the landing page, so "it is there" is
+  // not enough to assert: a 404 still leaves an <img> in the DOM, and a square
+  // box would silently crop a 0.926:1 drawing. Measure what was painted.
+  for (const width of [1600, 1024]) {
+    test(`the hero mark is loaded, large and undistorted at ${width}px`, async ({ page, baseURL }) => {
+      await page.setViewportSize({ width, height: 1000 })
+      await page.goto(baseURL!)
+      await page.evaluate(() => document.fonts.ready)
+
+      const mark = page.locator('.hero .hero-logo')
+      expect(await mark.count(), 'the hero has no mark').toBe(1)
+
+      const seen = await mark.evaluate((node) => {
+        const img = node as HTMLImageElement
+        const box = img.getBoundingClientRect()
+        const h1 = document.querySelector('.hero h1')!.getBoundingClientRect()
+        return {
+          loaded: img.complete && img.naturalWidth > 0,
+          natural: img.naturalWidth / img.naturalHeight,
+          drawn: box.width / box.height,
+          width: box.width,
+          aboveHeading: box.bottom <= h1.top,
+        }
+      })
+
+      expect(seen.loaded, `${await mark.getAttribute('src')} did not load`).toBe(true)
+      expect(seen.width, 'the mark is not large').toBeGreaterThanOrEqual(168)
+      expect(Math.abs(seen.drawn - seen.natural) / seen.natural,
+        `drawn at ${seen.drawn.toFixed(3)}:1, artwork is ${seen.natural.toFixed(3)}:1`).toBeLessThan(0.02)
+      expect(seen.aboveHeading, 'the mark does not lead the hero').toBe(true)
+    })
+  }
+})
