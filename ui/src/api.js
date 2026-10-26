@@ -41,6 +41,7 @@ export class ShieldApi {
   agentBindingAction(deviceId, agentId, action) { return this.request(`/api/shield/devices/${encodeURIComponent(deviceId)}/agent-bindings/${encodeURIComponent(agentId)}/${action}`, { method: 'POST', body: { tenant_id: this.tenantId }, tenant: false }) }
   device(id) { return this.request(`/api/shield/devices/${encodeURIComponent(id)}`) }
   exporterStatus() { return this.request('/api/shield/exporter-status') }
+  decisionTrace() { return this.request('/api/shield/decision-trace') }
   exporterRemediation(deviceId, action = 'retry', reason = '') { return this.request('/api/shield/exporter-remediation', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, action, reason }, tenant: false }) }
   integrations() { return this.request('/api/shield/integrations') }
   settings() { return this.request('/api/shield/settings') }

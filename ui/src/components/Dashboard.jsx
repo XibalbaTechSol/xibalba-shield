@@ -83,6 +83,7 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
     hermes: null,
     hermesDeliveries: [],
     resources: null,
+    decisionTrace: null,
   })
   const [status, setStatus] = useState({
     state: 'connecting',
@@ -119,8 +120,9 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
       api.hermesDeliveries(),
       api.runtimeResources(),
       fetchCortexNamespaces().catch(() => []),
+      api.decisionTrace(),
     ])
-    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox, hermes, hermesDeliveries, resources, cortexNamespaces] = results
+    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox, hermes, hermesDeliveries, resources, cortexNamespaces, decisionTrace] = results
     const live = summary.status === 'fulfilled'
     const summaryDevices = summary.status === 'fulfilled' ? (summary.value.devices || []) : []
     const visibleDevices = (devices.status === 'fulfilled' ? devices.value.devices : summaryDevices)
@@ -155,6 +157,7 @@ export function Dashboard({ connection, logout, theme = 'command-center', onThem
       hermes: hermes.status === 'fulfilled' ? hermes.value.hermes : current.hermes,
       hermesDeliveries: hermesDeliveries.status === 'fulfilled' ? hermesDeliveries.value.deliveries : current.hermesDeliveries,
       resources: resources.status === 'fulfilled' ? resources.value.resources : current.resources,
+      decisionTrace: decisionTrace.status === 'fulfilled' ? decisionTrace.value : current.decisionTrace,
     }))
 
     if (cortexNamespaces.status === 'fulfilled') setSharedNamespaces(cortexNamespaces.value)

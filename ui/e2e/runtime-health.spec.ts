@@ -91,6 +91,24 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
           } },
         ],
       },
+      '/api/shield/decision-trace': {
+        trace_id: 'trace-live-1',
+        session_id: 'session-live-1',
+        root: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        valid: true,
+        disclaimer: 'Observational correlation only; probabilities do not prove causality or execution.',
+        events: [{
+          event_id: 'evt-live-1',
+          trace_id: 'trace-live-1',
+          event_hash: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          parent_event_hash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+          envelope: { event_type: 'shield.policy_decision', policy_decision: 'deny', redaction_status: 'redacted' },
+          advisory: {
+            provider_id: 'jev.fixture.v1', status: 'available', risk_category: 'high',
+            transition_probabilities: { continue: 0.35, escalate: 0.65 }, recommended_escalation: true,
+          },
+        }],
+      },
       '/api/shield/integrations': { integrations: [] },
       '/api/shield/detection-quality': { detection_quality: [] },
       '/api/shield/test-events': { test_events: [] },
@@ -144,6 +162,9 @@ test('real telemetry overview renders split-runtime health', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Containment', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Evidence' }).click()
   await expect(page.getByRole('heading', { name: 'Export, queue, and verification' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'DecisionTrace' })).toBeVisible()
+  await expect(page.getByText('jev.fixture.v1 · available', { exact: true })).toBeVisible()
+  await expect(page.getByText('Causal claim: false · enforcement remains policy-owned.')).toBeVisible()
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await page.getByRole('tab', { name: 'Hermes Agent' }).click()
   await page.setViewportSize({ width: 390, height: 844 })

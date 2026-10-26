@@ -19,6 +19,7 @@ import {
   RotateCw,
   X,
 } from 'lucide-react'
+import { InferenceSettings } from './InferenceSettings'
 import { ShieldApi } from '../api'
 import { readSession, writeSession, removeSession } from '../storage'
 
@@ -483,7 +484,18 @@ export function SettingsView({ connection, logout, data = {}, theme = 'command-c
           <User size={15} />
           <span>Operator Profile</span>
         </button>
+
+        <button
+          type="button"
+          role="tab" aria-selected={activeTab === 'inference'} aria-controls="settings-panel-inference" id="settings-tab-inference" className={`settings-tab-btn ${activeTab === 'inference' ? 'active' : ''}`}
+          onClick={() => setActiveTab('inference')}
+        >
+          <Cpu size={15} />
+          <span>Inference &amp; Analysis</span>
+        </button>
       </div>
+
+      {activeTab === 'inference' && <InferenceSettings api={api} settings={savedPosture} onSaved={(next) => { setSavedPosture(next); writeSession('shield-posture', JSON.stringify(next)) }} />}
 
       {activeTab === 'sensors' && (
         <form className="settings-tab-pane" id="settings-panel-sensors" role="tabpanel" aria-labelledby="settings-tab-sensors" onSubmit={saveOperational}>

@@ -15,6 +15,7 @@ import { TransactionWorkbench } from './TransactionWorkbench'
 import { AgentView } from './AgentView'
 import { NetworkView } from './NetworkView'
 import { HermesAgentView } from './HermesAgentView'
+import { DecisionTracePanel } from './DecisionTracePanel'
 
 export function RollbackForm({ api }) {
   const [message, setMessage] = useState('')
@@ -323,6 +324,7 @@ function EvidenceWorkspace({ data, api }) {
         </div>
         <EvidenceMetricStrip data={data} />
         <EvidenceChainStatus data={data} />
+        <DecisionTracePanel trace={data.decisionTrace} />
         <div className="evidence-reference-grid"><Resource title="Exporter status by device" copy="DID preflight, queue, and receipt publication"><JsonRows rows={data.exporter} /></Resource><AuditPacketBuilder data={data} /></div>
         <EvidenceControls api={api} rows={data.exporter || []} />
         <RemediationForm api={api} />

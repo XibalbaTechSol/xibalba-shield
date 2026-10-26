@@ -52,6 +52,14 @@ judgment step over its own material events (scope `material`: contain, deny, esc
 It never requests or performs enforcement. Operations, invariants and rollback are in
 [`docs/runbooks/hermes-analyst.md`](docs/runbooks/hermes-analyst.md).
 
+**Configurable advisory inference.** The dedicated Settings → Inference & Analysis panel also
+supports deterministic Jev fixture analysis, the bounded local classifier, a Lila-compatible JSON
+adapter, and an OpenAI-compatible LLM adapter. These providers run after deterministic policy,
+receive redacted DecisionEnvelope data, and write observational DecisionTrace metadata. Provider
+settings are bounded and validated; credentials stay host-managed, and the provider can never
+authorize, contain, sign, or delay Shield enforcement. The canonical contract is
+[`docs/wiki/concepts/advisory-inference.md`](docs/wiki/concepts/advisory-inference.md).
+
 This repository is the **immune system** in a three-repository ecosystem designed as a living
 organism. (`integrity-dashboard`, the operator presentation layer, moved with the userapi from
 `integrity-core` to [`integrity-console`](https://github.com/XibalbaTechSol/integrity-console)
