@@ -104,6 +104,8 @@ def validate_settings(settings: dict[str, Any]) -> dict[str, Any]:
             parsed = urlparse(value)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ValueError("inferenceEndpoint must be an http(s) URL")
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise ValueError("inferenceEndpoint must not contain credentials, query parameters, or a fragment; use inferenceSecretRef for credentials")
             if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
                 raise ValueError("non-local inferenceEndpoint must use HTTPS")
         if key == "inferencePromptProfile" and len(value) > 128:

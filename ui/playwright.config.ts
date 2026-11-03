@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const previewPort = Number(process.env.SHIELD_PLAYWRIGHT_PORT || 4178);
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
@@ -11,7 +13,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'html',
   use: {
-    baseURL: 'http://127.0.0.1:4178',
+    baseURL: `http://127.0.0.1:${previewPort}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -21,8 +23,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview -- --port 4178',
-    port: 4178,
+    command: `npm run preview -- --host 127.0.0.1 --port ${previewPort}`,
+    port: previewPort,
     reuseExistingServer: true,
   },
 });
