@@ -262,7 +262,9 @@ DecisionEnvelope after local policy has already produced its result.
 Provider settings include model, endpoint, versioned prompt profile, timeout, token and temperature
 budgets, event-class scope, failure mode, and a `secret://` reference. Raw credentials remain
 host-managed; `SHIELD_INFERENCE_API_KEY` is read only by the optional HTTP adapter. Non-loopback
-HTTP endpoints are rejected and must use HTTPS.
+HTTP endpoints are rejected and must use HTTPS. URLs containing embedded credentials, query
+parameters, or fragments are rejected in both the browser and backend. Shield PR #65's backend and
+browser checks passed.
 
 The form shows execution mode (shadow) and redaction (strict) as fixed, refuses out-of-range or unsafe values before a request, and shows the backend's refusal verbatim; the backend remains the authority. It is covered by `ui/e2e/inference-settings.spec.ts` with the control plane mocked at HTTP; no live provider call is made from the console.
 

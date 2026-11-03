@@ -4,7 +4,7 @@
 > now — see the schema's "no aspirational content" rule. This is a focused core set covering
 > Shield's actual architecture, not an exhaustive catalog — contributions adding more pages are
 > welcome.
-> Last updated: 2026-10-04 | Total pages: 15 (10 concepts, 2 entities, 2 architecture, 1 query)
+> Last updated: 2026-11-03 | Total pages: 15 (10 concepts, 2 entities, 2 architecture, 1 query)
 
 ## Acronym glossary
 
