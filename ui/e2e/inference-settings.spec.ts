@@ -68,6 +68,16 @@ test('advisory inference is shadow-only, refuses bad values locally, and saves a
   await expect(page.getByText('A non-local endpoint must use HTTPS.')).toBeVisible()
   expect(posts).toHaveLength(0)
 
+  // Credentials and query strings belong in the host-managed secret reference, not a saved URL.
+  await page.getByLabel(/^Endpoint/).fill('https://user:secret@models.example.com/v1')
+  await page.getByRole('button', { name: 'Save advisory inference' }).click()
+  await expect(page.getByText('Endpoint cannot include credentials, a query, or a fragment; use a secret:// reference for credentials.')).toBeVisible()
+  expect(posts).toHaveLength(0)
+  await page.getByLabel(/^Endpoint/).fill('https://models.example.com/v1?api_key=secret')
+  await page.getByRole('button', { name: 'Save advisory inference' }).click()
+  await expect(page.getByText('Endpoint cannot include credentials, a query, or a fragment; use a secret:// reference for credentials.')).toBeVisible()
+  expect(posts).toHaveLength(0)
+
   // Fix everything and save.
   await page.getByLabel(/^Endpoint/).fill('https://models.example.com/v1')
   await page.getByLabel('Secret reference').fill('secret://jev-key')
