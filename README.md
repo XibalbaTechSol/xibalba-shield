@@ -266,6 +266,17 @@ HTTP endpoints are rejected and must use HTTPS.
 
 The form shows execution mode (shadow) and redaction (strict) as fixed, refuses out-of-range or unsafe values before a request, and shows the backend's refusal verbatim; the backend remains the authority. It is covered by `ui/e2e/inference-settings.spec.ts` with the control plane mocked at HTTP; no live provider call is made from the console.
 
+### Console visual contract
+
+The Shield-owned React/Vite console under `ui/` is the operator surface for Posture, Agent,
+Network, Decisions, Evidence, and Configuration. Its command-center theme uses the graphite
+palette, Barlow typography, square controls, one-pixel rectangular window borders, and a shared
+surface hierarchy across nested cards, drawers, and modal dialogs. Decorative registration
+crosses are intentionally not rendered at card corners. The visual contract is exercised by
+`ui/e2e/design-system.spec.ts` at 390px, 1280px, and 1600px, alongside the route, drawer, modal,
+and overflow coverage in the other `ui/e2e/` suites. Browser tests use mocked control-plane
+responses and do not claim live service or provider verification.
+
 Inference is shadow-only. Jev or another provider can classify risk, estimate transitions, or
 recommend escalation, but cannot authorize, deny, contain, sign evidence, or delay the deterministic
 Shield/OPA/BCC path. The resulting redacted advisory is linked to the observed event hash and

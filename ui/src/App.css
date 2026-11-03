@@ -8718,7 +8718,7 @@ h1, h2, h3, h4, b {
 
 .console.theme-command-center .event-action-pill .dot,
 .console.theme-command-center .severity-tag::before {
-  background: var(--dim) !important;
+  background: var(--accent) !important;
 }
 
 .console.theme-command-center .event-inline-json pre,
@@ -10008,6 +10008,29 @@ h1, h2, h3, h4, b {
     top 6px right 0, top 0 right 6px,
     bottom 6px left 0, bottom 0 left 6px,
     bottom 6px right 0, bottom 0 right 6px;
+}
+
+/* The mock's structural language is the border itself. Do not add decorative
+   registration crosses outside cards: they compete with the content at every
+   breakpoint and make adjacent windows read as if they are overlapping. */
+.console.theme-command-center .metric::before,
+.console.theme-command-center .panel::before,
+.console.theme-command-center .resource::before,
+.console.theme-command-center .settings-card::before,
+.console.theme-command-center .hybrid-architecture-card::before,
+.console.theme-command-center .outbox-status-card::before,
+.console.theme-command-center .policy-bundle-card::before,
+.console.theme-command-center .policy-deploy-panel::before,
+.console.theme-command-center .integration-card::before,
+.console.theme-command-center .event-stream-card:not(.event-ledger-row)::before,
+.console.theme-command-center .api-explorer-layout::before,
+.console.theme-command-center .agent-detail-section::before,
+.console.theme-command-center .agent-workspace > .agent-toolbar::before,
+.console.theme-command-center .agent-workspace > .agent-grid::before,
+.console.theme-command-center .event-stream-card.event-ledger-row::after {
+  content: none !important;
+  display: none !important;
+  background-image: none !important;
 }
 
 /* ── Industry grammar: the console at phone width ──────────────────────────
