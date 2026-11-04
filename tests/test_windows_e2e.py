@@ -147,14 +147,14 @@ def test_windows_e2e_live_containment_and_audit(tmp_path: Path):
 
             # 2. Resume process via NtResumeProcess
             resume_result = broker.resume(worker.pid)
-            assert resume_result.success is True
+            assert resume_result.completed is True
             assert resume_result.action == "resume"
             assert resume_result.method == "NtResumeProcess"
             assert worker.poll() is None
 
             # 3. Terminate process via TerminateProcess
             kill_result = broker.kill_process(worker.pid)
-            assert kill_result.success is True
+            assert kill_result.completed is True
             assert kill_result.action == "terminate"
             assert kill_result.method == "TerminateProcess"
 
