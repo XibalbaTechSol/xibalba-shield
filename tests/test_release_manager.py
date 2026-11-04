@@ -215,8 +215,13 @@ def test_default_installer_really_installs_a_real_trivial_wheel(tmp_path):
         )
         extract_dir = venv_dir.parent / "src"
         shutil.unpack_archive(str(artifact_path), str(extract_dir), format="tar")
+        pip_bin = (
+            venv_dir / "Scripts" / "pip.exe"
+            if sys.platform == "win32"
+            else venv_dir / "bin" / "pip"
+        )
         subprocess.run(
-            [str(venv_dir / "bin" / "pip"), "install", "--quiet", str(extract_dir / "trivial_pkg")],
+            [str(pip_bin), "install", "--quiet", str(extract_dir / "trivial_pkg")],
             check=True, capture_output=True, text=True,
         )
 
@@ -226,8 +231,13 @@ def test_default_installer_really_installs_a_real_trivial_wheel(tmp_path):
         installer=_real_installer_from_tar,
     )
 
+    show_pip = (
+        result.release_dir / "venv" / "Scripts" / "pip.exe"
+        if sys.platform == "win32"
+        else result.release_dir / "venv" / "bin" / "pip"
+    )
     installed = subprocess.run(
-        [str(result.release_dir / "venv" / "bin" / "pip"), "show", "trivial-pkg"],
+        [str(show_pip), "show", "trivial-pkg"],
         capture_output=True, text=True,
     )
     assert installed.returncode == 0

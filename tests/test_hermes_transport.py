@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+import pytest
+
 from shield.hermes_contract import build_event
 from shield.hermes_transport import HermesSpool
 from shield.schemas.events import Activity, Decision, EventRef, PolicyDecision, ProcessActivity, ProcessInfo, RuleRef
@@ -58,9 +61,9 @@ def test_inspect_status_is_read_only_and_reports_dead_letters(tmp_path):
     assert not (root / "pending" / "state.sqlite3").exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits not enforced on Windows")
 def test_default_spool_refuses_group_access(tmp_path):
     import os
-    import pytest
     from shield.hermes_transport import HermesTransportError
 
     root = tmp_path / "spool"
@@ -70,6 +73,7 @@ def test_default_spool_refuses_group_access(tmp_path):
         HermesSpool(root, key=b"k" * 32)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits not enforced on Windows")
 def test_group_shared_spool_sets_group_modes_under_strict_umask(tmp_path):
     # The sensor unit runs with UMask=0077; group_shared must still leave the envelope
     # group-readable and the state database group-writable for the analyst account.
@@ -89,9 +93,9 @@ def test_group_shared_spool_sets_group_modes_under_strict_umask(tmp_path):
     assert stat.S_IMODE(spool.state_path.stat().st_mode) == 0o660
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits not enforced on Windows")
 def test_group_shared_spool_still_refuses_world_access(tmp_path):
     import os
-    import pytest
     from shield.hermes_transport import HermesTransportError
 
     spool = HermesSpool(tmp_path / "spool", key=b"k" * 32, group_shared=True)
@@ -103,6 +107,7 @@ def test_group_shared_spool_still_refuses_world_access(tmp_path):
         spool._ensure_dirs()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX setgid/chmod and systemd sandbox specific")
 def test_group_shared_opens_under_a_sandbox_that_forbids_setgid_chmod(tmp_path, monkeypatch):
     # systemd RestrictSUIDSGID=true: chmod with S_ISGID fails with EPERM, even as the owner
     # and even when the directory is already 2770. That crashed the C5 install's step 4.

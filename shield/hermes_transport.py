@@ -28,6 +28,12 @@ class HermesTransportError(RuntimeError):
     """Raised for local transport configuration or authentication failures."""
 
 
+def _safe_filename(name: str) -> str:
+    for char in '<>:"/\\|?*':
+        name = name.replace(char, "_")
+    return name
+
+
 class HermesSpool:
     """Atomic-file producer/consumer with HMAC authentication and replay state."""
 
@@ -179,11 +185,12 @@ class HermesSpool:
         if len(encoded) > MAX_PAYLOAD_BYTES or self._pending_bytes() + len(encoded) > self.max_bytes:
             self._metric("capacity_dropped_total")
             return None
-        destination = self.pending / f"{delivery_id}.json"
-        temporary = self.pending / f".{delivery_id}.{os.getpid()}.tmp"
+        safe_name = _safe_filename(delivery_id)
+        destination = self.pending / f"{safe_name}.json"
+        temporary = self.pending / f".{safe_name}.{os.getpid()}.tmp"
         try:
             fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            if self.group_shared:
+            if self.group_shared and hasattr(os, "fchmod"):
                 os.fchmod(fd, 0o640)  # the umask stripped the group bits from 0o640
             with os.fdopen(fd, "wb") as handle:
                 handle.write(encoded)

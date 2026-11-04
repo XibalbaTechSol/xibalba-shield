@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import json
+import sys
 
 import pytest
 
@@ -43,6 +44,7 @@ def test_readiness_artifact_expires(tmp_path):
         )
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits (group/other writable) not applicable on Windows")
 def test_readiness_artifact_rejects_writable_proof(tmp_path):
     path = tmp_path / "proof.json"
     path.write_text(json.dumps({

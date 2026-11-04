@@ -52,14 +52,25 @@ def _read_current_version(current_link: Path) -> str | None:
 
 
 def _atomic_symlink_swap(current_link: Path, target_dir: Path) -> None:
-    """Symlink to a temp name, then `os.rename` over the real name -- `os.rename` on the
+    """Symlink to a temp name, then `os.replace` over the real name -- `os.replace` on the
     same filesystem is atomic, so there is never a window where `current_link` points at
     nothing or a half-written target, even if the process is killed mid-swap."""
     tmp_link = current_link.with_name(current_link.name + ".tmp")
     if tmp_link.exists() or tmp_link.is_symlink():
         tmp_link.unlink()
     tmp_link.symlink_to(target_dir, target_is_directory=True)
-    os.rename(tmp_link, current_link)
+    try:
+        os.replace(tmp_link, current_link)
+    except OSError:
+        if sys.platform == "win32":
+            if current_link.is_symlink() or current_link.exists():
+                try:
+                    current_link.unlink()
+                except OSError:
+                    os.rmdir(current_link)
+            os.replace(tmp_link, current_link)
+        else:
+            raise
 
 
 def default_installer(*, python_bin: str | None = None) -> Installer:
@@ -74,8 +85,14 @@ def default_installer(*, python_bin: str | None = None) -> Installer:
             [python_bin or sys.executable, "-m", "venv", str(venv_dir)],
             check=True, capture_output=True, text=True,
         )
+        if sys.platform == "win32":
+            pip_bin = venv_dir / "Scripts" / "pip.exe"
+            if not pip_bin.exists():
+                pip_bin = venv_dir / "Scripts" / "pip"
+        else:
+            pip_bin = venv_dir / "bin" / "pip"
         subprocess.run(
-            [str(venv_dir / "bin" / "pip"), "install", "--quiet", str(wheel_path)],
+            [str(pip_bin), "install", "--quiet", str(wheel_path)],
             check=True, capture_output=True, text=True,
         )
 
