@@ -69,27 +69,57 @@ Shield implements an RFC 7636 (PKCE S256) and HMAC-SHA256 signed-state flow to p
 
 ## 3. Render Web Service Deployment
 
-### Method A: Docker Deployment (Recommended)
+### Method A: Render CLI (Fastest & Automated)
+
+Using the official [Render CLI](https://render.com/docs/cli):
+
+```bash
+# 1. Verify you are authenticated to your Render workspace
+render whoami
+render workspace current
+
+# 2. Deploy Xibalba Shield web service with Google OAuth configured
+render services create \
+  --name xibalba-shield \
+  --type web_service \
+  --repo https://github.com/XibalbaTechSol/xibalba-shield \
+  --branch main \
+  --runtime python \
+  --build-command "pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)" \
+  --start-command "uv run shield-backend --host 0.0.0.0 --port \$PORT" \
+  --health-check-path /api/shield/health \
+  --plan free \
+  --region oregon \
+  --env-var GOOGLE_CLIENT_ID="<your-google-client-id>.apps.googleusercontent.com" \
+  --env-var GOOGLE_CLIENT_SECRET="<your-google-client-secret>" \
+  --env-var OIDC_REDIRECT_URI="https://xibalba-shield.onrender.com/api/shield/auth/oidc/callback" \
+  --env-var SESSION_SECRET="$(openssl rand -hex 32)" \
+  --env-var SHIELD_BACKEND_TOKEN="$(openssl rand -hex 16)" \
+  --env-var HOST="0.0.0.0"
+
+# 3. View deployment logs in real time
+render logs srv-<service-id>
+```
+
+### Method B: Render Blueprint (`render.yaml` Infrastructure as Code)
+
+The repository includes a validated `render.yaml` Blueprint definition.
+
+1. Validate the blueprint locally:
+   ```bash
+   render blueprints validate ./render.yaml
+   ```
+2. In Render Dashboard, click **New +** > **Blueprint**, connect `XibalbaTechSol/xibalba-shield`, and Render will parse `render.yaml`.
+3. Provide the un-synced values (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `OIDC_REDIRECT_URI`). `SESSION_SECRET` and `SHIELD_BACKEND_TOKEN` will be generated cryptographically by Render automatically.
+
+### Method C: Render Dashboard Manual Setup
 
 1. In Render Dashboard, click **New +** > **Web Service**.
-2. Connect your GitHub repository: `XibalbaTechSol/xibalba-shield`.
-3. Select **Docker** environment.
-4. Set Docker Build Context: `.` (or repository root).
-5. Add a Persistent Disk (optional, for persistent SQLite database):
-   - Mount Path: `/var/lib/xibalba-shield`
-   - Size: `1 GB` (or as required)
-
-### Method B: Native Python Environment
-
-1. Select **Python 3** environment.
-2. Build Command:
-   ```bash
-   pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)
-   ```
-3. Start Command:
-   ```bash
-   uv run shield-backend --host 0.0.0.0 --port $PORT
-   ```
+2. Connect `XibalbaTechSol/xibalba-shield`.
+3. Runtime: **Python 3**.
+4. Build Command: `pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)`
+5. Start Command: `uv run shield-backend --host 0.0.0.0 --port $PORT`
+6. Health Check Path: `/api/shield/health`
 
 ---
 
