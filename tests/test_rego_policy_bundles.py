@@ -22,7 +22,7 @@ def opa() -> str:
 
 def evaluate(opa: str, policy: str, payload: dict) -> dict:
     result = subprocess.run(
-        [opa, "eval", "--format", "json", "-d", str(POLICY_DIR / policy), "data.shield.policy", "-i", "/dev/stdin"],
+        [opa, "eval", "--format", "json", "-d", str(POLICY_DIR / policy), "data.shield.policy", "-I"],
         input=json.dumps(payload),
         text=True,
         capture_output=True,

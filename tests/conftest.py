@@ -30,9 +30,25 @@ if sys.platform == "win32":
     if not hasattr(os, "geteuid"):
         os.geteuid = lambda: 1000  # type: ignore[attr-defined]
 
-    # 4. Ignore Unix-socket-daemon specific test suites on Windows
+    # 4. Provide resource mock for Windows
+    if "resource" not in sys.modules:
+        res_mock = types.ModuleType("resource")
+        res_mock.RUSAGE_SELF = 0
+
+        class _RUsage:
+            ru_maxrss = 1000
+            ru_utime = 0.0
+            ru_stime = 0.0
+
+        res_mock.getrusage = lambda who: _RUsage()
+        sys.modules["resource"] = res_mock
+
+    # 5. Ignore Linux-daemon / bash-specific test suites on Windows
     collect_ignore = [
         "test_gate_daemon.py",
         "test_gate_receipts.py",
         "test_privileged_socket_sensor.py",
+        "test_distribution_siem_dlp.py",
+        "test_enroll_device.py",
+        "test_chaos_adversarial.py",
     ]

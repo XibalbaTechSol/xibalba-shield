@@ -12,6 +12,7 @@ import json
 import os
 import secrets
 import sqlite3
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -64,12 +65,12 @@ class HermesSpool:
         if self.group_shared:
             for directory in (self.root, self.pending, self.ack, self.dead):
                 self._chmod_if_owner(directory, dir_mode)
-            if self.root.stat().st_mode & 0o007:
+            if sys.platform != "win32" and (self.root.stat().st_mode & 0o007):
                 raise HermesTransportError("Hermes spool directory must not be world accessible")
             for directory in (self.pending, self.ack, self.dead):
-                if not os.access(directory, os.R_OK | os.W_OK | os.X_OK):
+                if sys.platform != "win32" and not os.access(directory, os.R_OK | os.W_OK | os.X_OK):
                     raise HermesTransportError(f"Hermes spool directory {directory.name} is not group writable for this account")
-        elif self.root.stat().st_mode & 0o077:
+        elif sys.platform != "win32" and (self.root.stat().st_mode & 0o077):
             raise HermesTransportError("Hermes spool directory must not be group/world accessible")
         with self._connect() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS deliveries (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at REAL NOT NULL, detail TEXT)")
