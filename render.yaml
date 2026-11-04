@@ -2,8 +2,8 @@ services:
   - type: web
     name: xibalba-shield
     runtime: python
-    buildCommand: pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)
-    startCommand: uv run shield-backend --host 0.0.0.0 --port $PORT
+    buildCommand: git clone --depth 1 https://github.com/XibalbaTechSol/integrity-core.git ../integrity-core && pip install --upgrade uv && uv sync --no-editable && (cd ui && npm ci && npm run build)
+    startCommand: uv run shield-backend --host 0.0.0.0
     healthCheckPath: /api/shield/health
     region: oregon
     plan: free

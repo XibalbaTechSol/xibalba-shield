@@ -85,8 +85,8 @@ render services create \
   --repo https://github.com/XibalbaTechSol/xibalba-shield \
   --branch main \
   --runtime python \
-  --build-command "pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)" \
-  --start-command "uv run shield-backend --host 0.0.0.0 --port \$PORT" \
+  --build-command "git clone --depth 1 https://github.com/XibalbaTechSol/integrity-core.git ../integrity-core && pip install --upgrade uv && uv sync --no-editable && (cd ui && npm ci && npm run build)" \
+  --start-command "uv run shield-backend --host 0.0.0.0" \
   --health-check-path /api/shield/health \
   --plan free \
   --region oregon \
@@ -117,8 +117,8 @@ The repository includes a validated `render.yaml` Blueprint definition.
 1. In Render Dashboard, click **New +** > **Web Service**.
 2. Connect `XibalbaTechSol/xibalba-shield`.
 3. Runtime: **Python 3**.
-4. Build Command: `pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)`
-5. Start Command: `uv run shield-backend --host 0.0.0.0 --port $PORT`
+4. Build Command: `git clone --depth 1 https://github.com/XibalbaTechSol/integrity-core.git ../integrity-core && pip install --upgrade uv && uv sync --no-editable && (cd ui && npm ci && npm run build)`
+5. Start Command: `uv run shield-backend --host 0.0.0.0`
 6. Health Check Path: `/api/shield/health`
 
 ---
