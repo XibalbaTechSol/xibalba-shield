@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: xibalba-shield
+    runtime: python
+    buildCommand: pip install --upgrade uv && uv sync --extra dev && (cd ui && npm ci && npm run build)
+    startCommand: uv run shield-backend --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/shield/health
+    region: oregon
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: OIDC_REDIRECT_URI
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SHIELD_BACKEND_TOKEN
+        generateValue: true
+      - key: SHIELD_PUBLIC_BASE_URL
+        sync: false
