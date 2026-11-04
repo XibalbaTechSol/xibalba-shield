@@ -61,3 +61,41 @@ jobs:
           shield validate --rules policies/defaults/smb.json
           shield validate --rules policies/defaults/professional-services.json
           shield validate --rules policies/defaults/regulated.json
+
+  windows-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout integrity-core (integrity-sdk dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: XibalbaTechSol/integrity-core
+          ref: 93fc2c9b0d6adc26ef313a2f3c6d577c1d0f2578
+          path: integrity-core
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install OPA
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri https://openpolicyagent.org/downloads/v1.18.2/opa_windows_amd64.exe -OutFile C:\opa.exe
+          $actual = (Get-FileHash C:\opa.exe -Algorithm SHA256).Hash.ToLower()
+          $expected = "b9022224ee660c87cc35ce957c21c352fa57b267d71fb4e1ce779a38e107c9df"
+          if ($actual -ne $expected) {
+            throw "OPA SHA256 mismatch: expected $expected, got $actual"
+          }
+          New-Item -ItemType Directory -Force -Path C:\tools
+          Move-Item C:\opa.exe C:\tools\opa.exe
+          echo "C:\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Install package
+        run: |
+          python -m pip install -e ./integrity-core/integrity-sdk
+          python -m pip install -e ".[dev]"
+      - name: Run Windows tests
+        run: pytest -q tests
+      - name: Validate default policy packs
+        run: |
+          shield validate --rules policies/defaults/smb.json
+          shield validate --rules policies/defaults/professional-services.json
+          shield validate --rules policies/defaults/regulated.json
