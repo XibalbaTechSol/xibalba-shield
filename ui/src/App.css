@@ -972,6 +972,53 @@ h1, h2, h3, h4, b {
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
+.google-sso-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 16px;
+  background: var(--panel-elevated, #ffffff);
+  border: 1px solid var(--line, #d8dee6);
+  border-radius: var(--radius-md, 6px);
+  color: var(--text, #20242a);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.google-sso-btn:hover {
+  background: var(--panel-hover, #f1f4f8);
+  border-color: var(--muted, #8a96a3);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 16px 0 20px;
+  color: var(--muted, #8a96a3);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--line, #e7ebf0);
+}
+
+.auth-divider span {
+  padding: 0 12px;
+}
+
 .auth-error {
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
@@ -3232,6 +3279,53 @@ h1, h2, h3, h4, b {
 .auth-form input { border-radius: 0; border-color: var(--line); background: var(--panel-elevated); color: var(--text); }
 .auth-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
 .local-connect { border-radius: 0; border-color: var(--line); background: transparent; color: var(--accent-text); }
+.google-sso-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 16px;
+  background: var(--panel-elevated, #ffffff);
+  border: 1px solid var(--line, #d8dee6);
+  border-radius: var(--radius-md, 6px);
+  color: var(--text, #20242a);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.google-sso-btn:hover {
+  background: var(--panel-hover, #f1f4f8);
+  border-color: var(--muted, #8a96a3);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 16px 0 20px;
+  color: var(--muted, #8a96a3);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--line, #e7ebf0);
+}
+
+.auth-divider span {
+  padding: 0 12px;
+}
+
 .auth-error { border-radius: 0; border-color: color-mix(in srgb, var(--red) 50%, transparent); background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 .session-note { color: var(--muted); }
 

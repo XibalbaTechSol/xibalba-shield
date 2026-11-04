@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ShieldApi } from './api'
 import { Landing } from './components/Landing'
 import { SignIn } from './components/SignIn'
@@ -22,6 +22,38 @@ export default function App() {
     writeSession('shield-session', '1')
     setView('dashboard')
   }
+
+  useEffect(() => {
+    // Automatically restore session if an active cookie exists (e.g. returning from Google OAuth)
+    const checkMe = async () => {
+      try {
+        const response = await fetch('/api/shield/auth/me', { credentials: 'include' })
+        if (response.ok) {
+          const payload = await response.json()
+          if (payload && payload.account && payload.tenant_id) {
+            connect({
+              tenant: payload.tenant_id,
+              token: '',
+              baseUrl: window.location.origin,
+              account: { ...payload.account, session_expires_at: payload.session_expires_at },
+            })
+            if (window.location.search) {
+              const url = new URL(window.location.href)
+              url.search = ''
+              window.history.replaceState({}, document.title, url.toString())
+            }
+          }
+        } else if (response.status === 401 && readSession('shield-session')) {
+          removeSession('shield-session')
+          removeSession('shield-connection')
+          setView('landing')
+        }
+      } catch {
+        /* local sign-out / network error */
+      }
+    }
+    checkMe()
+  }, [])
 
   const logout = async (notice = '') => {
     // The session lives in an HttpOnly cookie this code cannot see, so the server call is the
