@@ -340,3 +340,10 @@
   sits under Configuration. The spec opens Configuration, disambiguates the section heading from the view's own (they differ only by case), and
   scrolls the table into frame before its screenshot (it previously captured the top of the page, not the table). It fails when the mocked
   "differs from file" state is changed, so the three load states are really asserted. `e2e/visual.spec.ts` (sandbox-rendering diffs) is untouched.
+
+## [2026-11-03] docs | Advisory inference endpoint URL validation documented
+
+- Updated the canonical advisory inference page, README, and specification for Shield PR #65:
+  endpoint credentials, query parameters, and fragments are rejected by both UI and backend.
+- Recorded backend and browser checks, including rejection before POST and desktop/mobile Settings
+  coverage. Execution remains shadow-only with strict redaction.

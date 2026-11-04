@@ -364,7 +364,9 @@ The backend bounds timeout (50–5000 ms), maximum tokens (32–4096), temperatu
 field lengths, and event-class list size. Redaction mode is strict, failure mode is either
 `continue_with_policy` or `mark_unavailable`, and credentials are never tenant data: settings may
 contain only a `secret://` reference while the optional `SHIELD_INFERENCE_API_KEY` remains
-host-managed. Non-loopback HTTP endpoints must use HTTPS.
+host-managed. Non-loopback HTTP endpoints must use HTTPS. Endpoints with embedded user/password
+credentials, query parameters, or fragments are also rejected by the backend and browser settings
+validator before a save request is sent.
 
 After policy evaluation, the provider receives a redacted DecisionEnvelope and returns a bounded
 JevAnalysis-shaped advisory. The analyzer writes a parent-linked DecisionTrace projection and never

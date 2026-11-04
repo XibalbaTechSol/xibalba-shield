@@ -2,7 +2,7 @@
 title: Configurable Advisory Inference
 acronyms: [Jev, LLM, SLM]
 created: 2026-10-04
-updated: 2026-10-11
+updated: 2026-11-03
 type: concept
 tags: [enforcement, compliance, slm, infrastructure]
 confidence: high
@@ -63,8 +63,10 @@ The backend validates these tenant-scoped fields:
 - `inferenceFailureMode` (`continue_with_policy` or `mark_unavailable`); and
 - `inferenceEventClasses`, a bounded list of event classes to analyze.
 
-Endpoints must use HTTP(S); non-loopback HTTP endpoints are rejected and must use HTTPS. Secret
-settings are references beginning with `secret://`, never raw credentials.
+Endpoints must use HTTP(S); non-loopback HTTP endpoints are rejected and must use HTTPS. Embedded
+username/password credentials, query parameters, and fragments are rejected by both the settings
+API and browser-side validator. Secret settings are references beginning with `secret://`, never
+raw credentials.
 
 ## Console form
 
@@ -73,8 +75,9 @@ as fixed: there is no control for either. `ui/src/inferenceSettings.js` mirrors 
 request (a non-local `http` endpoint, a key that is not a `secret://` reference, an out-of-range timeout/tokens/temperature, a network
 provider with no endpoint), but the backend stays the authority and its refusal is shown verbatim. A save carries every other saved
 setting through unchanged; a provider of `disabled` forces `inferenceEnabled` off. Covered by `ui/e2e/inference-settings.spec.ts` (4
-Playwright tests at desktop width and 390px: the local refusals, the exact POSTed payload with no raw secret, a backend 422, and no
-sideways scroll on a phone). Not covered: a live provider call from the console, and the connected backend (the control plane is mocked at HTTP).
+Playwright tests at desktop width and 390px: local endpoint/secret/bounds refusals, embedded endpoint credential/query rejection
+before a POST, the saved payload with no raw secret, backend 422 handling, and no sideways scroll on a phone). Backend and browser
+checks passed for Shield PR #65. Not covered: a live provider call from the console, and the connected backend (the control plane is mocked at HTTP).
 
 ## Runtime and evidence
 
