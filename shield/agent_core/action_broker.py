@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,62 @@ from typing import Callable
 
 from .readiness import ProductionReadiness
 from .responders import ResponderCapabilities, ResponderDisabled
+
+PROCESS_TERMINATE = 0x0001
+PROCESS_SUSPEND_RESUME = 0x0800
+
+
+def _default_win32_freeze(pid: int) -> str:
+    """Freeze a process on Windows using NtSuspendProcess."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    ntdll = ctypes.windll.ntdll
+    handle = kernel32.OpenProcess(PROCESS_SUSPEND_RESUME, False, pid)
+    if not handle:
+        raise OSError(f"OpenProcess failed on pid {pid}: error {kernel32.GetLastError()}")
+    try:
+        status = ntdll.NtSuspendProcess(handle)
+        if status != 0:
+            raise OSError(f"NtSuspendProcess failed on pid {pid} with NTSTATUS {status:#x}")
+    finally:
+        kernel32.CloseHandle(handle)
+    return "NtSuspendProcess"
+
+
+def _default_win32_resume(pid: int) -> str:
+    """Resume a suspended process on Windows using NtResumeProcess."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    ntdll = ctypes.windll.ntdll
+    handle = kernel32.OpenProcess(PROCESS_SUSPEND_RESUME, False, pid)
+    if not handle:
+        raise OSError(f"OpenProcess failed on pid {pid}: error {kernel32.GetLastError()}")
+    try:
+        status = ntdll.NtResumeProcess(handle)
+        if status != 0:
+            raise OSError(f"NtResumeProcess failed on pid {pid} with NTSTATUS {status:#x}")
+    finally:
+        kernel32.CloseHandle(handle)
+    return "NtResumeProcess"
+
+
+def _default_win32_kill(pid: int) -> str:
+    """Terminate a process on Windows using TerminateProcess."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+    if not handle:
+        raise OSError(f"OpenProcess failed on pid {pid}: error {kernel32.GetLastError()}")
+    try:
+        success = kernel32.TerminateProcess(handle, 1)
+        if not success:
+            raise OSError(f"TerminateProcess failed on pid {pid}: error {kernel32.GetLastError()}")
+    finally:
+        kernel32.CloseHandle(handle)
+    return "TerminateProcess"
 
 
 @dataclass(frozen=True)
@@ -37,6 +94,9 @@ class ActionBroker:
         self,
         *,
         kill: Callable[[int, int], None] = os.kill,
+        win_freeze: Callable[[int], str] | None = None,
+        win_resume: Callable[[int], str] | None = None,
+        win_kill: Callable[[int], str] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         enable_destructive: bool = False,
@@ -46,6 +106,9 @@ class ActionBroker:
         readiness: ProductionReadiness | None = None,
     ) -> None:
         self._kill = kill
+        self._win_freeze = win_freeze
+        self._win_resume = win_resume
+        self._win_kill = win_kill
         self._monotonic = monotonic
         self._sleep = sleep
         self._enable_destructive = enable_destructive
@@ -86,7 +149,13 @@ class ActionBroker:
             freeze_file = self._cgroup_freeze_file(cgroup_path)
             freeze_file.write_text("1\n", encoding="ascii")
             return ActionResult(pid, "freeze", "cgroup.freeze", True, cgroup_path=str(freeze_file.parent))
-        self._kill(pid, signal.SIGSTOP)
+        if sys.platform == "win32" or self._win_freeze is not None:
+            method = self._win_freeze(pid) if self._win_freeze else _default_win32_freeze(pid)
+            return ActionResult(pid, "freeze", method, True)
+        sigstop = getattr(signal, "SIGSTOP", None)
+        if sigstop is None:
+            raise RuntimeError("SIGSTOP is not available on this platform")
+        self._kill(pid, sigstop)
         return ActionResult(pid, "freeze", "SIGSTOP", True)
 
     def freeze_process(self, pid: int) -> ActionResult:
@@ -98,7 +167,13 @@ class ActionBroker:
         self._validate_pid(pid)
         if not self.capabilities.kill_process:
             raise ResponderDisabled("kill_process is disabled until every production readiness proof passes")
-        self._kill(pid, signal.SIGKILL)
+        if sys.platform == "win32" or self._win_kill is not None:
+            method = self._win_kill(pid) if self._win_kill else _default_win32_kill(pid)
+            return ActionResult(pid, "terminate", method, True)
+        sigkill = getattr(signal, "SIGKILL", None)
+        if sigkill is None:
+            raise RuntimeError("SIGKILL is not available on this platform")
+        self._kill(pid, sigkill)
         return ActionResult(pid, "terminate", "SIGKILL", True)
 
     def freeze_cgroup(self, cgroup_path: str | os.PathLike[str], *, pid: int = 0) -> ActionResult:
@@ -126,7 +201,13 @@ class ActionBroker:
             freeze_file = self._cgroup_freeze_file(cgroup_path)
             freeze_file.write_text("0\n", encoding="ascii")
             return ActionResult(pid, "resume", "cgroup.freeze", True, cgroup_path=str(freeze_file.parent))
-        self._kill(pid, signal.SIGCONT)
+        if sys.platform == "win32" or self._win_resume is not None:
+            method = self._win_resume(pid) if self._win_resume else _default_win32_resume(pid)
+            return ActionResult(pid, "resume", method, True)
+        sigcont = getattr(signal, "SIGCONT", None)
+        if sigcont is None:
+            raise RuntimeError("SIGCONT is not available on this platform")
+        self._kill(pid, sigcont)
         return ActionResult(pid, "resume", "SIGCONT", True)
 
     def escalate_to_kill(
@@ -153,7 +234,13 @@ class ActionBroker:
             if remaining <= 0:
                 break
             self._sleep(remaining)
-        self._kill(pid, signal.SIGKILL)
+        if sys.platform == "win32" or self._win_kill is not None:
+            method = self._win_kill(pid) if self._win_kill else _default_win32_kill(pid)
+            return ActionResult(pid, "terminate", method, True, escalated=True, cgroup_path=str(cgroup_path) if cgroup_path else None)
+        sigkill = getattr(signal, "SIGKILL", None)
+        if sigkill is None:
+            raise RuntimeError("SIGKILL is not available on this platform")
+        self._kill(pid, sigkill)
         return ActionResult(pid, "terminate", "SIGKILL", True, escalated=True, cgroup_path=str(cgroup_path) if cgroup_path else None)
 
     def contain(

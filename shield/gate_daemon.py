@@ -415,7 +415,10 @@ class _GateHandler(socketserver.StreamRequestHandler):
             logger.warning("gate response write failed: %s", exc)
 
 
-class GateServer(socketserver.ThreadingUnixStreamServer):
+_BaseGateServer = getattr(socketserver, "ThreadingUnixStreamServer", socketserver.TCPServer)
+
+
+class GateServer(_BaseGateServer):
     """Threaded Unix-socket server holding one warm `PolicyEngine`.
 
     Threaded because an OPA query is network I/O: a single-threaded server would

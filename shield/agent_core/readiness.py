@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import sys
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -55,9 +56,9 @@ class ProductionReadiness:
         """Load a device-bound, time-bounded proof artifact."""
         artifact_path = Path(path)
         stat = artifact_path.stat()
-        if stat.st_mode & 0o022:
+        if sys.platform != "win32" and (stat.st_mode & 0o022):
             raise ValueError("responder readiness artifact must not be group/other writable")
-        if require_root_owner and stat.st_uid != 0:
+        if require_root_owner and getattr(stat, "st_uid", 1) != 0:
             raise ValueError("responder readiness artifact must be owned by root")
         if max_age_seconds <= 0:
             raise ValueError("responder proof max age must be positive")

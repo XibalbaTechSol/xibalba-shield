@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import base64
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -43,7 +44,8 @@ def test_backend_admin_token_is_generated_once_without_logging_value(tmp_path):
     assert recreated is False
     assert first == second
     assert len(first) >= 32
-    assert path.stat().st_mode & 0o777 == 0o600
+    if sys.platform != "win32":
+        assert path.stat().st_mode & 0o777 == 0o600
 
 
 def _start_backend(tmp_path):
