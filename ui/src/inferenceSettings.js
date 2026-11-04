@@ -79,6 +79,8 @@ export function validateInference(form) {
     try { url = new URL(endpoint) } catch { /* handled below */ }
     if (!url || !['http:', 'https:'].includes(url.protocol) || !url.host) {
       errors.inferenceEndpoint = 'Endpoint must be an http(s) URL.'
+    } else if (url.username || url.password || url.search || url.hash) {
+      errors.inferenceEndpoint = 'Endpoint cannot include credentials, a query, or a fragment; use a secret:// reference for credentials.'
     } else if (url.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
       errors.inferenceEndpoint = 'A non-local endpoint must use HTTPS.'
     }

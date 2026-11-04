@@ -351,3 +351,10 @@
 - Added `docs/handoffs/2026-11-03-shield-ui-visual-audit.md` for the browser-verified UI audit;
   the wiki catalog did not need a new architecture page because this pass changed presentation
   geometry and test enforcement, not the Shield runtime model.
+
+## [2026-11-03] docs | Advisory inference endpoint URL validation documented
+
+- Updated the canonical advisory inference page, README, and specification for Shield PR #65:
+  endpoint credentials, query parameters, and fragments are rejected by both UI and backend.
+- Recorded backend and browser checks, including rejection before POST and desktop/mobile Settings
+  coverage. Execution remains shadow-only with strict redaction.

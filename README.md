@@ -6,6 +6,8 @@ It is built around a simple premise: if the most powerful software now running o
 
 Shield is not a chatbot wrapper and not a dashboard-only compliance tool. It is the local sensor and enforcement layer. Integrity Protocol is the identity, BCC, telemetry, scoring, and evidence substrate that receives Shield's signed decisions.
 
+The cross-product execution authority is [integrity-core/docs/ecosystem/INTEGRITY_ECOSYSTEM_PLAN.md](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/ecosystem/INTEGRITY_ECOSYSTEM_PLAN.md). Shield-specific documents define implementation and operations only; they do not redefine cross-product identity, pack, receipt, evidence, or product boundaries.
+
 ## Shield is a standalone product
 
 Shield runs and enforces policy on its own — a laptop, an SMB workstation, a regulated desktop —
@@ -52,7 +54,7 @@ judgment step over its own material events (scope `material`: contain, deny, esc
 It never requests or performs enforcement. Operations, invariants and rollback are in
 [`docs/runbooks/hermes-analyst.md`](docs/runbooks/hermes-analyst.md).
 
-This repository is the **immune system** in a three-repository ecosystem designed as a living
+This repository is the **immune system** in a four-repository ecosystem designed as a living
 organism. (`integrity-dashboard`, the operator presentation layer, moved with the userapi from
 `integrity-core` to [`integrity-console`](https://github.com/XibalbaTechSol/integrity-console)
 in integrity-core's 2026-09-28 restructure, Phase A1.)
@@ -262,7 +264,9 @@ DecisionEnvelope after local policy has already produced its result.
 Provider settings include model, endpoint, versioned prompt profile, timeout, token and temperature
 budgets, event-class scope, failure mode, and a `secret://` reference. Raw credentials remain
 host-managed; `SHIELD_INFERENCE_API_KEY` is read only by the optional HTTP adapter. Non-loopback
-HTTP endpoints are rejected and must use HTTPS.
+HTTP endpoints are rejected and must use HTTPS. URLs containing embedded credentials, query
+parameters, or fragments are rejected in both the browser and backend. Shield PR #65's backend and
+browser checks passed.
 
 The form shows execution mode (shadow) and redaction (strict) as fixed, refuses out-of-range or unsafe values before a request, and shows the backend's refusal verbatim; the backend remains the authority. It is covered by `ui/e2e/inference-settings.spec.ts` with the control plane mocked at HTTP; no live provider call is made from the console.
 

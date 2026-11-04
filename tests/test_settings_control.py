@@ -51,6 +51,9 @@ def test_inference_settings_are_bounded_and_secret_refs_are_not_credentials():
         {"inferenceEventClasses": [1]},
         {"inferenceEndpoint": "ftp://inference.example.test/model"},
         {"inferenceEndpoint": "http://inference.example.test/model"},
+        {"inferenceEndpoint": "https://user:password@inference.example.test/model"},
+        {"inferenceEndpoint": "https://inference.example.test/model?api_key=secret"},
+        {"inferenceEndpoint": "https://inference.example.test/model#token"},
     ):
         try:
             validate_settings(invalid)
