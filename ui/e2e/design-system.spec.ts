@@ -581,7 +581,8 @@ test.describe('Industry grammar in the rendered console', () => {
       }
     }
 
-    // (c) frames complete, and their registration crosses inside every clip
+    // (c) frames complete. The current Shield grammar uses a clean one-pixel
+    // rectangle; decorative registration crosses are intentionally forbidden.
     const REPLACED = ['INPUT', 'IMG', 'SELECT', 'TEXTAREA', 'VIDEO', 'CANVAS', 'IFRAME', 'BR', 'HR']
     for (const f of framed) {
       const s = getComputedStyle(f), fr = f.getBoundingClientRect()
@@ -589,33 +590,14 @@ test.describe('Industry grammar in the rendered console', () => {
         num(s[('border' + d + 'Width') as any]) < 0.5 || alpha(s[('border' + d + 'Color') as any]) < 0.03)
       if (missing.length) out.push(`frame ${name(f)} missing border: ${missing.join(',')}`)
       if (REPLACED.includes(f.tagName)) continue
-      /* A cross is drawn as eight gradient arms on ONE pseudo inset outside the
-         window -- the only way a mark can straddle a corner, since a background
-         is clipped to the border box. Identifying it by the pseudo's SIZE (the
-         shape of the four-corner-boxes technique) silently matched nothing once
-         the arms moved onto an inset pseudo, and this whole check passed over
-         every panel without looking at one. */
-      const marks = (pe: string) => {
-        const st = getComputedStyle(f, pe)
-        if (!st.content || st.content === 'none') return null
-        const arms = (st.backgroundImage.match(/gradient/g) || []).length
-        if (arms < 8) return null
-        const inset = -parseFloat(st.top)
-        return Number.isFinite(inset) ? { bleed: inset } : null
+      if (f.matches(MARKED) && fr.width >= 200 && fr.height >= 72) {
+        for (const pseudo of ['::before', '::after']) {
+          const ps = getComputedStyle(f, pseudo)
+          const gradients = (ps.backgroundImage.match(/gradient/g) || []).length
+          if (gradients >= 8 && ps.content !== 'none')
+            out.push(`decorative registration cross on ${name(f)}`)
+        }
       }
-      const m = marks('::before') || marks('::after')
-      if (!m) {
-        // Only the window primitives are marked: a tag, a meter track and a
-        // status pill all carry a border and none of them carries a cross.
-        if (f.matches(MARKED) && fr.width >= 200 && fr.height >= 72)
-          out.push(`no registration cross on ${name(f)}`)
-        continue
-      }
-      if (m.bleed < 6) out.push(`cross on ${name(f)} bleeds only ${m.bleed}px; Industry offsets the corner -6px`)
-      const c = clipNoVp(f), bleed = m.bleed
-      const cut = [[fr.left, fr.top], [fr.right, fr.top], [fr.left, fr.bottom], [fr.right, fr.bottom]]
-        .filter(([x, y]) => x - bleed < c.l - 1 || x + bleed > c.r + 1 || y - bleed < c.t - 1 || y + bleed > c.b + 1).length
-      if (cut) out.push(`corner crosses clipped on ${name(f)}: ${cut}/4`)
     }
 
     // (c2) cards are transparent line drawings. Industry: "do not give cards or

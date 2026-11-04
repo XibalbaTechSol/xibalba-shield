@@ -340,6 +340,17 @@
   sits under Configuration. The spec opens Configuration, disambiguates the section heading from the view's own (they differ only by case), and
   scrolls the table into frame before its screenshot (it previously captured the top of the page, not the table). It fails when the mocked
   "differs from file" state is changed, so the three load states are really asserted. `e2e/visual.spec.ts` (sandbox-rendering diffs) is untouched.
+## [2026-11-03] audit | Shield console visual contract
+
+- Pages created: 0
+- Pages updated: 0
+- Dead links fixed: 0
+- Orphans resolved: 0
+- Stale pages refreshed: 0
+- Aspirational content flagged: 0
+- Added `docs/handoffs/2026-11-03-shield-ui-visual-audit.md` for the browser-verified UI audit;
+  the wiki catalog did not need a new architecture page because this pass changed presentation
+  geometry and test enforcement, not the Shield runtime model.
 
 ## [2026-11-03] docs | Advisory inference endpoint URL validation documented
 

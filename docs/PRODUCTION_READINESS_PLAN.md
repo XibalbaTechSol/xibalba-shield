@@ -373,10 +373,12 @@ Pass when the selected pilot fleet meets resource, availability, event-loss, dec
    *second*, unrelated UI surface -- `ShieldFleetOverview.tsx`/`ShieldPage.tsx` -- lives inside
    `integrity-core`'s own `integrity-dashboard`, not this repo, which is an architectural
    inconsistency with both repos' stated zero-cross-dependency boundary (`CLAUDE.md`). This
-   repo's own `ui/` is still the untouched default Vite/React scaffold, never built out --
-   tracked as a separate future item (build a real Shield-owned React app there, eventually
-   migrating fleet-overview functionality out of `integrity-core`), not attempted in this
-   pass since the embedded console was the faster, real win for this gate.
+   repo's own `ui/` is now a real Shield-owned React/Vite operator console with Posture, Agent,
+   Network, Decisions, Evidence, and Configuration views. Its command-center visual contract
+   is covered by Playwright design-system tests at 390px, 1280px, and 1600px, while the older
+   embedded console remains a separate surface. The integrity-core `integrity-dashboard`
+   surface still exists independently and should not be treated as the same application; any
+   future migration or convergence remains a separate architectural decision.
 
 Current evidence (2026-09-04): item 2 (watchdog/health telemetry) is implemented — a
 `Watchdog` (`shield/watchdog.py`) now owns hot-reload checking, OPA restart-if-unhealthy,

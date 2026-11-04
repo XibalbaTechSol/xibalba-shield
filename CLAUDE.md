@@ -87,7 +87,9 @@ shield/
                          #  observe|enforce` (default enforce); Hermes config errors disable
                          #  publication with a warning, never stop the sensor
 
-ui/                      # React/Vite operator console (Playwright e2e under ui/e2e). Settings → Advisory Inference is
+ui/                      # React/Vite operator console (Playwright e2e under ui/e2e). The command-center
+                          # visual contract is graphite, square, rectangular, and border-led; design-system
+                          # coverage runs at 390px, 1280px, and 1600px. Settings → Advisory Inference is
                           # InferenceSettings.jsx + inferenceSettings.js (client mirror of backend bounds; backend is the authority)
 slm_training/           # Tier-2 SLM training pipeline — app.py, train.py (QLoRA),
                           # generate_dataset.py, dataset.jsonl, models/ (Qwen2.5-0.5B GGUF)
