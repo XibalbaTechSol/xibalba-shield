@@ -601,16 +601,31 @@ def _enrich_device(device: dict[str, Any], *, identity: dict[str, Any] | None = 
 
 
 
-from .oidc import OIDCClient
+from .oidc import (
+    OIDCClient,
+    OAuthError,
+    generate_pkce,
+    sign_oauth_state,
+    verify_oauth_state,
+)
 
-oidc_client = None
-if os.environ.get("OIDC_DISCOVERY_URL") and os.environ.get("OIDC_CLIENT_ID"):
-    oidc_client = OIDCClient(
-        discovery_url=os.environ.get("OIDC_DISCOVERY_URL", ""),
-        client_id=os.environ.get("OIDC_CLIENT_ID", ""),
-        client_secret=os.environ.get("OIDC_CLIENT_SECRET", ""),
-        redirect_uri=os.environ.get("OIDC_REDIRECT_URI", "")
-    )
+
+def init_oidc_client() -> OIDCClient | None:
+    client_id = (os.environ.get("GOOGLE_CLIENT_ID") or os.environ.get("OIDC_CLIENT_ID") or "").strip()
+    client_secret = (os.environ.get("GOOGLE_CLIENT_SECRET") or os.environ.get("OIDC_CLIENT_SECRET") or "").strip()
+    discovery_url = (os.environ.get("OIDC_DISCOVERY_URL") or "https://accounts.google.com/.well-known/openid-configuration").strip()
+    redirect_uri = (os.environ.get("GOOGLE_REDIRECT_URI") or os.environ.get("OIDC_REDIRECT_URI") or "").strip()
+    if client_id and client_secret:
+        return OIDCClient(
+            discovery_url=discovery_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+        )
+    return None
+
+
+oidc_client = init_oidc_client()
 
 # Shield's Rego policy packs (shield/policies/rego/<id>.rego) and their display names.
 SHIELD_POLICY_PACKS = (
@@ -689,7 +704,26 @@ def opa_policy_status(opa_url: str | None = None, *, rego_dir: Path | None = Non
     }
 
 
-def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", dev_disable_admin_auth: bool = False, device_assertion_audience: str = ""):
+def make_handler(
+    *,
+    store: ShieldStore,
+    admin_token: str,
+    public_base_url: str = "",
+    allowed_origin: str = "*",
+    dev_disable_admin_auth: bool = False,
+    device_assertion_audience: str = "",
+    oidc_client: OIDCClient | None = None,
+    auth_secret: str = "",
+):
+    active_oidc_client = oidc_client if oidc_client is not None else globals().get("oidc_client")
+    state_signing_secret = (
+        auth_secret
+        or os.environ.get("SESSION_SECRET")
+        or os.environ.get("SHIELD_AUTH_SECRET")
+        or admin_token
+        or "xibalba-shield-oauth-secret"
+    )
+
     # Per-process replay guard for device assertions. A multi-process deployment needs a shared
     # store; until then the short assertion TTL plus audience binding is what bounds replay.
     _device_replay_guard = ReplayGuard()
@@ -717,6 +751,12 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
         # client without leaving a stuck connection able to starve the pool for good.
         timeout = 30
 
+        def _oidc_redirect_uri(self) -> str:
+            if active_oidc_client and active_oidc_client.redirect_uri:
+                return active_oidc_client.redirect_uri
+            base = public_base_url or self._request_base_url()
+            return f"{base.rstrip('/')}/api/shield/auth/oidc/callback"
+
         def do_OPTIONS(self) -> None:  # noqa: N802 -- CORS preflight, same convention as
             # xibalba-cortex's local_api.py -- without this a browser-based caller (e.g. the
             # dashboard's Guided System Test wizard) never even reaches a real endpoint; the
@@ -735,13 +775,104 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
             if parsed.path in ("/", "/xibalba-shield"):
                 self._send_html(_console_html())
                 return
+
+            if parsed.path == "/api/shield/auth/providers":
+                self._send_json({"google": active_oidc_client is not None})
+                return
+
             if parsed.path == "/api/shield/auth/oidc/login":
-                if not oidc_client:
-                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC not configured")
+                if not active_oidc_client:
+                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC / Google OAuth is not configured on this server")
                     return
-                state = secrets.token_urlsafe(16)
-                url = oidc_client.get_authorization_url(state=state)
+                tenant_id = query.get("tenant_id", [""])[0]
+                redirect_uri = self._oidc_redirect_uri()
+                code_verifier, code_challenge = generate_pkce()
+                state = sign_oauth_state(
+                    state_signing_secret,
+                    provider="google",
+                    code_verifier=code_verifier,
+                    redirect_uri=redirect_uri,
+                    tenant_id=tenant_id,
+                )
+                url = active_oidc_client.get_authorization_url(
+                    state=state,
+                    code_challenge=code_challenge,
+                    redirect_uri=redirect_uri,
+                )
+                accept = self.headers.get("Accept", "")
+                if query.get("redirect", [""])[0] in {"1", "true"} or ("text/html" in accept and "application/json" not in accept):
+                    self.send_response(HTTPStatus.FOUND)
+                    self.send_header("Location", url)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return
                 self._send_json({"redirect_url": url, "state": state})
+                return
+
+            if parsed.path == "/api/shield/auth/oidc/callback":
+                if not active_oidc_client:
+                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC / Google OAuth is not configured on this server")
+                    return
+                err = query.get("error", [""])[0]
+                if err:
+                    err_desc = query.get("error_description", [""])[0] or err
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"OAuth authorization error: {err_desc}")
+                    return
+                code = query.get("code", [""])[0]
+                state = query.get("state", [""])[0]
+                if not code or not state:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "code and state query parameters are required")
+                    return
+                try:
+                    state_payload = verify_oauth_state(state_signing_secret, state, expected_provider="google")
+                except OAuthError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"Invalid OAuth state: {exc}")
+                    return
+
+                code_verifier = state_payload.get("v")
+                tenant_id = state_payload.get("ten")
+                redirect_uri = state_payload.get("r") or self._oidc_redirect_uri()
+
+                try:
+                    tokens = active_oidc_client.exchange_code(
+                        code=code,
+                        code_verifier=code_verifier,
+                        redirect_uri=redirect_uri,
+                    )
+                    user_info = active_oidc_client.get_user_info(tokens)
+                    account, token = store.authenticate_or_create_oauth_account(
+                        email=user_info.email,
+                        provider=user_info.provider,
+                        provider_user_id=user_info.provider_user_id,
+                        display_name=user_info.display_name,
+                        tenant_id=tenant_id or None,
+                    )
+                except (OAuthError, ValueError) as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"OAuth authentication failed: {exc}")
+                    return
+
+                cookie = _session_cookie(token, max_age=_SESSION_TTL_SECONDS)
+                accept = self.headers.get("Accept", "")
+                if "application/json" in accept and "text/html" not in accept:
+                    self._send_json(
+                        {"ok": True, "account": account, "tenant_id": account["tenant_id"]},
+                        extra_headers=(("Set-Cookie", cookie),),
+                    )
+                    return
+
+                html = b"""<!doctype html>
+<html>
+<head><meta http-equiv="refresh" content="0;url=/"><title>Redirecting to Shield...</title></head>
+<body><script>window.location.href = '/';</script><p>Redirecting to Shield console...</p></body>
+</html>"""
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", "/")
+                self.send_header("Set-Cookie", cookie)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(html)
                 return
 
             if parsed.path == "/api/shield/health":
@@ -1178,6 +1309,72 @@ def make_handler(*, store: ShieldStore, admin_token: str, public_base_url: str =
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json(request, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path == "/api/shield/auth/oidc/login":
+                if not active_oidc_client:
+                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC / Google OAuth is not configured on this server")
+                    return
+                tenant_id = str(body.get("tenant_id") or "")
+                redirect_uri = str(body.get("redirect_uri") or "") or self._oidc_redirect_uri()
+                code_verifier, code_challenge = generate_pkce()
+                state = sign_oauth_state(
+                    state_signing_secret,
+                    provider="google",
+                    code_verifier=code_verifier,
+                    redirect_uri=redirect_uri,
+                    tenant_id=tenant_id,
+                )
+                url = active_oidc_client.get_authorization_url(
+                    state=state,
+                    code_challenge=code_challenge,
+                    redirect_uri=redirect_uri,
+                )
+                self._send_json({"redirect_url": url, "state": state})
+                return
+
+            if parsed.path == "/api/shield/auth/oidc/callback":
+                if not active_oidc_client:
+                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC / Google OAuth is not configured on this server")
+                    return
+                code = str(body.get("code") or "")
+                state = str(body.get("state") or "")
+                if not code or not state:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "code and state are required")
+                    return
+                try:
+                    state_payload = verify_oauth_state(state_signing_secret, state, expected_provider="google")
+                except OAuthError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"Invalid OAuth state: {exc}")
+                    return
+
+                code_verifier = state_payload.get("v")
+                tenant_id = state_payload.get("ten")
+                redirect_uri = state_payload.get("r") or self._oidc_redirect_uri()
+
+                try:
+                    tokens = active_oidc_client.exchange_code(
+                        code=code,
+                        code_verifier=code_verifier,
+                        redirect_uri=redirect_uri,
+                    )
+                    user_info = active_oidc_client.get_user_info(tokens)
+                    account, token = store.authenticate_or_create_oauth_account(
+                        email=user_info.email,
+                        provider=user_info.provider,
+                        provider_user_id=user_info.provider_user_id,
+                        display_name=user_info.display_name,
+                        tenant_id=tenant_id or None,
+                    )
+                except (OAuthError, ValueError) as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"OAuth authentication failed: {exc}")
+                    return
+
+                cookie = _session_cookie(token, max_age=_SESSION_TTL_SECONDS)
+                self._send_json(
+                    {"ok": True, "account": account, "tenant_id": account["tenant_id"], "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.session_for_token(token)["expires_at"]},
+                    extra_headers=(("Set-Cookie", cookie),),
+                )
                 return
 
             if parsed.path in ("/api/shield/auth/signup", "/api/shield/auth/login"):
@@ -2282,7 +2479,22 @@ def _configure_tls(server: ThreadingHTTPServer, *, tls_cert: Path, tls_key: Path
     server.mtls_enabled = bool(tls_client_ca)  # type: ignore[attr-defined]
 
 
-def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_base_url: str = "", allowed_origin: str = "*", tls_cert: Path | None = None, tls_key: Path | None = None, tls_client_ca: Path | None = None, tls_port: int | None = None, dev_disable_admin_auth: bool = False) -> ThreadingHTTPServer:
+def run_server(
+    *,
+    host: str,
+    port: int,
+    db_path: Path,
+    admin_token: str,
+    public_base_url: str = "",
+    allowed_origin: str = "*",
+    tls_cert: Path | None = None,
+    tls_key: Path | None = None,
+    tls_client_ca: Path | None = None,
+    tls_port: int | None = None,
+    dev_disable_admin_auth: bool = False,
+    oidc_client: OIDCClient | None = None,
+    auth_secret: str = "",
+) -> ThreadingHTTPServer:
     if bool(tls_cert) != bool(tls_key):
         raise ValueError("TLS requires both --tls-cert and --tls-key")
     if tls_client_ca and not tls_cert:
@@ -2295,7 +2507,15 @@ def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_
         if not loopback_host:
             raise ValueError("development auth bypass requires a loopback host")
     store = ShieldStore(db_path)
-    handler = make_handler(store=store, admin_token=admin_token, public_base_url=public_base_url, allowed_origin=allowed_origin, dev_disable_admin_auth=dev_disable_admin_auth)
+    handler = make_handler(
+        store=store,
+        admin_token=admin_token,
+        public_base_url=public_base_url,
+        allowed_origin=allowed_origin,
+        dev_disable_admin_auth=dev_disable_admin_auth,
+        oidc_client=oidc_client,
+        auth_secret=auth_secret,
+    )
     server = _BoundedThreadingHTTPServer((host, port), handler)
     if tls_port is not None:
         if not tls_cert or not tls_key:
@@ -2318,8 +2538,8 @@ def run_server(*, host: str, port: int, db_path: Path, admin_token: str, public_
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shield-backend")
-    parser.add_argument("--host", default=os.getenv("SHIELD_BACKEND_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("SHIELD_BACKEND_PORT", "8765")))
+    parser.add_argument("--host", default=os.getenv("HOST") or os.getenv("SHIELD_BACKEND_HOST", "127.0.0.1"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT") or os.getenv("SHIELD_BACKEND_PORT", "8765")))
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", ""))
     parser.add_argument("--admin-token-file", type=Path, default=Path(os.getenv("SHIELD_BACKEND_TOKEN_FILE", str(Path.home() / ".xibalba-shield" / "backend-admin.token"))))

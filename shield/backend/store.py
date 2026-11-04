@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 import tempfile
@@ -183,6 +184,19 @@ class ShieldStore:
                 revoked_at TEXT,
                 FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS oauth_identities (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                provider_user_id TEXT NOT NULL,
+                email TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE,
+                UNIQUE(provider, provider_user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_oauth_identities_account ON oauth_identities(account_id);
+            CREATE INDEX IF NOT EXISTS idx_oauth_identities_email ON oauth_identities(email);
 
             CREATE TABLE IF NOT EXISTS tenant_admin_tokens (
                 tenant_id TEXT PRIMARY KEY,
@@ -680,6 +694,130 @@ class ShieldStore:
         self.record_auth_event(event_type="login_succeeded", email=normalized, tenant_id=row["tenant_id"])
         account = {"id": row["account_id"], "tenant_id": row["tenant_id"], "email": row["email"], "display_name": row["display_name"], "role": row["role"], "status": row["status"], "email_verified": bool(row["email_verified"]), "approval_status": row["approval_status"], "created_at": row["created_at"], "tenants": self.list_account_tenants(account_id=row["account_id"])}
         return account, self.issue_account_session(account_id=row["account_id"], tenant_id=row["tenant_id"])
+
+    def authenticate_or_create_oauth_account(
+        self,
+        *,
+        email: str,
+        provider: str = "google",
+        provider_user_id: str = "",
+        display_name: str = "",
+        tenant_id: str | None = None,
+    ) -> tuple[dict[str, Any], str]:
+        normalized = email.strip().lower()
+        if not normalized or "@" not in normalized:
+            raise ValueError("valid email address required")
+        now = _now()
+
+        with self._conn:
+            account_row = None
+            if provider_user_id:
+                identity_row = self._conn.execute(
+                    "SELECT account_id FROM oauth_identities WHERE provider=? AND provider_user_id=?",
+                    (provider, provider_user_id),
+                ).fetchone()
+                if identity_row:
+                    account_row = self._conn.execute(
+                        "SELECT * FROM accounts WHERE account_id=?",
+                        (identity_row["account_id"],),
+                    ).fetchone()
+
+            if account_row is None:
+                account_row = self._conn.execute(
+                    "SELECT * FROM accounts WHERE email=?",
+                    (normalized,),
+                ).fetchone()
+                if account_row is not None and provider_user_id:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO oauth_identities (id, account_id, provider, provider_user_id, email, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        (secrets.token_hex(16), account_row["account_id"], provider, provider_user_id, normalized, now),
+                    )
+
+            if account_row is not None:
+                if account_row["status"] != "active":
+                    self.record_auth_event(event_type="oauth_login_blocked", email=normalized, tenant_id=account_row["tenant_id"], detail=f"provider:{provider} account_inactive")
+                    raise ValueError("account is inactive")
+                if account_row["approval_status"] != "approved":
+                    self.record_auth_event(event_type="oauth_login_blocked", email=normalized, tenant_id=account_row["tenant_id"], detail=f"provider:{provider} approval_required")
+                    raise ValueError("account requires administrator approval")
+
+                if not account_row["email_verified"]:
+                    self._conn.execute("UPDATE accounts SET email_verified=1 WHERE account_id=?", (account_row["account_id"],))
+
+                self._conn.execute("UPDATE accounts SET failed_attempts=0, locked_until=NULL WHERE account_id=?", (account_row["account_id"],))
+                self.record_auth_event(event_type="oauth_login_succeeded", email=normalized, tenant_id=account_row["tenant_id"], detail=f"provider:{provider}")
+
+                account = {
+                    "id": account_row["account_id"],
+                    "tenant_id": account_row["tenant_id"],
+                    "email": account_row["email"],
+                    "display_name": account_row["display_name"],
+                    "role": account_row["role"],
+                    "status": account_row["status"],
+                    "email_verified": True,
+                    "approval_status": account_row["approval_status"],
+                    "created_at": account_row["created_at"],
+                    "tenants": self.list_account_tenants(account_id=account_row["account_id"]),
+                }
+                token = self.issue_account_session(account_id=account_row["account_id"], tenant_id=account_row["tenant_id"])
+                return account, token
+
+            requested_tenant = (tenant_id or "").strip()
+            if requested_tenant:
+                self._validate_id("tenant_id", requested_tenant)
+                if self._conn.execute("SELECT 1 FROM tenants WHERE tenant_id=?", (requested_tenant,)).fetchone():
+                    base_tenant = requested_tenant
+                    suffix = 1
+                    while self._conn.execute("SELECT 1 FROM tenants WHERE tenant_id=?", (f"{base_tenant}-{suffix}",)).fetchone():
+                        suffix += 1
+                    target_tenant_id = f"{base_tenant}-{suffix}"
+                else:
+                    target_tenant_id = requested_tenant
+            else:
+                slug = re.sub(r"[^a-z0-9-]", "-", normalized.split("@")[0].lower())[:28].strip("-") or "operator"
+                base_tenant = f"{slug}-org"
+                target_tenant_id = base_tenant
+                suffix = 1
+                while self._conn.execute("SELECT 1 FROM tenants WHERE tenant_id=?", (target_tenant_id,)).fetchone():
+                    target_tenant_id = f"{base_tenant}-{suffix}"
+                    suffix += 1
+
+            self._validate_id("tenant_id", target_tenant_id)
+            self._conn.execute("INSERT INTO tenants (tenant_id, created_at) VALUES (?, ?)", (target_tenant_id, now))
+
+            account_id = secrets.token_hex(16)
+            salt, digest = _password_hash(secrets.token_urlsafe(32))
+            clean_name = (display_name or normalized.split("@")[0]).strip()
+            self._conn.execute(
+                "INSERT INTO accounts (account_id, tenant_id, email, display_name, password_hash, password_salt, status, role, email_verified, approval_status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'active', 'tenant_admin', 1, 'approved', ?)",
+                (account_id, target_tenant_id, normalized, clean_name, digest, salt, now),
+            )
+            self._conn.execute(
+                "INSERT INTO account_tenant_memberships (account_id, tenant_id, role, created_at) VALUES (?, ?, 'tenant_admin', ?)",
+                (account_id, target_tenant_id, now),
+            )
+            if provider_user_id:
+                self._conn.execute(
+                    "INSERT INTO oauth_identities (id, account_id, provider, provider_user_id, email, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (secrets.token_hex(16), account_id, provider, provider_user_id, normalized, now),
+                )
+
+            self.record_auth_event(event_type="oauth_account_created", email=normalized, tenant_id=target_tenant_id, detail=f"provider:{provider}")
+
+            account = {
+                "id": account_id,
+                "tenant_id": target_tenant_id,
+                "email": normalized,
+                "display_name": clean_name,
+                "role": "tenant_admin",
+                "status": "active",
+                "email_verified": True,
+                "approval_status": "approved",
+                "created_at": now,
+                "tenants": [{"tenant_id": target_tenant_id, "role": "tenant_admin", "created_at": now}],
+            }
+            token = self.issue_account_session(account_id=account_id, tenant_id=target_tenant_id)
+            return account, token
 
     def get_account_for_tenant(self, *, tenant_id: str, email: str) -> dict[str, Any] | None:
         row = self._conn.execute("SELECT account_id,tenant_id,email,display_name,status,role,created_at FROM accounts WHERE tenant_id=? AND email=?", (tenant_id, email.strip().lower())).fetchone()
