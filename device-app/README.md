@@ -86,7 +86,7 @@ npm run lint
 npm run test:e2e
 ```
 
-### 3. Build & Run Desktop App
+### 3. Build & Run Desktop App (Linux)
 ```bash
 # Build production bundle
 npm run build
@@ -94,6 +94,19 @@ npx tauri build --no-bundle
 
 # Launch installed desktop app
 ~/.local/bin/shield-desktop
+```
+
+### 4. macOS Universal Build & Service Installation
+To build the macOS native desktop client or install the background LaunchDaemon:
+```bash
+# Build Universal macOS DMG and .app bundle (Apple Silicon + Intel)
+npm run build
+npx tauri build --target universal-apple-darwin
+
+# Automated in CI via .github/workflows/build-desktop-macos.yml
+
+# Install macOS LaunchDaemon background service (replaces systemd)
+sudo ../scripts/install_macos_agent.sh
 ```
 
 ---

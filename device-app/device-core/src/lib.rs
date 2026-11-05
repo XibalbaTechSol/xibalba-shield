@@ -96,6 +96,17 @@ pub enum ProcState {
 /// *last* `)` because the command name may itself contain spaces and parentheses.
 pub fn proc_state(pid: u32, proc_root: &Path) -> ProcState {
     if !proc_root.is_dir() {
+        #[cfg(target_os = "macos")]
+        if proc_root == Path::new("/proc") {
+            // On macOS, /proc does not exist; check via kill -0 fallback
+            if let Ok(status) = std::process::Command::new("kill").arg("-0").arg(pid.to_string()).status() {
+                return if status.success() {
+                    ProcState::Stopped
+                } else {
+                    ProcState::Gone
+                };
+            }
+        }
         return ProcState::Unknown;
     }
     let stat = proc_root.join(pid.to_string()).join("stat");
@@ -372,6 +383,11 @@ fn detect_route() -> (String, String) {
             }
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        return ("en0".to_string(), "192.168.1.1".to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
     ("wlp9s0".to_string(), "192.168.68.1".to_string())
 }
 
@@ -386,6 +402,11 @@ fn detect_mac(iface: &str) -> String {
             return trimmed;
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        return "f0:18:98:3c:4e:12".to_string();
+    }
+    #[cfg(not(target_os = "macos"))]
     "e8:b1:fc:fd:3d:3d".to_string()
 }
 
@@ -438,7 +459,11 @@ pub fn load_device_info(home: Option<&str>) -> Option<DeviceInfo> {
 
     let hostname = std::fs::read_to_string("/etc/hostname")
         .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-host".to_string()));
+        .unwrap_or_else(|_| {
+            std::env::var("HOSTNAME")
+                .or_else(|_| std::env::var("HOST"))
+                .unwrap_or_else(|_| "unknown-host".to_string())
+        });
 
     let mut agent_did = String::new();
     if let Some(h) = home {

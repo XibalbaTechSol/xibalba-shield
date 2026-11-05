@@ -1,0 +1,73 @@
+name: Build Desktop (macOS)
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+      - "feat/**"
+    paths:
+      - "device-app/**"
+      - ".github/workflows/build-desktop-macos.yml"
+  pull_request:
+    paths:
+      - "device-app/**"
+  workflow_dispatch:
+
+jobs:
+  build-macos-desktop:
+    name: Build macOS Desktop DMG & App
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: device-app/package-lock.json
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            device-app/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('device-app/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install npm dependencies
+        working-directory: device-app
+        run: npm ci
+
+      - name: Run device-core unit and contract tests
+        working-directory: device-app
+        run: cargo test --manifest-path device-core/Cargo.toml
+
+      - name: Build web frontend assets
+        working-directory: device-app
+        run: npm run build
+
+      - name: Build Universal macOS DMG and Application
+        working-directory: device-app
+        run: npx tauri build --target universal-apple-darwin
+
+      - name: Upload macOS Desktop Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xibalba-shield-desktop-macos
+          path: |
+            device-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            device-app/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: warn
