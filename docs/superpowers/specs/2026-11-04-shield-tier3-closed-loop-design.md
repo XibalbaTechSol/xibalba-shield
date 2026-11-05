@@ -283,7 +283,20 @@ infrastructure; C2 onward does.
 - Autonomy level: **full, including contain**, chosen with the risks stated.
 - Rejected: Tier 3 in the blocking path; cloud reaching into devices; designing toward "immunity".
 
-### 11.1 One interpretation that needs explicit confirmation
+### 11.1 Direct remote contain — APPROVED as an additional component (2026-11-04)
+
+**Resolved:** direct ad-hoc remote contain is wanted *in addition to* the rule pipeline. It becomes
+its own component (§12), with its own rate cap, its own kill switch, and its own receipt type, as
+anticipated below.
+
+This changes the critical path. Direct remote contain requires a way to deliver a command to a
+device, and devices sit behind NAT — the cloud cannot dial in. That channel is the control plane,
+which §9.4 already flagged as blocking C2+. **The control plane is therefore now blocking both
+remaining workstreams**, and is the highest-priority dependency in this design (§13).
+
+The original framing is kept below for the record.
+
+### 11.1a Original framing (superseded by the approval above)
 
 "Full autonomy including contain" was chosen. §3.2 and invariant I1 together route autonomous
 *contain* through the §6 rule pipeline (replay-checked, canary-promoted) rather than letting Tier 3
@@ -302,3 +315,110 @@ as a direct remote command.
 **If direct ad-hoc remote contain is wanted as well, say so and it becomes an explicit additional
 component** — with its own rate cap, its own kill switch, and its own receipt type. It is a
 deliberate design decision, not an oversight, and it is reversible either way.
+
+---
+
+## 12. Direct remote contain (approved 2026-11-04)
+
+A cloud-originated command that contains a named process on a named device, without a human and
+without waiting for the rule pipeline. This is the most dangerous component in the design, so its
+controls are part of its definition.
+
+### 12.1 Delivery: the device dials out, never in
+
+Endpoints are behind NAT; the control plane cannot open a connection to them. The agent therefore
+**long-polls a per-device command queue**:
+
+```
+GET /api/shield/devices/{device_id}/commands?wait=30   ->  [] | [SignedCommand]
+```
+
+Chosen over WebSocket/MQTT because it needs no new transport infrastructure, traverses corporate
+proxies, and reuses the HTTP server and auth that already exist. Latency is bounded by the poll
+window, which is acceptable: Tier 1/2 already handle anything needing millisecond response, and
+this path exists for cross-device correlation, not for beating a local threat.
+
+### 12.2 Commands are signed by the control plane and verified on the device
+
+A transport that can contain processes fleet-wide is a high-value target, so transport security is
+not the trust boundary. Each command is signed; the agent verifies before acting and rejects
+anything unsigned, badly signed, expired, or replayed.
+
+- Signing reuses this repo's existing key/trust machinery (`shield/config/signing.py` for policy
+  signing, `shield/release/` for package signing) rather than inventing a third scheme. Which trust
+  domain owns command signing is an open question (§13.3) — it must not silently share the policy
+  signing key.
+- Each command carries `device_id`, `nonce`, `issued_at`, and a short TTL. The agent keeps a seen-
+  nonce window and refuses replays. A command whose `device_id` is not this device is refused even
+  if correctly signed, so a captured command cannot be redirected.
+- **PID identity is re-verified before acting**, exactly as in the release path: between issuance
+  and execution the PID may have exited and been recycled.
+
+### 12.3 Controls (each independently testable)
+
+| Control | Requirement |
+|---|---|
+| Kill switch | Independent of the Tier 3 release switch; a device can refuse remote commands while still accepting adjudicated releases. Filesystem flag, no network needed. |
+| Rate cap | Per-device and per-fleet ceilings, enforced **on the device**, not only in the cloud. A cloud emitting mass contains cannot exceed the local cap. |
+| Fleet-wide ceiling | A single issuance may not target more than a configured fraction of the fleet without tripping to proposal-only. This is the control that prevents one bad verdict becoming a fleet outage. |
+| Receipt | Its own receipt type, distinct from adjudication receipts, recording issuer, nonce, verification result and outcome. |
+| Reversibility | Every remote contain has a corresponding remote release; a contain with no reachable inverse is refused. |
+| Audit | The issuing reason and the evidence it rested on are recorded with the command, so an operator can reconstruct why a machine was frozen. |
+
+### 12.4 Failure postures
+
+| Condition | Posture |
+|---|---|
+| Command signature invalid / expired / replayed | refuse, record, do not act |
+| `device_id` mismatch | refuse, record |
+| PID identity mismatch or PID gone | refuse, record, do not act |
+| Local rate cap exceeded | refuse, trip to observe-only, alert |
+| Control plane unreachable | no commands arrive; local Tiers 1/2 unaffected (never a fleet event, per §3.3) |
+| Receipt cannot be written | refuse to act |
+
+---
+
+## 13. The control plane (now the critical path)
+
+Blocking: C2/C3 fleet promotion (§6) and direct remote contain (§12).
+
+### 13.1 What it must provide
+
+1. **Durable multi-tenant storage** that survives redeploy — replaces today's SQLite on an
+   ephemeral disk (`shield/backend/store.py`), where accounts and sessions are wiped on every
+   restart, redeploy or free-tier spin-down.
+2. **A per-device command queue** with the long-poll endpoint in §12.1.
+3. **Device identity**, distinct from operator identity. Operator sign-in already works (Google
+   OIDC, live). A device is not a person and must not borrow a person's session.
+4. **Promotion state** for §6: which rule, from which event, which replay result, which canary
+   window, what promoted it.
+
+### 13.2 Measured starting position (2026-11-04)
+
+- Render Postgres: exactly one instance, `integrity-userapi-db` (`dpg-dbld7sqjnfac73flo1p0-a`),
+  **free plan**, `expiresAt: 2026-12-04`. Free Render Postgres is deleted at expiry, so this is a
+  dated liability for `integrity-userapi` independent of Shield.
+- Supabase: three projects (`DustInTime`, `app`, `CognitoFlow`), **all INACTIVE/paused**, none
+  Shield-related.
+- Shield service: free plan, sleeps when idle (~51s cold start measured), SQLite on ephemeral disk.
+
+Neither existing option is a production control plane today, and both free tiers fail the same way:
+they expire or pause. A security control plane that pauses is not a control plane.
+
+### 13.3 Open questions
+
+1. **Vendor and cost.** Render Postgres (paid) keeps one vendor and one region (`oregon`, matching
+   the Shield service) and is the smallest change. Supabase adds row-level security and managed
+   auth, but Shield's operator auth is already solved, so that upside is smaller than it looks, and
+   a paused free project is a worse failure mode here.
+2. **Does Shield share a database with `integrity-userapi`,** or get its own? Shared is cheaper;
+   separate keeps the Shield/Integrity product boundary that this repo's one-way dependency rule
+   exists to protect. Recommend separate.
+3. **Which trust domain signs device commands** (§12.2) — must not reuse the policy signing key.
+4. **Device enrolment and revocation.** How a device obtains its identity, and how a stolen device
+   is revoked, is unspecified and must be designed before §12 ships.
+
+### 13.4 Sequencing consequence
+
+Phase A (A1/A2) remains unblocked and needs none of this. Both C2+ and §12 wait on §13. The
+implementation plan therefore covers Phase A only, and the control plane needs its own spec.
