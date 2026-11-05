@@ -1,0 +1,7 @@
+[[permission]]
+identifier = "allow-device-commands"
+description = "Enables device_overview and resume_process IPC commands"
+commands.allow = [
+  "device_overview",
+  "resume_process"
+]

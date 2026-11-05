@@ -142,3 +142,65 @@ test('fits a phone width without sideways page scroll', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(1)
 })
+
+test('renders endpoint identity, dual-agent chassis, network telemetry, and security posture when paired', async ({ page }) => {
+  const pairedOverview = {
+    ...OVERVIEW,
+    device_info: {
+      endpoint_identity: 'xibalba-HP-Desktop-M01-F0xxx',
+      device_id: 'fb81289f6c384248a86663035ee70511',
+      tenant_id: 'jacob-v-universe-org',
+      device_role: 'hybrid_real',
+      agent_did: 'did:integrity:d6de94edbf5d7aef06e90b4d237a1369f5a475ff970312d56c08c4f96b892831',
+      backend_url: 'https://xibalba-shield.onrender.com',
+      key_path: '/home/xibalba/.shield/did/private_key.pem',
+      local_agent_status: 'Active (Sub-millisecond Confinement)',
+      cloud_agent_status: 'Paired (Fleet Reasoning & Advisory)',
+      decisions_count: 38298,
+      network: {
+        interface_name: 'wlp9s0',
+        mac_address: 'e8:b1:fc:fd:3d:3d',
+        local_ip: '192.168.68.109',
+        gateway_ip: '192.168.68.1',
+        loopback_port: 8436,
+        loopback_status: 'Listening (RFC 8628 Loopback)',
+        cloud_egress_url: 'https://xibalba-shield.onrender.com/api/shield/events',
+        policy_sync_url: 'https://xibalba-shield.onrender.com/api/shield/policy',
+        egress_confined: true,
+        oracle_configured: true,
+      },
+      security: {
+        mcp_firewall_status: 'Active · Sensitive Tool & Param Boundary Gated',
+        jev_confinement_status: 'Enforcing · Sub-millisecond SIGSTOP (<1ms)',
+        process_isolation_mode: 'Landlock & Cgroup v2 Confinement Active',
+        circuit_breaker_status: 'Armored · Denial-of-Wallet & Loop Guarded',
+        key_boundary_status: '0600 POSIX File Boundary (Strict Local Only)',
+      },
+    },
+  }
+
+  await asDeviceApp(page, ({ cmd }) => (cmd === 'device_overview' ? pairedOverview : {}))
+  await page.goto('/')
+
+  // Identity and cryptographic anchor
+  await expect(page.getByText('xibalba-HP-Desktop-M01-F0xxx')).toBeVisible()
+  await expect(page.getByText('did:integrity:d6de94edbf5d7aef06e90b4d237a1369f5a475ff970312d56c08c4f96b892831')).toBeVisible()
+  await expect(page.getByText('0600 POSIX Bound')).toBeVisible()
+
+  // Dual-agent chassis
+  await expect(page.getByRole('heading', { name: 'Fast Local Agent (JEV Confinement)' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Cloud Inference Agent (Fleet Loop)' })).toBeVisible()
+  await expect(page.getByText('38,298+')).toBeVisible()
+
+  // Network and hardware telemetry
+  await expect(page.getByText('e8:b1:fc:fd:3d:3d')).toBeVisible()
+  await expect(page.getByText('192.168.68.109/24')).toBeVisible()
+  await expect(page.getByText('192.168.68.1', { exact: true })).toBeVisible()
+  await expect(page.getByText('Port 8436 (RFC 8628)')).toBeVisible()
+
+  // Security posture
+  await expect(page.getByText('MCP Tool Call Firewall')).toBeVisible()
+  await expect(page.getByText('Landlock & Cgroups Sandboxing')).toBeVisible()
+  await expect(page.getByText('Denial-of-Wallet Breaker')).toBeVisible()
+  await expect(page.getByText('Integrity Provenance Anchor')).toBeVisible()
+})
