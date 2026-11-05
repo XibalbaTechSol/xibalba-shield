@@ -53,17 +53,24 @@ def _no_real_oracle_identity_lookups(monkeypatch):
 
 
 def _build_dist(tmp_path):
-    """A minimal stand-in for a real `vite build` output tree."""
+    """A minimal stand-in for a real `vite build` output tree.
+
+    Written as bytes, not text. `write_text` applies the platform's newline translation, so on
+    Windows every `\\n` here would land on disk as `\\r\\n` -- the server would then serve those
+    bytes faithfully and a byte-for-byte assertion would fail for a difference the fixture
+    introduced, not the handler. A real build output is bytes; this fixture is too.
+    """
     dist = tmp_path / "ui" / "dist"
     (dist / "assets").mkdir(parents=True)
-    (dist / "index.html").write_text(
-        f'<!doctype html>\n<html lang="en">{INDEX_MARKER}'
-        '<head><script type="module" src="/assets/app.js"></script></head>'
-        '<body><div id="root"></div></body></html>\n',
-        encoding="utf-8",
+    (dist / "index.html").write_bytes(
+        (
+            f'<!doctype html>\n<html lang="en">{INDEX_MARKER}'
+            '<head><script type="module" src="/assets/app.js"></script></head>'
+            '<body><div id="root"></div></body></html>\n'
+        ).encode("utf-8")
     )
-    (dist / "assets" / "app.js").write_text(ASSET_JS, encoding="utf-8")
-    (dist / "favicon.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+    (dist / "assets" / "app.js").write_bytes(ASSET_JS.encode("utf-8"))
+    (dist / "favicon.svg").write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
     return dist
 
 
