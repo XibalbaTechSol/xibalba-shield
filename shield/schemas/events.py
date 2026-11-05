@@ -18,6 +18,12 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
+# Tier 3 adjudication vocabulary. Deliberately separate from Decision.action (the in-path
+# enforcement vocabulary gate_daemon.py collapses): adding "release" there would change every
+# exhaustive handler. Adjudication verdicts stay out of enforcement vocabulary.
+Tier3Verdict = Literal["release", "confirm", "uncertain"]
+
+
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -222,7 +228,7 @@ class Decision:
     # Default "tier1" matches existing behavior for any pre-existing Decision(...) call site
     # that doesn't set this explicitly -- Tier 1 is the first (and, until now, often only)
     # evaluator every event sees.
-    tier: Literal["tier1", "tier2", "tier2_unresolved"] = "tier1"
+    tier: Literal["tier1", "tier2", "tier2_unresolved", "tier3"] = "tier1"
     confidence: float = 1.0
     risk_score: float = 0.0
     human_required: bool = False
@@ -326,7 +332,7 @@ class EnforcementOutcome:
 @dataclass
 class EscalationRequest:
     """docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md — what a Tier-2-still-
-    uncertain event carries if/when it escalates to a future Tier 3. Carries the FULL
+    uncertain event carries when it escalates to Tier 3. Carries the FULL
     decision trail (Tier 1's original decision, Tier 2's revision), not just the final
     outcome — an auditor or a future cloud model needs to see what already ran and what
     each tier concluded, not just "still escalate"."""
@@ -340,16 +346,19 @@ class EscalationRequest:
 
 @dataclass
 class EscalationResponse:
-    """Mirrors PolicyDecision's decision-bearing shape closely enough that a future Tier-3
-    backend can be a drop-in `evaluate()`-shaped call, the same convention
-    `shield/agent_core/slm_backend.py`'s `SlmBackend` protocol already establishes for Tier 2
-    (`evaluate(event, ctx) -> PolicyDecision`). Not yet produced by any real code — no Tier 3
-    exists (docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md's explicit deferral) —
-    this shape exists so a future Tier3Backend has a real contract to implement against."""
+    """Mirrors PolicyDecision's decision-bearing shape closely enough that a Tier-3 backend can
+    be a drop-in `evaluate()`-shaped call, the same convention `shield/agent_core/slm_backend.py`'s
+    `SlmBackend` protocol already establishes for Tier 2 (`evaluate(event, ctx) -> PolicyDecision`).
+
+    `verdict` is the Tier 3 adjudication outcome. It defaults to "uncertain" on purpose: a
+    response that never set a verdict must fail closed and never read as "release".
+    Adjudication is off the blocking path: it runs after local containment. Nothing here
+    computes AIS; Tier 3 never approximates it."""
 
     decision: Decision
     reason: str = ""
     time: str = field(default_factory=_now_iso)
+    verdict: Tier3Verdict = "uncertain"
 
 
 # §5.6 — security-event intent_type namespace. Extends BCC Commitment.intent_type the same
