@@ -77,6 +77,7 @@ references rather than raw command content.
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
@@ -535,6 +536,13 @@ def remove_stale_socket(socket_path: Path) -> bool:
     except (ConnectionRefusedError, FileNotFoundError):
         socket_path.unlink(missing_ok=True)
         return True
+    except OSError as err:
+        # On Darwin/macOS, connecting to a regular file (e.g. stale non-socket file) raises
+        # ENOTSOCK (Errno 38: Socket operation on non-socket). That path is dead/stale.
+        if err.errno in (errno.ENOTSOCK, errno.ECONNREFUSED, errno.ENOENT):
+            socket_path.unlink(missing_ok=True)
+            return True
+        raise
     else:
         raise OSError(f"a gate daemon is already listening on {socket_path}")
     finally:

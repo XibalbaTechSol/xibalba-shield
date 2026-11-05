@@ -75,6 +75,7 @@ def test_failed_freeze_reports_no_latency_rather_than_a_fast_one():
 
 
 @posix_only
+@pytest.mark.skipif(not os.path.exists("/proc"), reason="/proc required for process stat test")
 def test_shield_resume_really_continues_a_frozen_process(capsys, tmp_path):
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:

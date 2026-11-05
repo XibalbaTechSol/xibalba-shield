@@ -8,16 +8,25 @@
 //! compiled in the sandbox where it was written. `device-core` is tested; this shell is not.
 //! Build and exercise it with `npm run tauri dev` on a desktop machine before relying on it.
 
-use device_core::{overview, resume_command, Overview, Paths, ProcState};
+use device_core::{overview, resume_command, Overview, Paths};
+#[cfg(desktop)]
+use device_core::ProcState;
 use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
+
+#[cfg(desktop)]
 use std::time::Duration;
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
+#[cfg(desktop)]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+#[cfg(desktop)]
 use tauri::{AppHandle, Manager, WindowEvent};
 
+#[cfg(desktop)]
 const TRAY_ID: &str = "main";
+#[cfg(desktop)]
 const POLL_SECONDS: u64 = 5;
 const DECISION_LIMIT: usize = 50;
 
@@ -71,6 +80,7 @@ fn resume_process(pid: i64, event_id: Option<String>) -> Result<ResumeResult, St
     })
 }
 
+#[cfg(desktop)]
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -80,6 +90,7 @@ fn show_main(app: &AppHandle) {
 }
 
 /// Tooltip text from real state: only freezes the OS still shows as stopped are counted.
+#[cfg(desktop)]
 fn tooltip() -> String {
     match paths() {
         Ok(p) => {
@@ -94,55 +105,64 @@ fn tooltip() -> String {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![device_overview, resume_process])
-        .setup(|app| {
-            let open = MenuItem::with_id(app, "open", "Open Shield", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &quit])?;
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![device_overview, resume_process]);
 
-            let mut builder = TrayIconBuilder::with_id(TRAY_ID)
-                .tooltip("Xibalba Shield")
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => show_main(app),
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        show_main(tray.app_handle());
-                    }
-                });
-            if let Some(icon) = app.default_window_icon() {
-                builder = builder.icon(icon.clone());
-            }
-            builder.build(app)?;
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .setup(|app| {
+                let open = MenuItem::with_id(app, "open", "Open Shield", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&open, &quit])?;
 
-            // Keep the tooltip honest without the window open.
-            let handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                if let Some(tray) = handle.tray_by_id(TRAY_ID) {
-                    let _ = tray.set_tooltip(Some(tooltip()));
+                let mut tray_builder = TrayIconBuilder::with_id(TRAY_ID)
+                    .tooltip("Xibalba Shield")
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "open" => show_main(app),
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            show_main(tray.app_handle());
+                        }
+                    });
+                if let Some(icon) = app.default_window_icon() {
+                    tray_builder = tray_builder.icon(icon.clone());
                 }
-                std::thread::sleep(Duration::from_secs(POLL_SECONDS));
+                tray_builder.build(app)?;
+
+                // Keep the tooltip honest without the window open.
+                let handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    if let Some(tray) = handle.tray_by_id(TRAY_ID) {
+                        let _ = tray.set_tooltip(Some(tooltip()));
+                    }
+                    std::thread::sleep(Duration::from_secs(POLL_SECONDS));
+                });
+                Ok(())
+            })
+            .on_window_event(|window, event| {
+                // Closing the window hides it; "Quit" in the tray menu is the only way to exit, so
+                // the app keeps watching in the tray.
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             });
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            // Closing the window hides it; "Quit" in the tray menu is the only way to exit, so
-            // the app keeps watching in the tray.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-            }
-        })
+    }
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running the Shield device app");
 }

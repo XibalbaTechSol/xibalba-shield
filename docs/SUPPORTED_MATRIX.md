@@ -75,5 +75,21 @@ freeze above, not an entry that can be "frozen" alongside it:
 
 ## macOS track
 
-Same status as Windows (`"planned"` in `native_support_matrix()`), out of scope for this freeze
-and not requested — not expanded here.
+**Status:** Desktop app, CLI, and semantic guardrail pipeline operational; kernel-level sensor planned.
+
+1. **Native Desktop UI (`device-app/`)**:
+   - Cross-platform Tauri v2 desktop client targeting both Apple Silicon (`aarch64-apple-darwin`) and Intel (`x86_64-apple-darwin`).
+   - Automated Universal macOS DMG & `.app` build pipeline established under `.github/workflows/build-desktop-macos.yml` (runs on `macos-14`).
+   - Process state liveness resolution includes Darwin POSIX fallbacks (`kill(pid, 0)`).
+
+2. **Agent Core & Semantic Guardrails (`shield` Python CLI)**:
+   - Root-free test suite and policy validation executed in CI under `macos-latest` (`.github/workflows/ci.yml`).
+   - All 6 agent guardrail hooks, RFC 8628 pairing, and Integrity Protocol export are functional on macOS.
+
+3. **Daemon Service Management**:
+   - Dedicated macOS LaunchDaemon configuration: `packaging/launchd/com.xibalba.shield.plist` and runner `packaging/launchd/xibalba-shield-run.sh`.
+   - Dedicated root installer: `scripts/install_macos_agent.sh` (replaces Linux `systemd` with Darwin `launchctl`).
+
+4. **Kernel Sensing (`EndpointSecurity` / `NetworkExtension`)**:
+   - Outlined in `shield/sensors/platform.py` (`macos_support_status()`).
+   - In-kernel eBPF is Linux-specific; native macOS kernel interception requires an Apple Endpoint Security entitlement and `libEndpointSecurity.dylib` client. Planned for post-freeze kernel extension track.

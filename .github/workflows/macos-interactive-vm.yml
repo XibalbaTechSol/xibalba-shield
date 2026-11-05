@@ -1,0 +1,43 @@
+name: Interactive macOS Debug VM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos-interactive:
+    name: Interactive macOS Session
+    runs-on: macos-14
+    timeout-minutes: 360
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install OPA on macOS
+        run: |
+          ARCH="$(uname -m)"
+          if [ "$ARCH" = "x86_64" ]; then
+            curl --fail --location -o opa https://openpolicyagent.org/downloads/v1.18.2/opa_darwin_amd64
+          else
+            curl --fail --location -o opa https://openpolicyagent.org/downloads/v1.18.2/opa_darwin_arm64
+          fi
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+
+      - name: Install Shield & Dependencies
+        run: |
+          python -m pip install -e .
+
+      - name: Start Interactive SSH Session (tmate)
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false

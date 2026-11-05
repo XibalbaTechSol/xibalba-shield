@@ -192,9 +192,9 @@ def test_cortex_outbox_rejects_when_storage_ceiling_is_reached(tmp_path, monkeyp
         base_url="http://127.0.0.1:1", token="token", agent_id="agent-a",
         device_id="device-a", outbox_path=tmp_path / "outbox.sqlite3",
     )
-    monkeypatch.setattr(
-        cortex_memory, "_OUTBOX_MAX_BYTES", provider._outbox_size_bytes() + 1,
-    )
+    # Set ceiling below the initialized database size to simulate reaching capacity
+    # reliably across platforms without sensitivity to SQLite WAL checkpointing.
+    monkeypatch.setattr(cortex_memory, "_OUTBOX_MAX_BYTES", 1)
     provider._enqueue({"content": "bounded"}, "capacity")
     assert provider.status()["pending"] == 0
     assert provider.metrics()["capacity_dropped_total"] == 1
