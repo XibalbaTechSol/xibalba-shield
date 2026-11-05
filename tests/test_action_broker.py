@@ -194,6 +194,9 @@ def test_cgroup_freeze_and_resume_use_cgroup_freeze_file(tmp_path):
     cgroup.mkdir()
     freeze_file = cgroup / "cgroup.freeze"
     freeze_file.write_text("0\n", encoding="ascii")
+    # Real cgroup v2 directories always expose cgroup.procs; the protected-process interlock
+    # reads it to refuse freezing a group that contains a protected member.
+    (cgroup / "cgroup.procs").write_text("", encoding="ascii")
     broker = ActionBroker(enable_cgroup=True, readiness=_passed_readiness())
 
     frozen = broker.freeze(4242, cgroup_path=cgroup)

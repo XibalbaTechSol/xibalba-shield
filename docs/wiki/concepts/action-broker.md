@@ -2,12 +2,13 @@
 title: Action Broker
 acronyms: []
 created: 2026-08-12
-updated: 2026-09-08
+updated: 2026-11-05
 type: concept
 tags: [containment, enforcement]
 confidence: high
 source_files:
   - shield/agent_core/action_broker.py
+  - shield/agent_core/protected_processes.py
   - shield/agent_core/router.py
   - shield/cli.py
   - docs/audits/2026-08-07-action-broker.md
@@ -17,6 +18,7 @@ source_files:
 
 - [Overview](#overview)
 - [Containment methods](#containment-methods)
+- [Protected-process interlock](#protected-process-interlock)
 - [Wired into shield run's live loop as of 2026-08-12](#wired-into-shield-run-s-live-loop-as-of-2026-08-12)
 - [Verification record](#verification-record)
 - [Related pages](#related-pages)
@@ -54,6 +56,25 @@ class ActionBroker:
 
 `SIGKILL` is never the primary or default action — it only fires from an explicit timeout
 escalation, never as a direct response to a `contain` decision.
+
+## Protected-process interlock
+
+`ProtectedProcessGuard` (`shield/agent_core/protected_processes.py`) runs **inside** the broker's
+`freeze`, `kill_process`, `escalate_to_kill`, and `freeze_cgroup` paths, so no caller can bypass
+it. It is on by default; there is no disable switch. A refusal raises `ProtectedProcessError`
+*before any signal is sent*; the router records it as a failed containment
+(`EnforcementOutcome.completed=False`). `resume` is never guarded: recovery must always work.
+
+Protected: pid <= 1, Shield's own pid and every ancestor, explicit `extra_pids`, and system
+binaries (`sshd`, `systemd`, `dbus-daemon`, `containerd`, `dockerd`, `opa`, `shield`, ...).
+Identity is the resolved `/proc/<pid>/exe`, not `comm`/argv (a process can rename itself), and a
+name match counts only if the binary sits under a root-owned directory (`/usr/sbin/`, ...), so a
+copy named `sshd` in `/tmp` gets no immunity. A cgroup freeze is refused if any member is
+protected or membership is unreadable.
+
+Fail posture: **closed**. A live process whose exe cannot be read is treated as protected.
+Limits: with no `/proc` (Windows/macOS) only the pid-based rules apply; name-based protection
+there is `[PLANNED]`. This changes no default (`--enforcement-mode` is still `enforce`).
 
 ## Wired into `shield run`'s live loop as of 2026-08-12
 

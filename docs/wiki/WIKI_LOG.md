@@ -358,3 +358,12 @@
   endpoint credentials, query parameters, and fragments are rejected by both UI and backend.
 - Recorded backend and browser checks, including rejection before POST and desktop/mobile Settings
   coverage. Execution remains shadow-only with strict redaction.
+
+## [2026-11-05] code | Protected-process interlock added to ActionBroker
+
+- Added `shield/agent_core/protected_processes.py` and wired it into every actuator path in
+  `action_broker.py` (fail-closed; exe-path identity; `resume` exempt). Updated
+  `concepts/action-broker.md`.
+- Tests: `tests/test_protected_processes.py` (fake-/proc, deterministic) plus a cgroup test fix
+  (`cgroup.procs` now required). Full suite matches `main` on the 80 pre-existing failures/errors
+  (no `opa` binary in the CI container); +16 passing.
