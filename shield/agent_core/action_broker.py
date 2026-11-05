@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .protected_processes import ProtectedProcessGuard
 from .readiness import ProductionReadiness
 from .responders import ResponderCapabilities, ResponderDisabled
 
@@ -104,7 +105,12 @@ class ActionBroker:
         enable_network: bool = False,
         block_network: Callable[[dict[str, object]], str] | None = None,
         readiness: ProductionReadiness | None = None,
+        guard: ProtectedProcessGuard | None = None,
     ) -> None:
+        # Interlock is ON by default: an actuator must be safe without opt-in. Pass a custom
+        # guard to extend it (extra_pids, exe_names); there is deliberately no `guard=None`
+        # disable switch -- tests that need to bypass it inject a guard over a fake /proc.
+        self.guard = guard or ProtectedProcessGuard()
         self._kill = kill
         self._win_freeze = win_freeze
         self._win_resume = win_resume
@@ -143,9 +149,11 @@ class ActionBroker:
     def freeze(self, pid: int, *, cgroup_path: str | os.PathLike[str] | None = None) -> ActionResult:
         """Freeze a process, preferring cgroup v2 when explicitly requested."""
         self._validate_pid(pid)
+        self.guard.assert_allowed(pid)
         if cgroup_path is not None:
             if not self.capabilities.freeze_cgroup:
                 raise ResponderDisabled("freeze_cgroup is disabled until every production readiness proof passes")
+            self.guard.assert_cgroup_allowed(cgroup_path)
             freeze_file = self._cgroup_freeze_file(cgroup_path)
             freeze_file.write_text("1\n", encoding="ascii")
             return ActionResult(pid, "freeze", "cgroup.freeze", True, cgroup_path=str(freeze_file.parent))
@@ -167,6 +175,7 @@ class ActionBroker:
         self._validate_pid(pid)
         if not self.capabilities.kill_process:
             raise ResponderDisabled("kill_process is disabled until every production readiness proof passes")
+        self.guard.assert_allowed(pid)
         if sys.platform == "win32" or self._win_kill is not None:
             method = self._win_kill(pid) if self._win_kill else _default_win32_kill(pid)
             return ActionResult(pid, "terminate", method, True)
@@ -180,6 +189,9 @@ class ActionBroker:
         """Cgroup freeze responder reserved until its runtime gate passes."""
         if not self.capabilities.freeze_cgroup:
             raise ResponderDisabled("freeze_cgroup is disabled until every production readiness proof passes")
+        if pid:
+            self.guard.assert_allowed(pid)
+        self.guard.assert_cgroup_allowed(cgroup_path)
         freeze_file = self._cgroup_freeze_file(cgroup_path)
         freeze_file.write_text("1\n", encoding="ascii")
         return ActionResult(pid, "freeze", "cgroup.freeze", True, cgroup_path=str(freeze_file.parent))
@@ -228,6 +240,8 @@ class ActionBroker:
             raise ResponderDisabled("kill_process is disabled until every production readiness proof passes")
         if timeout_seconds < 0:
             raise ValueError("timeout_seconds must be non-negative")
+        # Checked BEFORE the wait: refuse early rather than after a long blocking sleep.
+        self.guard.assert_allowed(pid)
         deadline = self._monotonic() + timeout_seconds
         while True:
             remaining = deadline - self._monotonic()
