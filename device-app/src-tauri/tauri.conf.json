@@ -11,7 +11,7 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Xibalba Shield", "width": 980, "height": 700, "minWidth": 480, "minHeight": 520 }
+      { "label": "main", "title": "Xibalba Shield", "width": 1180, "height": 820, "minWidth": 480, "minHeight": 520, "devtools": true }
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"

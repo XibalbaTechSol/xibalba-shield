@@ -3,5 +3,8 @@
   "identifier": "default",
   "description": "The main window may call the app's own commands and nothing else. No filesystem, shell, or opener plugin is granted: the Rust commands are the only way the UI touches the device.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "allow-device-commands"
+  ]
 }

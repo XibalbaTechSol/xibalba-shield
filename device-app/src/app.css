@@ -34,8 +34,51 @@ button:focus-visible { outline: 2px solid var(--shield-accent); outline-offset: 
 .message pre { margin: 8px 0 0; white-space: pre-wrap; font: 12px/1.5 var(--font-mono); color: var(--ink-muted); }
 .notes { margin: 0; padding-left: 18px; color: var(--ink-muted); display: flex; flex-direction: column; gap: 6px; }
 code { font-family: var(--font-mono); font-size: 12px; }
+
+/* Enhanced Endpoint Architecture & Telemetry Styles */
+.header-actions { display: flex; align-items: center; gap: 12px; }
+.badge { display: inline-flex; align-items: center; padding: 3px 8px; font: 700 11px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--hairline); }
+.badge.accent { border-color: var(--shield-accent); color: var(--shield-accent); background: rgba(159, 195, 223, 0.08); }
+.badge.success { border-color: #68d391; color: #68d391; background: rgba(104, 211, 145, 0.08); }
+.badge.warning { border-color: var(--status-review); color: var(--status-review); background: rgba(215, 170, 108, 0.08); }
+
+.identity-bar { background: var(--elevated); border: 1px solid var(--hairline); padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.identity-main { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.identity-meta { display: flex; align-items: center; gap: 10px; }
+.identity-title { margin: 0; font: 600 20px/1.2 var(--font-condensed); letter-spacing: 0.02em; display: flex; align-items: center; gap: 8px; }
+.identity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding-top: 8px; border-top: 1px solid var(--hairline-faint); }
+.identity-field { display: flex; flex-direction: column; gap: 2px; }
+.field-label { font: 700 10px/1 var(--font-body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+.field-value { font-size: 12px; color: var(--ink); word-break: break-all; }
+
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+.agent-card { background: var(--elevated); border: 1px solid var(--frame-line); padding: 20px; display: flex; flex-direction: column; gap: 14px; position: relative; }
+.agent-card.local-agent { border-left: 3px solid var(--shield-accent); }
+.agent-card.cloud-agent { border-left: 3px solid #68d391; }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.card-header h3 { margin: 0; font: 600 19px/1.1 var(--font-condensed); color: var(--ink); }
+.card-desc { margin: 0; font-size: 13px; color: var(--ink-muted); line-height: 1.4; }
+.stats-row { display: flex; gap: 16px; padding: 10px 0; border-top: 1px solid var(--hairline-faint); border-bottom: 1px solid var(--hairline-faint); }
+.stat-item { display: flex; flex-direction: column; gap: 2px; }
+.stat-val { font: 700 18px/1 var(--font-mono); color: var(--ink); }
+.stat-lbl { font: 600 10px/1 var(--font-body); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-dim); }
+.agent-specs { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-muted); }
+.spec-line { display: flex; justify-content: space-between; gap: 8px; }
+.spec-line span:first-child { color: var(--ink-dim); }
+
+.telemetry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.telemetry-card { background: var(--elevated); border: 1px solid var(--hairline-faint); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.telemetry-label { font: 700 10px/1 var(--font-body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+.telemetry-val { font-family: var(--font-mono); font-size: 13px; color: var(--ink); word-break: break-all; }
+
+.posture-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.posture-card { border: 1px solid var(--hairline-faint); padding: 14px; background: rgba(255, 255, 255, 0.02); display: flex; flex-direction: column; gap: 6px; }
+.posture-title { font: 700 11px/1 var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--shield-accent); margin: 0; }
+.posture-desc { font-size: 12px; color: var(--ink-muted); margin: 0; line-height: 1.4; }
+
 @media (max-width: 640px) {
   .device { padding: 20px 14px 40px; }
   .device-header { flex-direction: column; }
+  .grid-2, .identity-grid, .telemetry-grid, .posture-grid { grid-template-columns: 1fr; }
   table { display: block; overflow-x: auto; }
 }
