@@ -226,8 +226,9 @@ class Decision:
     # than requiring log correlation to reconstruct whether Tier 1 resolved it, Tier 2 revised
     # it, or Tier 2 was asked and remained unable to resolve it (see `router.py`'s handle()).
     # Default "tier1" matches existing behavior for any pre-existing Decision(...) call site
-    # that doesn't set this explicitly -- Tier 1 is the first (and, until now, often only)
-    # evaluator every event sees.
+    # that doesn't set this explicitly -- Tier 1 is the first evaluator every event sees.
+    # "tier3" means the decision was produced or revised by Tier 3 cloud adjudication.
+    # No code sets it yet: the Tier 3 backend does not exist, so this is vocabulary only.
     tier: Literal["tier1", "tier2", "tier2_unresolved", "tier3"] = "tier1"
     confidence: float = 1.0
     risk_score: float = 0.0
@@ -332,7 +333,8 @@ class EnforcementOutcome:
 @dataclass
 class EscalationRequest:
     """docs/archive/2026-08/2026-08-18-a2a-escalation-schema-proposal.md — what a Tier-2-still-
-    uncertain event carries when it escalates to Tier 3. Carries the FULL
+    uncertain event would carry if it escalated to Tier 3. This is vocabulary only: no Tier3Backend
+    exists yet, and router.py still fails closed to contain ("no Tier 3 configured"). Carries the FULL
     decision trail (Tier 1's original decision, Tier 2's revision), not just the final
     outcome — an auditor or a future cloud model needs to see what already ran and what
     each tier concluded, not just "still escalate"."""
@@ -346,14 +348,17 @@ class EscalationRequest:
 
 @dataclass
 class EscalationResponse:
-    """Mirrors PolicyDecision's decision-bearing shape closely enough that a Tier-3 backend can
+    """Mirrors PolicyDecision's decision-bearing shape closely enough that a Tier-3 backend could
     be a drop-in `evaluate()`-shaped call, the same convention `shield/agent_core/slm_backend.py`'s
     `SlmBackend` protocol already establishes for Tier 2 (`evaluate(event, ctx) -> PolicyDecision`).
 
+    This is vocabulary only: no Tier3Backend exists yet, and router.py still fails closed to
+    contain ("no Tier 3 configured").
+
     `verdict` is the Tier 3 adjudication outcome. It defaults to "uncertain" on purpose: a
     response that never set a verdict must fail closed and never read as "release".
-    Adjudication is off the blocking path: it runs after local containment. Nothing here
-    computes AIS; Tier 3 never approximates it."""
+    Tier 3 is designed to run after local containment, off the blocking path. Nothing here
+    computes AIS; Tier 3 is not intended to approximate it."""
 
     decision: Decision
     reason: str = ""

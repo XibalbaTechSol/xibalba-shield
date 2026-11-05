@@ -10,18 +10,20 @@ def test_decision_accepts_tier3():
     # succeeds even before the vocabulary is extended. Assert the declared vocabulary too,
     # so this test actually fails until "tier3" is part of the Decision.tier annotation.
     hints = typing.get_type_hints(Decision)
-    assert "tier3" in typing.get_args(hints["tier"])
-    assert "tier1" in typing.get_args(hints["tier"])
+    assert set(typing.get_args(hints["tier"])) == {"tier1", "tier2", "tier2_unresolved", "tier3"}
     assert Decision(action="allow").tier == "tier1"
-
-    d = Decision(action="contain", tier="tier3")
-    assert d.tier == "tier3"
 
 
 def test_tier3_verdict_vocabulary():
     from shield.schemas.events import Tier3Verdict
 
-    assert typing.get_args(Tier3Verdict) == ("release", "confirm", "uncertain")
+    assert set(typing.get_args(Tier3Verdict)) == {"release", "confirm", "uncertain"}
+
+
+def test_escalation_response_verdict_type_is_tier3verdict():
+    from shield.schemas.events import Tier3Verdict
+
+    assert typing.get_type_hints(EscalationResponse)["verdict"] == Tier3Verdict
 
 
 def test_escalation_response_defaults_to_uncertain():
