@@ -87,7 +87,8 @@ def test_group_shared_spool_sets_group_modes_under_strict_umask(tmp_path):
     finally:
         os.umask(old_umask)
     root_mode = stat.S_IMODE((tmp_path / "spool").stat().st_mode)
-    assert root_mode == 0o2770
+    expected_root_mode = 0o770 if sys.platform == "darwin" else 0o2770
+    assert root_mode == expected_root_mode
     envelope = next((tmp_path / "spool" / "pending").glob("*.json"))
     assert stat.S_IMODE(envelope.stat().st_mode) == 0o640
     assert stat.S_IMODE(spool.state_path.stat().st_mode) == 0o660
@@ -107,7 +108,10 @@ def test_group_shared_spool_still_refuses_world_access(tmp_path):
         spool._ensure_dirs()
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX setgid/chmod and systemd sandbox specific")
+@pytest.mark.skipif(
+    sys.platform in ("win32", "darwin"),
+    reason="Linux setgid/chmod and systemd sandbox specific",
+)
 def test_group_shared_opens_under_a_sandbox_that_forbids_setgid_chmod(tmp_path, monkeypatch):
     # systemd RestrictSUIDSGID=true: chmod with S_ISGID fails with EPERM, even as the owner
     # and even when the directory is already 2770. That crashed the C5 install's step 4.
