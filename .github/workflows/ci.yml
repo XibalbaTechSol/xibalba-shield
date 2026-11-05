@@ -129,7 +129,7 @@ jobs:
           python -m pip install -e ./integrity-core/integrity-sdk
           python -m pip install -e ".[dev]"
       - name: Run macOS root-free tests
-        run: pytest -q tests
+        run: pytest -q --basetemp=/tmp/t tests
       - name: Validate default policy packs
         run: |
           shield validate --rules policies/defaults/smb.json

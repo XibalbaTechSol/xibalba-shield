@@ -68,6 +68,6 @@ jobs:
         with:
           name: xibalba-shield-desktop-macos
           path: |
-            device-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            device-app/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            device-app/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            device-app/target/universal-apple-darwin/release/bundle/macos/*.app
           if-no-files-found: warn
