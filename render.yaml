@@ -11,6 +11,11 @@ services:
     envVars:
       - key: HOST
         value: "0.0.0.0"
+      # The build installs the package with `uv sync --no-editable`, so shield/backend/api.py
+      # ends up in site-packages and cannot find ui/dist by walking up from itself. Point at
+      # the checkout explicitly, or the backend silently serves its built-in fallback console.
+      - key: SHIELD_UI_DIR
+        value: /opt/render/project/src/ui/dist
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
