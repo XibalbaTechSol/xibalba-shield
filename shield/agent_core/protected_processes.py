@@ -33,6 +33,7 @@ Fail posture (stated per the repo convention): FAIL CLOSED for protection.
 from __future__ import annotations
 
 import os
+import posixpath
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -109,10 +110,20 @@ class ProtectedProcessGuard:
         return chain
 
     def _exe_of(self, pid: int) -> str | None:
+        """Executable path of `pid`, as a POSIX string, or None if unreadable.
+
+        The kernel already returns a canonical absolute path for /proc/<pid>/exe, so no
+        realpath() is applied: on Windows, ntpath.realpath would rewrite "/usr/sbin/sshd" to
+        "C:\\usr\\sbin\\sshd" and break prefix matching (the fake-/proc tests exercise this
+        code on the Windows CI runner). Separators are normalised only where os.sep is a
+        backslash, so Linux paths -- where a backslash is a legal filename character -- are
+        never rewritten.
+        """
         try:
-            return os.path.realpath(os.readlink(self._proc_dir(pid) / "exe"))
+            target = os.readlink(self._proc_dir(pid) / "exe")
         except OSError:
             return None
+        return target.replace("\\", "/") if os.sep == "\\" else target
 
     # -- public API -------------------------------------------------------------------------
     def check(self, pid: int) -> ProtectionVerdict:
@@ -134,7 +145,7 @@ class ProtectedProcessGuard:
         if exe is None:
             return ProtectionVerdict(True, f"pid {pid} identity unreadable (fail closed)")
         # Linux appends " (deleted)" when the binary was unlinked after exec.
-        base = os.path.basename(exe.removesuffix(" (deleted)"))
+        base = posixpath.basename(exe.removesuffix(" (deleted)"))
         if base in self.exe_names and exe.startswith(self.trusted_prefixes):
             return ProtectionVerdict(True, f"pid {pid} runs protected system binary {exe}")
         return ProtectionVerdict(False)
