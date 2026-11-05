@@ -3,15 +3,25 @@ import { ShieldApi } from './api'
 import { Landing } from './components/Landing'
 import { SignIn } from './components/SignIn'
 import { Dashboard } from './components/Dashboard'
+import { DevicePair } from './components/DevicePair'
 import './App.css'
 import { readSession, writeSession, removeSession } from './storage'
 
 export default function App() {
-  const [view, setView] = useState(() =>
-    readSession('shield-session')
-      ? 'dashboard'
-      : 'landing'
-  )
+  const isPairRoute = () => {
+    try {
+      const hash = window.location.hash || ''
+      const search = window.location.search || ''
+      return hash.startsWith('#pair') || search.includes('pair=')
+    } catch {
+      return false
+    }
+  }
+
+  const [view, setView] = useState(() => {
+    if (isPairRoute()) return 'pair'
+    return readSession('shield-session') ? 'dashboard' : 'landing'
+  })
 
   const [connection, setConnection] = useState(() =>
     JSON.parse(readSession('shield-connection', '{}'))
@@ -20,8 +30,20 @@ export default function App() {
     setConnection(conn)
     writeSession('shield-connection', JSON.stringify(conn))
     writeSession('shield-session', '1')
-    setView('dashboard')
+    if (isPairRoute()) {
+      setView('pair')
+    } else {
+      setView('dashboard')
+    }
   }
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (isPairRoute()) setView('pair')
+    }
+    window.addEventListener('hashchange', handleHash)
+    return () => window.removeEventListener('hashchange', handleHash)
+  }, [])
 
   useEffect(() => {
     // Automatically restore session if an active cookie exists (e.g. returning from Google OAuth)
@@ -84,7 +106,21 @@ export default function App() {
   }
 
   if (view === 'signin') {
-    return <SignIn back={() => setView('landing')} connect={connect} />
+    return <SignIn back={() => setView(isPairRoute() ? 'pair' : 'landing')} connect={connect} />
+  }
+
+  if (view === 'pair') {
+    return (
+      <DevicePair
+        onDone={() => {
+          if (window.location.hash.startsWith('#pair')) {
+            window.location.hash = ''
+          }
+          setView(readSession('shield-session') ? 'dashboard' : 'landing')
+        }}
+        onSignInRequired={() => setView('signin')}
+      />
+    )
   }
 
   return <Dashboard connection={connection} logout={logout} />
