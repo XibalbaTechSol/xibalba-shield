@@ -31,6 +31,8 @@ to autonomous control, as a plant is commissioned one rung at a time. Each rung 
 evidence the control plane holds, read from `GET /api/shield/commissioning-metrics`
 (`ShieldStore.commissioning_metrics`).
 
+![Xibalba Shield Commissioning Ladder](../../../assets/shield_cloud_commissioning.png)
+
 ## Evidence per rung
 
 | Rung | Evidence shown | Source |

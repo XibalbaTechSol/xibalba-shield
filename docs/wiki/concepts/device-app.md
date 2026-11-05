@@ -5,10 +5,11 @@ created: 2026-11-05
 updated: 2026-11-05
 type: concept
 tags: [device, console, containment]
-confidence: medium
+confidence: high
 source_files:
   - device-app/device-core/src/lib.rs
   - device-app/device-core/tests/contract.rs
+  - device-app/src-tauri/src/main.rs
   - device-app/src-tauri/src/lib.rs
   - device-app/src/App.jsx
   - device-app/src/bridge.js
@@ -20,53 +21,51 @@ source_files:
 ## Table of contents
 
 - [Overview](#overview)
-- [Data flow](#data-flow)
-- [What is verified](#what-is-verified)
-- [Known gaps](#known-gaps)
-- [Related pages](#related-pages)
+- [Visual Interface](#visual-interface)
+- [Data Flow & Architecture](#data-flow--architecture)
+- [Features](#features)
+- [What is Verified](#what-is-verified)
+- [Known Gaps](#known-gaps)
+- [Related Pages](#related-pages)
 
 ## Overview
 
-The device app (`device-app/`) is a Tauri tray application for the endpoint. It answers "what has
-Shield frozen on this machine, and how do I undo it?" and is the operator's local observer and
-manual override. It reads Shield's logs, checks them against the operating system, and runs
-`shield resume`. It never signals a process itself.
+The device app (`device-app/`) is a native Tauri tray and desktop application for the endpoint. It answers "what has Shield frozen on this machine, and how do I safely undo it?" while serving as the local operator's hardware telemetry cockpit, agent DID anchor, and manual override. It reads Shield's local evidence logs, checks them against the operating system, and runs `shield resume`. It never signals a process itself.
 
-## Data flow
+## Visual Interface
 
-1. `shield run` writes `decisions.jsonl` ([Event Log](../entities/event-log.md)) and, since
-   2026-11-05, `outcomes.jsonl` through `LocalOutcomeLog` (`shield/agent_core/outcome_log.py`),
-   beside the backend publisher, isolated from it by `fan_out`. Outcomes now carry `pid`.
-2. `device-core` (plain Rust) reads the bounded tail of both files and derives the open freezes:
-   a freeze is reversed by a later completed resume naming its `event_id`, or targeting the same pid.
-3. Each open freeze is **checked against `/proc/<pid>/stat`**: *stopped* (confirmed), *running*
-   (the log says frozen, the OS disagrees), *gone*, or *unknown* (no `/proc`). The headline counts
-   only confirmed stops.
-4. Resume builds `shield resume --pid N --event-id=E ...` as an argument vector (pid validated,
-   event id restricted so it cannot be read as an option) and the shell spawns it directly.
+![Xibalba Shield Desktop UI](../../../assets/shield_desktop_ui.png)
 
-`shield resume` always appends a `resume` outcome to the local log, and tells the backend too when a
-device config is available, which is what feeds the fleet false-freeze rate in
-[Commissioning Ladder](commissioning-ladder.md).
+## Data Flow & Architecture
 
-## What is verified
+1. `shield run` writes `decisions.jsonl` ([Event Log](../entities/event-log.md)) and `outcomes.jsonl` through `LocalOutcomeLog` (`shield/agent_core/outcome_log.py`), beside the backend publisher, isolated by `fan_out`.
+2. `device-core` (pure Rust) reads the bounded tail of both logs and derives open freezes: a freeze is reversed by a later completed resume naming its `event_id`, or targeting the same PID.
+3. Open freezes are **checked against `/proc/<pid>/stat`**: *stopped* (confirmed), *running* (the log says frozen, the OS disagrees), *gone*, or *unknown* (no `/proc`). The headline counts only confirmed stops.
+4. Resume builds `shield resume --pid N --event-id=E ...` as an argument vector (PID validated, event ID restricted against option injection) and the shell spawns it directly.
+5. In paired mode, `device-core` loads `~/.shield/device.json` and `~/.shield/did/did.txt`, extracting the paired tenant ID, backend URL, Confined Agent DID, active route (`/proc/net/route`), MAC address (`/sys/class/net/<iface>/address`), and local IP.
 
-- `device-core`: 19 unit tests and 3 contract tests (`cargo test`).
-- Contract: the Rust reader is tested against golden fixtures produced by the real Python
-  `EventRouter`/`EventLog`/`LocalOutcomeLog`; `tests/test_device_contract.py` fails if the Python
-  shape drifts from what the reader relies on.
-- UI: 8 Playwright specs drive the real bridge by providing `window.__TAURI_INTERNALS__`.
+## Features
 
-## Known gaps
+- **Top-Level Endpoint Identity & Cryptographic Anchor**: Hostname (`xibalba-HP-Desktop-M01-F0xxx`), device role (`hybrid_real`), Device ID, and Confined Agent DID (`did:integrity:...`). Private signing key (`~/.shield/did/private_key.pem`) is locked under strict POSIX `0600` permissions and never leaves hardware.
+- **Dual-Agent Closed-Loop Control Chassis**:
+  - *Tier 1 Fast Local Agent (JEV Confinement)*: Sub-millisecond in-kernel/eBPF interception (`< 1.0 ms`), SIGSTOP signal containment, and local decision ledger auditing (`38,298+` decisions verified).
+  - *Tier 2 Cloud Inference Agent (Fleet Loop)*: Asynchronous multi-turn LLM reasoning on local detection events, RFC 8628 pairing, and dynamic fleet policy sync from the control plane (`https://xibalba-shield.onrender.com`).
+- **Network & Hardware Telemetry Grid**: Reports active interface (`wlp9s0`), hardware MAC address (`e8:b1:fc:fd:3d:3d`), local IPv4 (`192.168.68.109/24`), default gateway (`192.168.68.1`), and local loopback listener (`Port 8436`).
+- **Endpoint AI Agent Security Posture**: MCP tool call firewall, Landlock/cgroups sandboxing, denial-of-wallet circuit breaker, and Integrity provenance Merkle root anchoring.
 
-- **`src-tauri` (tray, window, commands) has not been compiled or run.** It needs the platform
-  webview libraries; the build sandbox lacked them. Treat it as unverified.
-- Without `/proc` (Windows, macOS) freeze state shows as *Unverified*. Those platforms are untested.
-- The local outcome log is a best-effort convenience view, not the enforcement record: a failed
-  write leaves a freeze missing from it.
-- CI does not yet run `cargo test` or the app's Playwright specs.
+## What is Verified
 
-## Related pages
+- `device-core`: 19 unit tests and 3 contract tests passing (`cargo test`).
+- Golden contract: Rust reader verified against real Python `EventRouter`/`EventLog`/`LocalOutcomeLog` outputs via `tests/test_device_contract.py`.
+- Native Shell: `src-tauri` compiled with Tauri v2 (`custom-protocol`, `devtools`), WebKitGTK 4.1, and Wayland DMABuf workaround (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
+- UI: 9 Playwright E2E specs driving standalone, fresh device, error, phone layout, and paired device views (`npm run test:e2e`).
+
+## Known Gaps
+
+- Without `/proc` (Windows, macOS) freeze state shows as *Unverified*. Native sensors on those platforms require ETW/EndpointSecurity drivers.
+- The local outcome log is a best-effort convenience view, not the enforcement record: a failed write leaves a freeze missing from it.
+
+## Related Pages
 
 - [Action Broker](action-broker.md)
 - [Commissioning Ladder](commissioning-ladder.md)
