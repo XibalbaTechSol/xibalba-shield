@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, Cpu, HardDrive, LockKeyhole, Network, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react'
+import { Activity, Cpu, HardDrive, LockKeyhole, Network, Plus, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react'
 
 const DEFAULT_RESPONDER_CAPABILITIES = {
   freeze_process: true,
@@ -101,8 +101,183 @@ function AgentDetailDrawer({ selected, setSelected, cortexMemories, inspectCorte
   )
 }
 
+function PairDeviceModal({ onClose }) {
+  const [activeTab, setActiveTab] = useState('install')
+  const [code, setCode] = useState('')
+  const origin = window.location.origin
+  const linuxCmd = `curl -fsSL ${origin}/install.sh | bash`
+  const winCmd = `irm ${origin}/install.ps1 | iex`
+  const [copied, setCopied] = useState('')
+
+  const copyToClipboard = (text, label) => {
+    navigator.clipboard?.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(''), 2000)
+  }
+
+  const handleEnterCode = (e) => {
+    e.preventDefault()
+    if (code.trim()) {
+      window.location.hash = `#pair?code=${encodeURIComponent(code.trim().toUpperCase())}`
+    }
+  }
+
+  return (
+    <div className="device-detail-backdrop" role="presentation" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <section
+        className="settings-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pair new device"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 'min(580px, 94vw)', margin: 0, maxHeight: '90vh', overflowY: 'auto', background: 'var(--panel)', border: '1px solid var(--line-strong)', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.45)' }}
+      >
+        <div className="settings-card-header">
+          <div className="settings-card-title">
+            <ShieldCheck size={20} />
+            <div>
+              <p className="eyebrow" style={{ margin: 0 }}>HYBRID ENDPOINT SETUP</p>
+              <h3 style={{ margin: 0 }}>Pair New Endpoint Device</h3>
+            </div>
+          </div>
+          <button type="button" className="agent-detail-close" aria-label="Close" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <p className="settings-card-desc">
+          Shield agents run locally on physical or virtual endpoints and securely bind to your cloud account. The private key never leaves the device.
+        </p>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button
+            type="button"
+            className={activeTab === 'install' ? 'primary-btn' : 'secondary-btn'}
+            onClick={() => setActiveTab('install')}
+          >
+            One-line installer
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'cli' ? 'primary-btn' : 'secondary-btn'}
+            onClick={() => setActiveTab('cli')}
+          >
+            Existing CLI
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'code' ? 'primary-btn' : 'secondary-btn'}
+            onClick={() => setActiveTab('code')}
+          >
+            Enter pairing code
+          </button>
+        </div>
+
+        {activeTab === 'install' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                Linux / macOS (Terminal)
+              </label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <pre style={{ margin: 0, padding: '10px 12px', background: 'var(--code-bg, #0f172a)', color: 'var(--code-fg, #f8fafc)', borderRadius: 6, fontSize: 12, flex: 1, overflowX: 'auto' }}>
+                  {linuxCmd}
+                </pre>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => copyToClipboard(linuxCmd, 'linux')}
+                >
+                  {copied === 'linux' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                Windows (PowerShell)
+              </label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <pre style={{ margin: 0, padding: '10px 12px', background: 'var(--code-bg, #0f172a)', color: 'var(--code-fg, #f8fafc)', borderRadius: 6, fontSize: 12, flex: 1, overflowX: 'auto' }}>
+                  {winCmd}
+                </pre>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => copyToClipboard(winCmd, 'win')}
+                >
+                  {copied === 'win' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+
+            <small className="muted">
+              The installer will install Shield, generate local endpoint credentials, launch your browser, and auto-complete pairing over local loopback.
+            </small>
+          </div>
+        )}
+
+        {activeTab === 'cli' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              If you have already installed Shield, run this command on your device:
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <pre style={{ margin: 0, padding: '10px 12px', background: 'var(--code-bg, #0f172a)', color: 'var(--code-fg, #f8fafc)', borderRadius: 6, fontSize: 12, flex: 1 }}>
+                shield pair
+              </pre>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => copyToClipboard('shield pair', 'cli')}
+              >
+                {copied === 'cli' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <small className="muted">
+              Headless server or VM? Run <code>shield pair --no-browser</code> and enter the generated code below.
+            </small>
+          </div>
+        )}
+
+        {activeTab === 'code' && (
+          <form onSubmit={handleEnterCode} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <label style={{ fontSize: 13, fontWeight: 600 }}>
+              Device Pairing Code
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="e.g. SHLD-9X4A"
+              maxLength={12}
+              style={{
+                padding: '10px 14px',
+                fontSize: 16,
+                letterSpacing: 2,
+                fontWeight: 700,
+                textAlign: 'center',
+                textTransform: 'uppercase',
+                borderRadius: 6,
+                border: '1px solid var(--line)',
+                background: 'var(--input-bg, #ffffff)',
+                color: 'inherit',
+              }}
+              required
+            />
+            <button type="submit" className="primary-btn" style={{ justifyContent: 'center' }}>
+              Verify & Authorize Device
+            </button>
+          </form>
+        )}
+      </section>
+    </div>
+  )
+}
+
 export function AgentView({ data, refresh, api }) {
   const [selected, setSelected] = useState(null)
+  const [showPairModal, setShowPairModal] = useState(false)
   const [remediation, setRemediation] = useState({ action: 'retry', message: '' })
   const [guardrails, setGuardrails] = useState({ toolCalls: true, modelRouting: true, retrieval: true, outputChecks: true, postAction: true })
   const [guardrailMessage, setGuardrailMessage] = useState('')
@@ -186,7 +361,18 @@ export function AgentView({ data, refresh, api }) {
       <span>Inspect endpoint posture, sensor attachment, evidence publication, and recent enforcement activity from one authenticated view.</span>
       <small className="evidence-label">Only control-plane records are shown. Missing telemetry is marked unverified.</small>
     </header>
-    <div className="agent-toolbar"><span><span className="status-dot green" /> {devices.length} enrolled device{devices.length === 1 ? '' : 's'}</span><span className="evidence-label">Each device is scoped to one canonical Shield agent and Cortex memory namespace.</span><button type="button" className="secondary-btn" onClick={refresh}><RefreshCw size={14} /> Refresh agents</button></div>
+    <div className="agent-toolbar">
+      <span><span className="status-dot green" /> {devices.length} enrolled device{devices.length === 1 ? '' : 's'}</span>
+      <span className="evidence-label">Each device is scoped to one canonical Shield agent and Cortex memory namespace.</span>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" className="primary-btn" onClick={() => setShowPairModal(true)}>
+          <Plus size={14} /> Pair new device
+        </button>
+        <button type="button" className="secondary-btn" onClick={refresh}>
+          <RefreshCw size={14} /> Refresh agents
+        </button>
+      </div>
+    </div>
     {devices.length > 0 && <section className="hybrid-architecture-card" aria-labelledby="hybrid-architecture-title"><div><p className="eyebrow">HYBRID IDENTITY BOUNDARY</p><h3 id="hybrid-architecture-title">One device · one Shield agent · one Cortex namespace</h3><p>Shield enforces locally. Redacted events may be reasoned about by the dedicated Hermes cloud agent, while Cortex memory remains keyed to the selected Shield agent.</p></div><div className="hybrid-pair-list">{devices.map((device) => { const pair = device.device_agent_pair || {}; const hybrid = device.hybrid_architecture || {}; const cloud = hybrid.cloud_reasoning || {}; return <article className="hybrid-pair" key={pair.pair_id || device.device_id}><div className="hybrid-pair-heading"><HardDrive size={15} /><b>{pair.device_id || device.device_id}</b><span className="live-status-pill">{hybrid.mode || 'hybrid'}</span></div><dl><div><dt>Shield agent</dt><dd>{pair.shield_agent_id || device.agent_id || 'unbound'}</dd></div><div><dt>Pair ID</dt><dd>{pair.pair_id || '—'}</dd></div><div><dt>Local authority</dt><dd>{hybrid.local_enforcement?.status === 'active' ? 'Shield · active' : 'Unverified'}</dd></div><div><dt>Cloud reasoning</dt><dd>{cloud.status === 'configured' ? `Hermes · ${cloud.agent_id}` : 'Hermes · not configured'}</dd></div><div><dt>Cortex memory</dt><dd>{cloud.memory_namespace || pair.memory_namespace || '—'}</dd></div></dl></article> })}</div></section>}
     {data.cortexOutbox && <section className={`outbox-status-card ${data.cortexOutbox.dead_letter || (data.cortexOutbox.pending > 0 && !realAgentRoster.length) ? 'has-warning' : ''}`} aria-label="Cortex delivery status"><div><p className="eyebrow">CORTEX DELIVERY</p><h3>Durable cloud publication</h3><p>{data.cortexOutbox.pending ? `${data.cortexOutbox.pending} events are waiting for Cortex acknowledgement.` : 'No events are waiting for Cortex acknowledgement.'} Failed attempts move to a dead-letter queue.</p>{data.cortexOutbox.pending > 0 && !realAgentRoster.length && <p className="form-message" role="status">Pending records are not currently attributable to an authenticated agent identity; they remain device-scoped until binding is verified.</p>}{data.cortexOutbox.dead_letter > 0 && <p className="form-message error" role="status">{data.cortexOutbox.dead_letter} events need operator review.</p>}</div><div className="outbox-metrics"><span><b>{data.cortexOutbox.pending || 0}</b><small>pending</small></span><span><b>{data.cortexOutbox.sent || 0}</b><small>sent</small></span><span className={data.cortexOutbox.dead_letter ? 'danger' : ''}><b>{data.cortexOutbox.dead_letter || 0}</b><small>dead-letter</small></span><span><b>{data.cortexOutbox.delivered_total || 0}</b><small>delivered</small></span></div></section>}
     <section className="settings-card" aria-labelledby="real-agent-roster-title"><div className="settings-card-header"><div className="settings-card-title"><ShieldCheck size={18} /><h3 id="real-agent-roster-title">Real agents observed on this device</h3></div><span className="live-status-pill"><Activity size={13} /> {realAgentRoster.length ? `${realAgentRoster.length} observed` : 'No observed agents'}</span></div><p className="settings-card-desc">Only identities emitted by this device’s authenticated decisions/outcomes are listed. OS process, file, and network events stay device-scoped until an authenticated agent hook attributes them.</p>{realAgentRoster.length === 0 ? <div className="empty"><ShieldCheck /><h4>No authenticated agent events</h4><p>Process, file, and network observations are present, but none carry an agent identity. Register an agent and exercise its guardrail hook to populate this roster.</p><small>Expected event classes: agent_event, tool_call, model_route, retrieval, output_check, post_action.</small></div> : <div className="agent-roster">{realAgentRoster.map((agent) => <div className="agent-roster-row" key={`${agent.device_id}:${agent.agent_id}`}><div><b>{agent.name}</b><small>{agent.agent_id}</small></div><span>{agent.source}</span><button type="button" className="secondary-btn" onClick={async () => { try { const result = await api.testEvents(agent.agent_id); setAgentTelemetry({ agentId: agent.agent_id, events: result.test_events || [] }) } catch (error) { setAgentTelemetry({ agentId: agent.agent_id, error: error instanceof Error ? error.message : String(error) }) } }}>Inspect telemetry</button></div>)}</div>}{agentTelemetry && <p className="form-message" aria-live="polite">{agentTelemetry.error || `${agentTelemetry.events.length} authenticated telemetry records for ${agentTelemetry.agentId}.`}</p>}</section>
@@ -211,7 +397,16 @@ export function AgentView({ data, refresh, api }) {
       <div className="toggle-list guardrail-grid">{[['toolCalls', 'Tool execution', 'Require policy evaluation before a tool call runs.'], ['modelRouting', 'Model routing', 'Restrict provider and endpoint selection to approved destinations.'], ['retrieval', 'Retrieval and context', 'Gate data sources before they enter agent context.'], ['outputChecks', 'Output checks', 'Review caller-supplied risk labels before release.'], ['postAction', 'Post-action verification', 'Compare expected and observed state after an action.']].map(([key, label, description]) => <label className="toggle-item" key={key}><input type="checkbox" checked={guardrails[key]} onChange={(event) => setGuardrails((current) => ({ ...current, [key]: event.target.checked }))} /><div><b>{label}</b><p>{description}</p></div></label>)}</div>
       <div className="settings-actions-footer"><button type="button" className="primary-btn" onClick={saveGuardrails}>Save guardrails</button>{guardrailMessage && <span className="form-message" aria-live="polite">{guardrailMessage}</span>}</div>
     </section>
-    {devices.length === 0 ? <div className="empty"><HardDrive /><h3>No enrolled agents</h3><p>Enroll an endpoint to begin authenticated posture reporting.</p></div> : <div className="agent-grid">{devices.map((device) => {
+    {devices.length === 0 ? (
+      <div className="empty">
+        <HardDrive />
+        <h3>No enrolled agents</h3>
+        <p>Enroll an endpoint to begin authenticated posture reporting.</p>
+        <button type="button" className="primary-btn" style={{ marginTop: 12 }} onClick={() => setShowPairModal(true)}>
+          <Plus size={14} /> Pair device now
+        </button>
+      </div>
+    ) : <div className="agent-grid">{devices.map((device) => {
       const id = device.device_id || device.id
       const exporter = exporterByDevice[id]?.status || {}
       const sensors = exporter.sensors || {}
@@ -228,6 +423,6 @@ export function AgentView({ data, refresh, api }) {
       </button>
     })}</div>}
     <div className="agent-footer-note"><Activity size={15} /><span>Agent actions remain tenant-scoped and auditable. Use Evidence for worker-backed remediation.</span></div>
-    {selected && <aside className="device-detail-backdrop" role="presentation" onClick={() => setSelected(null)}><section className="device-detail-drawer" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}><header className="device-detail-header"><div><p className="eyebrow">AGENT DETAIL</p><h2>{selected.device_id}</h2><span>{selected.device_role || 'Endpoint'} · {selected.status || 'unverified'}</span></div><button type="button" className="drawer-close" aria-label="Close agent details" onClick={() => setSelected(null)}>×</button></header>{selected.loading ? <p className="device-detail-loading">Loading authenticated agent state…</p> : selected.error ? <p className="form-message error">{selected.error}</p> : <><dl className="device-detail-grid">{['policy_version', 'last_seen_at', 'ip_address', 'kernel_version', 'ebpf_sensor', 'did', 'agent_id', 'registration_status', 'memory_scope'].map((key) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{selected[key] || '—'}</dd></div>)}</dl><div className="agent-remediation-panel hybrid-detail-panel"><p className="eyebrow">HYBRID ROUTING</p><h3>{selected.device_agent_pair?.pair_id ? `Pair ${selected.device_agent_pair.pair_id}` : 'Device-agent pair'}</h3><p><b>Shield</b> remains the local enforcement authority. <b>Hermes</b> receives only redacted events when configured and reasons through the <b>Cortex</b> namespace shown below.</p><div className="hybrid-detail-values"><span><small>Shield agent</small><code>{selected.device_agent_pair?.shield_agent_id || selected.agent_id || 'unbound'}</code></span><span><small>Cortex namespace</small><code>{selected.hybrid_architecture?.cloud_reasoning?.memory_namespace || selected.device_agent_pair?.memory_namespace || '—'}</code></span><span><small>Hermes status</small><b>{selected.hybrid_architecture?.cloud_reasoning?.status || 'not configured'}</b></span></div><div className="cortex-memory-panel"><div><p className="eyebrow">SELECTED AGENT MEMORY</p><h4>Cortex evidence for this device pair</h4><p>Reads only the Cortex partition bound to this device and canonical Shield agent.</p></div><button type="button" className="secondary-btn" onClick={() => inspectCortexMemories(selected)}>Inspect Cortex memory</button>{cortexMemories?.loading && <p className="small muted">Loading authenticated Cortex memory…</p>}{cortexMemories?.error && <p className="form-message error">{cortexMemories.error}</p>}{cortexMemories && !cortexMemories.loading && !cortexMemories.error && <><div className="memory-proof-row"><span><b>{(cortexMemories.memories || []).length}</b><small>memories</small></span><code>{cortexMemories.memory_namespace}</code></div><div className="memory-preview">{(cortexMemories.memories || []).slice(0, 3).map((memory) => <article key={memory.id}><b>{memory.source?.kind || 'memory'}</b><span>{memory.content_preview || memory.content || memory.id}</span></article>)}</div></>}</div></div><div className="agent-remediation-panel"><p className="eyebrow">INTEGRITY IDENTITY</p><h3>Register Shield agent</h3><p>Verify the canonical DID with Integrity and bind this device to the agent-scoped Cortex memory namespace.</p><button type="button" className="primary" onClick={registerSelectedAgent}>Register / verify on Integrity</button>{registrationMessage && <p className="form-message" aria-live="polite">{registrationMessage}</p>}</div><div className="agent-remediation-panel"><p className="eyebrow">WORKER-BACKED ACTION</p><h3>Exporter remediation</h3><select className="form-select" value={remediation.action} onChange={(event) => setRemediation({ action: event.target.value, message: '' })}><option value="retry">Retry failed exports</option><option value="reconnect">Reconnect exporter</option><option value="flush">Flush pending queue</option></select><button type="button" className="primary" onClick={queueRemediation}>Queue action</button>{remediation.message && <p className="form-message" aria-live="polite">{remediation.message}</p>}</div></>}</section></aside>}
+    {showPairModal && <PairDeviceModal onClose={() => setShowPairModal(false)} />}
   </section>
 }

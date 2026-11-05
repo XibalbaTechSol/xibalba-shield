@@ -885,6 +885,60 @@ def _local_run(args: argparse.Namespace) -> int:
         return 1
 
 
+def _pair(args: argparse.Namespace) -> int:
+    from .device_pairing import DevicePairingFlow, DEFAULT_CLOUD_BACKEND
+    backend_url = args.backend_url or os.environ.get("SHIELD_BACKEND_URL") or DEFAULT_CLOUD_BACKEND
+    flow = DevicePairingFlow(backend_url=backend_url, shield_home=args.shield_home)
+    try:
+        flow.run_pairing(
+            timeout_seconds=args.timeout,
+            open_browser=not args.no_browser,
+            use_loopback=not args.no_loopback,
+            loopback_port=args.loopback_port,
+        )
+        return 0
+    except Exception as exc:
+        print(f"shield pair error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _install(args: argparse.Namespace) -> int:
+    from .device_pairing import DevicePairingFlow, DEFAULT_CLOUD_BACKEND
+    shield_home = args.shield_home or (Path.home() / ".shield")
+    shield_home.mkdir(parents=True, exist_ok=True)
+    (shield_home / "policies").mkdir(parents=True, exist_ok=True)
+    (shield_home / "logs").mkdir(parents=True, exist_ok=True)
+    (shield_home / "did").mkdir(parents=True, exist_ok=True)
+
+    print("\n[Shield Installer] Setting up Xibalba Shield on local endpoint...")
+    print(f"  Shield home:     {shield_home}")
+
+    backend_url = args.backend_url or os.environ.get("SHIELD_BACKEND_URL") or DEFAULT_CLOUD_BACKEND
+    flow = DevicePairingFlow(backend_url=backend_url, shield_home=shield_home)
+    print(f"  Local device ID: {flow.device_id}")
+    print(f"  Endpoint type:   {flow.device_type}")
+    print(f"  Confined DID:    {flow.agent_did}")
+
+    if args.no_pair:
+        print("  Local setup complete (pairing skipped with --no-pair).")
+        return 0
+
+    print("\nInitiating cloud pairing with Shield Control Plane...")
+    try:
+        flow.run_pairing(
+            timeout_seconds=args.timeout,
+            open_browser=not args.no_browser,
+            use_loopback=not args.no_loopback,
+            loopback_port=args.loopback_port,
+        )
+        print("Setup complete! You can now start Shield protection:")
+        print(f"  shield run --device-config {shield_home / 'device.json'}\n")
+        return 0
+    except Exception as exc:
+        print(f"shield install pairing failed: {exc}", file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shield")
     parser.add_argument(
@@ -1096,6 +1150,25 @@ def main(argv: list[str] | None = None) -> int:
     p_local.add_argument("--max-events", type=int, default=1)
     p_local.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH)
     p_local.set_defaults(func=_local_run)
+
+    p_pair = sub.add_parser("pair", help="pair this device with a cloud Shield workspace via browser authorization")
+    p_pair.add_argument("--backend-url", default=None, help="Shield backend control plane URL")
+    p_pair.add_argument("--shield-home", type=Path, default=None, help="Shield local home directory (default: ~/.shield)")
+    p_pair.add_argument("--timeout", type=int, default=600, help="pairing timeout in seconds")
+    p_pair.add_argument("--no-browser", action="store_true", help="do not attempt to open browser automatically")
+    p_pair.add_argument("--no-loopback", action="store_true", help="disable local loopback fast-approval listener")
+    p_pair.add_argument("--loopback-port", type=int, default=8436, help="local loopback port for approval redirect")
+    p_pair.set_defaults(func=_pair)
+
+    p_install = sub.add_parser("install", help="set up Shield on this endpoint and initiate cloud pairing")
+    p_install.add_argument("--backend-url", default=None, help="Shield backend control plane URL")
+    p_install.add_argument("--shield-home", type=Path, default=None, help="Shield local home directory (default: ~/.shield)")
+    p_install.add_argument("--timeout", type=int, default=600, help="pairing timeout in seconds")
+    p_install.add_argument("--no-browser", action="store_true", help="do not attempt to open browser automatically")
+    p_install.add_argument("--no-loopback", action="store_true", help="disable local loopback fast-approval listener")
+    p_install.add_argument("--loopback-port", type=int, default=8436, help="local loopback port for approval redirect")
+    p_install.add_argument("--no-pair", action="store_true", help="initialize local directories without pairing")
+    p_install.set_defaults(func=_install)
 
     args = parser.parse_args(argv)
     return args.func(args)

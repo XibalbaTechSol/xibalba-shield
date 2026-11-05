@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import hmac
 import json
 import re
 import secrets
@@ -17,6 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config.loader import ConfigError, PolicyBundle, load_policy_bundle
+
+
+def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
+    return json.dumps(
+        {"schema": "xibalba.shield.device-agent-binding.v1", "tenant_id": tenant_id, "device_id": device_id, "agent_id": agent_id},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 class TenantExistsError(ValueError):
@@ -238,6 +247,29 @@ class ShieldStore:
                 ON device_agent_bindings(tenant_id, device_id, unbound_at);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_device_agent_bindings_active_pair
                 ON device_agent_bindings(tenant_id, device_id, agent_id) WHERE unbound_at IS NULL;
+
+            CREATE TABLE IF NOT EXISTS device_pairing_requests (
+                id TEXT PRIMARY KEY,
+                user_code TEXT NOT NULL UNIQUE,
+                device_id TEXT NOT NULL,
+                device_name TEXT NOT NULL,
+                device_type TEXT NOT NULL DEFAULT 'virtual',
+                agent_did TEXT NOT NULL,
+                agent_name TEXT NOT NULL DEFAULT 'shield-agent',
+                agent_public_key TEXT,
+                callback_url TEXT,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approved_account_id TEXT,
+                approved_tenant_id TEXT,
+                issued_device_token TEXT,
+                redeemed_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_device_pairing_user_code
+                ON device_pairing_requests(user_code);
+            CREATE INDEX IF NOT EXISTS idx_device_pairing_status
+                ON device_pairing_requests(status);
 
             CREATE TABLE IF NOT EXISTS policies (
                 tenant_id TEXT NOT NULL,
@@ -519,6 +551,30 @@ class ShieldStore:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_enforcement_outcomes_received_at ON enforcement_outcomes(received_at, id)")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_test_events_recorded_at ON test_events(recorded_at, id)")
         self._conn.commit()
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS device_pairing_requests (
+                id TEXT PRIMARY KEY,
+                user_code TEXT NOT NULL UNIQUE,
+                device_id TEXT NOT NULL,
+                device_name TEXT NOT NULL,
+                device_type TEXT NOT NULL DEFAULT 'virtual',
+                agent_did TEXT NOT NULL,
+                agent_name TEXT NOT NULL DEFAULT 'shield-agent',
+                agent_public_key TEXT,
+                callback_url TEXT,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approved_account_id TEXT,
+                approved_tenant_id TEXT,
+                issued_device_token TEXT,
+                redeemed_at TEXT
+            )
+            """
+        )
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_device_pairing_user_code ON device_pairing_requests(user_code)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_device_pairing_status ON device_pairing_requests(status)")
         # Backfill membership rows for accounts created before the membership table existed.
         self._conn.execute("INSERT OR IGNORE INTO account_tenant_memberships(account_id,tenant_id,role,created_at) SELECT account_id,tenant_id,role,created_at FROM accounts")
         self._conn.commit()
@@ -1175,6 +1231,194 @@ class ShieldStore:
             if not updated:
                 raise KeyError("active device-agent pair not found")
         return next(row for row in self.list_device_agent_bindings(tenant_id=tenant_id, device_id=device_id) if row["agent_id"] == agent_id and row["unbound_at"] == now)
+
+    def create_device_pairing_request(
+        self,
+        *,
+        device_id: str,
+        device_name: str,
+        device_type: str = "virtual",
+        agent_did: str,
+        agent_name: str = "shield-agent",
+        agent_public_key: str | None = None,
+        callback_url: str | None = None,
+        ttl_seconds: int = 900,
+    ) -> dict[str, Any]:
+        device_id = str(device_id).strip()
+        device_name = str(device_name).strip() or device_id
+        device_type = str(device_type).strip() or "virtual"
+        agent_did = str(agent_did).strip()
+        agent_name = str(agent_name).strip() or "shield-agent"
+        if not device_id:
+            raise ValueError("device_id is required")
+        if not agent_did:
+            raise ValueError("agent_did is required")
+
+        device_code = secrets.token_urlsafe(32)
+        part = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(4))
+        user_code = f"SHLD-{part}"
+
+        now_utc = datetime.now(timezone.utc)
+        expires_utc = now_utc + timedelta(seconds=ttl_seconds)
+        now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        expires_iso = expires_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO device_pairing_requests (
+                    id, user_code, device_id, device_name, device_type, agent_did,
+                    agent_name, agent_public_key, callback_url, created_at, expires_at, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                """,
+                (
+                    device_code,
+                    user_code,
+                    device_id,
+                    device_name,
+                    device_type,
+                    agent_did,
+                    agent_name,
+                    agent_public_key,
+                    callback_url,
+                    now_iso,
+                    expires_iso,
+                ),
+            )
+        return {
+            "device_code": device_code,
+            "user_code": user_code,
+            "code": user_code,
+            "status": "pending",
+            "expires_in": ttl_seconds,
+            "interval": 2,
+        }
+
+    def get_device_pairing_request(self, code: str) -> dict[str, Any] | None:
+        code_clean = str(code).strip()
+        row = self._conn.execute(
+            "SELECT * FROM device_pairing_requests WHERE id=? OR user_code=?",
+            (code_clean, code_clean.upper()),
+        ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        now_utc = datetime.now(timezone.utc)
+        expires_str = data["expires_at"]
+        expires_dt = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
+        if now_utc > expires_dt and data["status"] == "pending":
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE device_pairing_requests SET status='expired' WHERE id=?",
+                    (data["id"],),
+                )
+            data["status"] = "expired"
+        expires_in = max(0, int((expires_dt - now_utc).total_seconds()))
+        data["expires_in"] = expires_in
+        return data
+
+    def approve_device_pairing_request(
+        self,
+        code: str,
+        *,
+        account_id: str,
+        tenant_id: str,
+        base_url: str = "",
+    ) -> dict[str, Any]:
+        data = self.get_device_pairing_request(code)
+        if not data:
+            raise ValueError("Pairing request not found")
+        if data["status"] != "pending":
+            raise ValueError(f"Pairing request is already {data['status']}")
+        if data["expires_in"] <= 0:
+            raise ValueError("Pairing request has expired")
+
+        device_id = data["device_id"]
+        agent_did = data["agent_did"]
+        device_name = data["device_name"]
+        device_type = data["device_type"]
+        agent_name = data["agent_name"]
+
+        enrollment = self.enroll_device(
+            tenant_id=tenant_id,
+            device_id=device_id,
+            device_role=f"hybrid_{device_type}",
+            base_url=base_url or "https://xibalba-shield.onrender.com",
+            agent_label=agent_name,
+        )
+
+        binding_payload = _binding_bytes(tenant_id=tenant_id, device_id=device_id, agent_id=agent_did)
+        proof_fields = {
+            "version": "xibalba.shield.device-agent-binding.v1",
+            "payload_sha256": hashlib.sha256(binding_payload).hexdigest(),
+            "device_hmac": hmac.new(enrollment.device_token.encode("utf-8"), binding_payload, hashlib.sha256).hexdigest(),
+            "device_type": device_type,
+            "device_confinement": "confined_to_endpoint",
+        }
+        if data.get("agent_public_key"):
+            proof_fields["agent_public_key"] = data["agent_public_key"]
+        binding_proof = json.dumps(proof_fields, sort_keys=True, separators=(",", ":"))
+
+        self.bind_integrity_agent(
+            tenant_id=tenant_id,
+            device_id=device_id,
+            agent_id=agent_did,
+            registration_status="registered",
+            binding_proof=binding_proof,
+        )
+
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE device_pairing_requests
+                SET status='approved', approved_account_id=?, approved_tenant_id=?, issued_device_token=?
+                WHERE id=?
+                """,
+                (account_id, tenant_id, enrollment.device_token, data["id"]),
+            )
+
+        self.record_auth_event(
+            event_type="device_paired",
+            tenant_id=tenant_id,
+            detail=f"{agent_name} on {device_name} ({device_type}:{device_id}) bound to {agent_did}",
+        )
+
+        return {
+            "ok": True,
+            "device_id": device_id,
+            "device_name": device_name,
+            "device_type": device_type,
+            "agent_did": agent_did,
+            "tenant_id": tenant_id,
+            "device_token": enrollment.device_token,
+            "callback_url": data.get("callback_url"),
+        }
+
+    def poll_device_pairing_status(self, code: str) -> dict[str, Any]:
+        data = self.get_device_pairing_request(code)
+        if not data:
+            return {"status": "not_found", "error": "Pairing request not found"}
+        if data["status"] == "pending":
+            return {"status": "pending", "expires_in": data["expires_in"], "interval": 2}
+        if data["status"] == "expired":
+            return {"status": "expired", "error": "Pairing request has expired"}
+        if data["status"] == "approved":
+            now = _now()
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE device_pairing_requests SET redeemed_at=COALESCE(redeemed_at, ?) WHERE id=?",
+                    (now, data["id"]),
+                )
+            return {
+                "status": "approved",
+                "tenant_id": data["approved_tenant_id"],
+                "device_id": data["device_id"],
+                "device_name": data["device_name"],
+                "device_type": data["device_type"],
+                "agent_did": data["agent_did"],
+                "device_token": data["issued_device_token"],
+            }
+        return {"status": data["status"]}
 
     def discover_agent_ids(self, *, tenant_id: str, device_id: str) -> list[dict[str, Any]]:
         """Discover agent identities observed by this real device; never creates a fixture."""
