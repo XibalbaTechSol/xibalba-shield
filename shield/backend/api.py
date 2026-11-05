@@ -581,16 +581,29 @@ def _enrich_device(device: dict[str, Any], *, identity: dict[str, Any] | None = 
         "device_attested": bool(proof.get("device_hmac")),
         "agent_attested": agent_attested,
     }
+    device_type = str(proof.get("device_type") or ("virtual" if "vm" in str(device.get("device_role", "")).lower() else "real"))
+    cloud_agent = hermes_agent_id or f"did:integrity:cloud:{hashlib.sha256(tenant_id.encode()).hexdigest()[:32]}"
+    enriched["device_type"] = device_type
+    enriched["device_confinement"] = proof.get("device_confinement") or "confined_to_endpoint"
     enriched["hybrid_architecture"] = {
         "mode": "hybrid",
-        "local_enforcement": {"component": "Shield", "authority": "device", "status": "active"},
+        "local_enforcement": {
+            "component": "Shield",
+            "authority": "device",
+            "status": "active",
+            "device_id": enriched.get("device_id"),
+            "agent_id": canonical_agent_id,
+            "device_type": device_type,
+            "confinement": "confined_to_endpoint",
+        },
         "cloud_reasoning": {
-            "component": "Hermes",
-            "status": "configured" if hermes_agent_id else "not_configured",
-            "agent_id": hermes_agent_id,
+            "component": "Cloud Shield / Hermes",
+            "status": "active" if (hermes_agent_id or os.environ.get("RENDER")) else "configured",
+            "agent_id": cloud_agent,
             "subject_agent_id": canonical_agent_id,
             "memory_provider": "Cortex",
             "memory_namespace": f"shield:{canonical_agent_id}",
+            "authority": "cloud",
         },
     }
     enriched["machine_id"] = machine_id
@@ -967,6 +980,44 @@ def make_handler(
                 if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
                     return
                 self._send_json({"events": store.list_auth_events(tenant_id=tenant_id, email=query.get("email", [None])[0])})
+                return
+            if parsed.path.startswith("/api/shield/device/pair/"):
+                suffix = parsed.path[len("/api/shield/device/pair/"):].strip("/")
+                if suffix.endswith("/status"):
+                    code = suffix[:-len("/status")].strip("/")
+                    status_info = store.poll_device_pairing_status(code)
+                    self._send_json(status_info)
+                    return
+                code = suffix
+                req = store.get_device_pairing_request(code)
+                if not req:
+                    self._send_error(HTTPStatus.NOT_FOUND, "Pairing request not found or expired")
+                    return
+                self._send_json({
+                    "code": req["user_code"],
+                    "device_id": req["device_id"],
+                    "device_name": req["device_name"],
+                    "device_type": req["device_type"],
+                    "agent_did": req["agent_did"],
+                    "agent_name": req["agent_name"],
+                    "status": req["status"],
+                    "expires_in": req["expires_in"],
+                    "callback_url": req["callback_url"],
+                })
+                return
+            if parsed.path == "/install.sh":
+                script_path = Path(__file__).resolve().parents[2] / "scripts" / "install.sh"
+                if script_path.is_file():
+                    self._send_text(script_path.read_text(encoding="utf-8"), content_type="text/x-shellscript; charset=utf-8")
+                    return
+                self._send_error(HTTPStatus.NOT_FOUND, "installer script not found")
+                return
+            if parsed.path == "/install.ps1":
+                script_path = Path(__file__).resolve().parents[2] / "scripts" / "install.ps1"
+                if script_path.is_file():
+                    self._send_text(script_path.read_text(encoding="utf-8"), content_type="text/plain; charset=utf-8")
+                    return
+                self._send_error(HTTPStatus.NOT_FOUND, "installer script not found")
                 return
             if parsed.path == "/api/shield/policy-history":
                 tenant_id = self._tenant_from_query_or_error(query)
@@ -1414,6 +1465,68 @@ def make_handler(
                     )
                 except ValueError as exc:
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+
+            if parsed.path == "/api/shield/device/pair/request":
+                device_id = str(body.get("device_id") or "").strip()
+                agent_did = str(body.get("agent_did") or "").strip()
+                if not device_id or not agent_did:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "device_id and agent_did are required")
+                    return
+                try:
+                    result = store.create_device_pairing_request(
+                        device_id=device_id,
+                        device_name=str(body.get("device_name") or device_id),
+                        device_type=str(body.get("device_type") or "virtual"),
+                        agent_did=agent_did,
+                        agent_name=str(body.get("agent_name") or "shield-agent"),
+                        agent_public_key=body.get("agent_public_key"),
+                        callback_url=body.get("callback_url"),
+                        ttl_seconds=int(body.get("ttl_seconds") or 900),
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                user_code = result["user_code"]
+                base = str(public_base_url or self._request_base_url()).rstrip("/")
+                verification_url = f"{base}/#pair?code={user_code}"
+                self._send_json(
+                    {
+                        "ok": True,
+                        "device_code": result["device_code"],
+                        "user_code": user_code,
+                        "code": user_code,
+                        "verification_url": verification_url,
+                        "verification_uri": verification_url,
+                        "expires_in": result["expires_in"],
+                        "interval": result["interval"],
+                    },
+                    status=HTTPStatus.CREATED,
+                )
+                return
+
+            if parsed.path.startswith("/api/shield/device/pair/") and parsed.path.endswith("/approve"):
+                code = parsed.path[len("/api/shield/device/pair/"):-len("/approve")].strip("/")
+                session = store.session_for_token(self._current_admin_token())
+                if session is None and not self._require_admin():
+                    return
+                if session is not None:
+                    account_id = session["account_id"]
+                    tenant_id = session["tenant_id"]
+                else:
+                    account_id = "tenant-admin"
+                    tenant_id = str(body.get("tenant_id") or "tenant-a")
+                try:
+                    approval = store.approve_device_pairing_request(
+                        code,
+                        account_id=account_id,
+                        tenant_id=tenant_id,
+                        base_url=str(public_base_url or self._request_base_url()),
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(approval, status=HTTPStatus.OK)
                 return
 
             if parsed.path == "/api/shield/enroll":
@@ -2210,6 +2323,15 @@ def make_handler(
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _send_text(self, text: str, *, content_type: str = "text/plain; charset=utf-8") -> None:
+            raw = text.encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(raw)
 
