@@ -17,7 +17,7 @@ on:
 jobs:
   build-macos-desktop:
     name: Build macOS Desktop DMG & App
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
