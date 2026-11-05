@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Callable, Iterable, Literal, Protocol
 
 from integrity_sdk.telemetry.tracing import get_tracer
@@ -136,6 +137,9 @@ class EventRouter:
         """Process one normalized event end-to-end. Returns the PolicyDecision so callers
         (tests, the dev-mode sensor loop, guardrail hook call sites) can inspect the
         outcome synchronously."""
+        # Monotonic start for EnforcementOutcome.handle_to_contain_ms. time.monotonic() is
+        # immune to wall-clock steps (NTP), unlike the whole-second event timestamps.
+        handle_started = time.monotonic()
         if isinstance(event, AgentEvent):
             self.registry.touch(event.agent.agent_id)
 
@@ -212,6 +216,7 @@ class EventRouter:
             if pid is not None:
                 try:
                     result = self.action_broker.contain(pid)
+                    handle_to_contain_ms = round((time.monotonic() - handle_started) * 1000.0, 3)
                     logger.warning(
                         "contained pid %s for decision on %s: %s (%s)",
                         pid, decision.event_ref.event_id, result.action, result.method,
@@ -230,6 +235,11 @@ class EventRouter:
                                 completed=getattr(result, "completed", True),
                                 escalated=getattr(result, "escalated", False),
                                 error=getattr(result, "error", None), agent_id=agent_id,
+                                # Only a completed freeze has a meaningful latency; a failed
+                                # attempt reports None rather than a misleading fast number.
+                                handle_to_contain_ms=(
+                                    handle_to_contain_ms if getattr(result, "completed", True) else None
+                                ),
                             )
                         )
                 except Exception as exc:  # noqa: BLE001

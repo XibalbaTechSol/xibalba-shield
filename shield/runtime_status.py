@@ -40,6 +40,15 @@ class BackendEvidencePublisher:
     def publish_outcome(self, outcome: Any) -> None:
         self._enqueue("enforcement-outcomes", {"outcome": outcome.to_dict()})
 
+    def publish_outcome_sync(self, outcome: Any) -> None:
+        """Publish one outcome on the caller's thread and raise on failure.
+
+        For one-shot CLI commands (`shield resume`) that must tell the operator whether the
+        evidence actually landed; the long-running `shield run` loop keeps using the
+        fire-and-forget `publish_outcome` so a backend outage never delays enforcement.
+        """
+        self._post("enforcement-outcomes", {"outcome": outcome.to_dict()})
+
     def health(self) -> dict[str, Any]:
         return {
             "queue_depth": self._queue.qsize(),

@@ -367,3 +367,15 @@
 - Tests: `tests/test_protected_processes.py` (fake-/proc, deterministic) plus a cgroup test fix
   (`cgroup.procs` now required). Full suite matches `main` on the 80 pre-existing failures/errors
   (no `opa` binary in the CI container); +16 passing.
+
+## [2026-11-05] code | Commissioning-ladder instrumentation (outcome latency, shield resume, metrics endpoint)
+
+- `EnforcementOutcome` gains `handle_to_contain_ms` and `resumes_event_id`; the router measures
+  containment latency on a monotonic clock. New `shield resume` command and
+  `GET /api/shield/commissioning-metrics`. Documented in `concepts/action-broker.md`.
+- Found that `ActionBroker.resume` had no production caller, so a false-freeze rate was
+  unmeasurable until now. Found that event timestamps are whole-second, so sensor-to-freeze
+  latency is `[PLANNED]` and not reported.
+- Tests: `tests/test_commissioning_instrumentation.py` (real subprocess, real signals, end-to-end
+  against a real backend) and three in `tests/test_backend.py`. Suite matches `main`'s 80
+  pre-existing failures/errors (no `opa` binary); +8 passing.

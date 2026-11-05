@@ -20,6 +20,7 @@ source_files:
 - [Containment methods](#containment-methods)
 - [Protected-process interlock](#protected-process-interlock)
 - [Wired into shield run's live loop as of 2026-08-12](#wired-into-shield-run-s-live-loop-as-of-2026-08-12)
+- [Commissioning instrumentation and the resume path](#commissioning-instrumentation-and-the-resume-path)
 - [Verification record](#verification-record)
 - [Related pages](#related-pages)
 
@@ -90,6 +91,24 @@ no timeout — as the very first thing it does for a `contain` decision on a pro
 before anything else in the method, including any network call. `--no-containment` opts out for
 local-only observation/dev use, the same purpose `--no-exporter` serves for the
 [Integrity Exporter](integrity-exporter.md).
+
+## Commissioning instrumentation and the resume path
+
+Added 2026-11-05 so the commissioning ladder has measurable evidence.
+
+- **`EnforcementOutcome.handle_to_contain_ms`**: monotonic milliseconds from `EventRouter.handle()`
+  entry to `ActionBroker.contain()` returning. It is `None` for a failed containment, never a fast
+  number. It is **not** sensor-event-to-freeze: event timestamps are whole-second, so that
+  figure would be fabricated. Sub-second sensor timestamps are `[PLANNED]`.
+- **`shield resume --pid N [--event-id E] [--device-config PATH]`**: the operator rollback path.
+  It `SIGCONT`s the process and, when a device config is given, records an `action: "resume"`
+  outcome whose `resumes_event_id` names the freeze reversed. Before this command, `resume` had
+  no caller in the product. The resume itself never waits on the backend; if the outcome cannot be
+  recorded the command says so and the resume does not count toward the metric.
+- **`GET /api/shield/commissioning-metrics?tenant_id=&device_id=`** (admin): latency p50/p95/p99
+  (nearest-rank), containment counts, false-freeze rate (linked resumes over completed freezes),
+  and observe-mode would-actions. Every figure is `None`, not 0, when its inputs do not exist, and
+  the response lists what is `not_instrumented`. The window is the latest 5,000 outcome rows.
 
 ## Verification record
 

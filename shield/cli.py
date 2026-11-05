@@ -738,6 +738,49 @@ def _preflight(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resume(args: argparse.Namespace) -> int:
+    """Operator reversal of a Shield freeze: SIGCONT the process and record the outcome.
+
+    This is the rollback path the commissioning ladder depends on, and the source of the
+    false-freeze rate: a resume that names the freeze it reverses (--event-id) is counted
+    against that freeze. Fail posture: the resume itself is local and never waits on the
+    backend; if the evidence cannot be recorded, the process is still resumed and the
+    command says plainly that the resume will not count toward the metric.
+    """
+    import uuid
+
+    from .runtime_status import BackendEvidencePublisher
+    from .schemas.events import EnforcementOutcome
+
+    try:
+        result = ActionBroker().resume(args.pid)
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"shield resume: could not resume pid {args.pid}: {exc}", file=sys.stderr)
+        return 1
+    print(f"OK   resumed pid {args.pid} ({result.method})")
+
+    if not args.device_config:
+        print(
+            "note: no --device-config given; this resume is not recorded and will not count "
+            "toward the false-freeze rate",
+            file=sys.stderr,
+        )
+        return 0
+    try:
+        device_config = load_device_config(args.device_config)
+        outcome = EnforcementOutcome(
+            event_id=f"resume-{uuid.uuid4().hex}", device_id=device_config.device_id,
+            action="resume", completed=True, resumes_event_id=args.event_id,
+        )
+        BackendEvidencePublisher(device_config).publish_outcome_sync(outcome)
+    except Exception as exc:  # noqa: BLE001 -- the process is already resumed; report, do not undo
+        print(f"warning: pid {args.pid} resumed, but the outcome was not recorded: {exc}", file=sys.stderr)
+        return 0
+    if not args.event_id:
+        print("note: no --event-id given; recorded as an unlinked resume (not counted in the rate)", file=sys.stderr)
+    return 0
+
+
 def _verify_log(args: argparse.Namespace) -> int:
     result = EventLog(args.log_path, integrity_key_path=args.integrity_key).verify()
     if result.get("ok"):
@@ -929,6 +972,12 @@ def main(argv: list[str] | None = None) -> int:
     p_preflight.add_argument("--oracle-url", dest="oracle_url", default=None, help="overrides --device-config's oracle_url; omit to skip the oracle readback check")
     p_preflight.add_argument("--timeout", type=float, default=5.0, help="HTTP timeout in seconds")
     p_preflight.set_defaults(func=_preflight)
+
+    p_resume = sub.add_parser("resume", help="resume a process Shield froze, and record the reversal")
+    p_resume.add_argument("--pid", type=int, required=True, help="pid of the frozen process")
+    p_resume.add_argument("--event-id", default=None, help="event_id of the freeze being reversed (links the false-freeze metric)")
+    p_resume.add_argument("--device-config", type=Path, default=None, help="device config; enables recording the reversal in the backend")
+    p_resume.set_defaults(func=_resume)
 
     p_verify_log = sub.add_parser("verify-log", help="verify a tamper-evident decision log hash chain")
     p_verify_log.add_argument("--integrity-key", type=Path, required=True, help="HMAC key file used when writing the log")

@@ -1102,6 +1102,17 @@ def make_handler(
                 agent_id = query.get("agent_id", [None])[0]
                 self._send_json({"test_events": store.list_test_events(tenant_id=tenant_id, agent_id=agent_id)})
                 return
+            if parsed.path == "/api/shield/commissioning-metrics":
+                # Read-only evidence for the commissioning ladder; admin-gated like the
+                # outcome and decision lists it is derived from.
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None:
+                    return
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                device_id = query.get("device_id", [None])[0]
+                self._send_json(store.commissioning_metrics(tenant_id=tenant_id, device_id=device_id))
+                return
             if parsed.path == "/api/shield/enforcement-outcomes":
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
