@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import mimetypes
 import os
 import secrets
 import ssl
@@ -16,7 +17,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Mapping
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 import urllib.error
 import urllib.request
 
@@ -714,7 +715,11 @@ def make_handler(
     device_assertion_audience: str = "",
     oidc_client: OIDCClient | None = None,
     auth_secret: str = "",
+    ui_dir: Path | None = None,
 ):
+    # Resolved once: the containment check below compares against this, and resolving per
+    # request would let a symlink swapped in mid-flight change what counts as inside.
+    static_root = ui_dir.resolve() if ui_dir is not None else None
     active_oidc_client = oidc_client if oidc_client is not None else globals().get("oidc_client")
     state_signing_secret = (
         auth_secret
@@ -773,7 +778,11 @@ def make_handler(
             query = parse_qs(parsed.query)
 
             if parsed.path in ("/", "/xibalba-shield"):
-                self._send_html(_console_html())
+                index = self._ui_index()
+                if index is not None:
+                    self._send_file(index, cache="no-store")
+                else:
+                    self._send_html(_console_html())
                 return
 
             if parsed.path == "/api/shield/auth/providers":
@@ -1126,6 +1135,9 @@ def make_handler(
                         item["registration_status"] = "registered"
                     item["available_agents"] = store.discover_agent_ids(tenant_id=tenant_id, device_id=str(device.get("device_id")))
                 self._send_json({"agents": list(grouped.values())})
+                return
+            # Last, so every API route above wins: static files from the built console.
+            if self._serve_ui(parsed.path):
                 return
             self._send_error(HTTPStatus.NOT_FOUND, "not found")
 
@@ -2139,6 +2151,60 @@ def make_handler(
             prefix = "Bearer "
             return auth[len(prefix):] if auth.startswith(prefix) else ""
 
+        def _ui_index(self) -> Path | None:
+            """The built console's entry point, or None when no build is present.
+
+            Fails open to the built-in `_console_html()` fallback: a plain `pip install` or a dev
+            box with no `npm run build` must keep working exactly as before.
+            """
+            if static_root is None:
+                return None
+            index = static_root / "index.html"
+            return index if index.is_file() else None
+
+        def _serve_ui(self, request_path: str) -> bool:
+            """Serve a file from the built console, with an SPA fallback. True if handled.
+
+            Called only after every `/api/*` route has had its chance, so static files can never
+            shadow the API, and the SPA fallback can never answer an unmatched API path with
+            HTML (which would turn a JSON 404 into a page and break client error handling).
+            """
+            index = self._ui_index()
+            if index is None:
+                return False
+            if request_path.startswith("/api/"):
+                return False
+
+            relative = unquote(request_path).lstrip("/")
+            if relative:
+                candidate = (static_root / relative).resolve()
+                # Containment check: refuses `..` traversal and symlinks escaping the build dir.
+                if candidate.is_file() and candidate.is_relative_to(static_root):
+                    self._send_file(candidate)
+                    return True
+
+            # Unknown path with no file behind it: hand back the SPA shell so deep links boot.
+            self._send_file(index, cache="no-store")
+            return True
+
+        def _send_file(self, path: Path, *, cache: str | None = None) -> None:
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                self._send_error(HTTPStatus.NOT_FOUND, "not found")
+                return
+            content_type, _ = mimetypes.guess_type(path.name)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type or "application/octet-stream")
+            self.send_header("Content-Length", str(len(raw)))
+            if cache is not None:
+                self.send_header("Cache-Control", cache)
+            elif "/assets/" in path.as_posix():
+                # Vite fingerprints asset filenames, so they are safe to cache immutably.
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self.end_headers()
+            self.wfile.write(raw)
+
         def _send_html(self, html: str) -> None:
             raw = html.encode("utf-8")
             self.send_response(HTTPStatus.OK)
@@ -2479,6 +2545,23 @@ def _configure_tls(server: ThreadingHTTPServer, *, tls_cert: Path, tls_key: Path
     server.mtls_enabled = bool(tls_client_ca)  # type: ignore[attr-defined]
 
 
+def default_ui_dir() -> Path | None:
+    """Where the built operator console lives, or None if it has not been built.
+
+    `SHIELD_UI_DIR` wins, so an image can relocate the build. Otherwise this walks up from this
+    module to the repo root and looks for `ui/dist` -- the output of `npm run build`, which the
+    Render buildCommand already produces. Returns None rather than raising: a backend with no
+    built UI must still start and serve the API.
+    """
+    override = os.getenv("SHIELD_UI_DIR")
+    if override:
+        candidate = Path(override).expanduser()
+        return candidate.resolve() if (candidate / "index.html").is_file() else None
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    candidate = repo_root / "ui" / "dist"
+    return candidate.resolve() if (candidate / "index.html").is_file() else None
+
+
 def run_server(
     *,
     host: str,
@@ -2494,6 +2577,7 @@ def run_server(
     dev_disable_admin_auth: bool = False,
     oidc_client: OIDCClient | None = None,
     auth_secret: str = "",
+    ui_dir: Path | None = None,
 ) -> ThreadingHTTPServer:
     if bool(tls_cert) != bool(tls_key):
         raise ValueError("TLS requires both --tls-cert and --tls-key")
@@ -2507,6 +2591,7 @@ def run_server(
         if not loopback_host:
             raise ValueError("development auth bypass requires a loopback host")
     store = ShieldStore(db_path)
+    resolved_ui_dir = ui_dir if ui_dir is not None else default_ui_dir()
     handler = make_handler(
         store=store,
         admin_token=admin_token,
@@ -2515,8 +2600,10 @@ def run_server(
         dev_disable_admin_auth=dev_disable_admin_auth,
         oidc_client=oidc_client,
         auth_secret=auth_secret,
+        ui_dir=resolved_ui_dir,
     )
     server = _BoundedThreadingHTTPServer((host, port), handler)
+    server.ui_dir_in_use = resolved_ui_dir  # type: ignore[attr-defined]
     if tls_port is not None:
         if not tls_cert or not tls_key:
             raise ValueError("--tls-port requires both --tls-cert and --tls-key")
@@ -2541,6 +2628,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default=os.getenv("HOST") or os.getenv("SHIELD_BACKEND_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT") or os.getenv("SHIELD_BACKEND_PORT", "8765")))
     parser.add_argument("--db-path", type=Path, default=Path(os.getenv("SHIELD_BACKEND_DB", str(DEFAULT_DB_PATH))))
+    parser.add_argument(
+        "--ui-dir",
+        type=Path,
+        default=None,
+        help="directory holding the built operator console (defaults to ui/dist, or $SHIELD_UI_DIR)",
+    )
     parser.add_argument("--admin-token", default=os.getenv("SHIELD_BACKEND_TOKEN", ""))
     parser.add_argument("--admin-token-file", type=Path, default=Path(os.getenv("SHIELD_BACKEND_TOKEN_FILE", str(Path.home() / ".xibalba-shield" / "backend-admin.token"))))
     parser.add_argument("--dev-disable-auth", action="store_true", default=os.getenv("SHIELD_DEV_DISABLE_AUTH", "").strip().lower() in {"1", "true", "yes", "on"}, help="disable admin bearer auth for loopback-only development")
@@ -2572,7 +2665,17 @@ def main(argv: list[str] | None = None) -> int:
         tls_client_ca=args.tls_client_ca,
         tls_port=args.tls_port,
         dev_disable_admin_auth=args.dev_disable_auth,
+        ui_dir=args.ui_dir,
     )
+    serving_ui = getattr(server, "ui_dir_in_use", None)
+    if serving_ui is None:
+        print(
+            "shield-backend: no built operator console found; serving the built-in fallback "
+            "console. Run `npm run build` in ui/ (or set SHIELD_UI_DIR) to serve the real UI.",
+            file=sys.stderr,
+        )
+    else:
+        print(f"shield-backend: serving operator console from {serving_ui}", file=sys.stderr)
     scheme = "https" if getattr(server, "tls_enabled", False) else "http"
     mode = " with mTLS" if getattr(server, "mtls_enabled", False) else ""
     print(f"shield-backend listening on {scheme}://{args.host}:{server.server_port}{mode}")
