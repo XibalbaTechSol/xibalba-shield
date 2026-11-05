@@ -379,3 +379,14 @@
 - Tests: `tests/test_commissioning_instrumentation.py` (real subprocess, real signals, end-to-end
   against a real backend) and three in `tests/test_backend.py`. Suite matches `main`'s 80
   pre-existing failures/errors (no `opa` binary); +8 passing.
+
+## [2026-11-05] code | Commissioning ladder view added to the cloud console
+
+- New `ui/src/components/CommissioningView.jsx` (Governance > Commissioning) reading
+  `/api/shield/commissioning-metrics`; formatting rule in `ui/src/commissioningFormat.js`.
+  New page `concepts/commissioning-ladder.md`; index updated (15 -> 16 pages).
+- Playwright: `ui/e2e/commissioning.spec.ts` (populated, empty-reads-Not-measured, error, device
+  scope) and the route added to the design-system grammar sweep. All 35+ specs pass.
+- Found the console already covers fleet/device detail (Agent workspace), evidence and
+  receipt verification (Evidence), and conforms to the mock-matched tokens, so no duplicate views
+  or restyle were added.

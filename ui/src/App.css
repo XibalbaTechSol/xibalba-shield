@@ -10186,3 +10186,33 @@ h1, h2, h3, h4, b {
     border-right: 0;
   }
 }
+
+/* ── Commissioning ladder ─────────────────────────────────────────────────────
+   Uses only existing tokens: square, border-led, flat fills, no gradients, no
+   decorative colour. Tone is carried by a WORD in the state chip plus a border
+   colour, never by colour alone. */
+.commissioning-view { display: flex; flex-direction: column; gap: 20px; }
+.commissioning-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.commissioning-toolbar label { font: 600 12px var(--font-body); color: var(--muted); }
+.commissioning-toolbar select { min-height: 38px; padding: 0 12px; background: var(--panel-elevated); color: var(--text); border: 1px solid var(--line); border-radius: 0; }
+.commissioning-ladder { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.commissioning-rung { display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 0; background: transparent; min-width: 0; }
+.commissioning-rung header { display: flex; align-items: center; gap: 12px; }
+.commissioning-rung h3 { margin: 0; font-family: var(--font-heading, inherit); font-size: 22px; font-weight: 600; }
+.commissioning-rung p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.commissioning-rung-number { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line-hover); font: 500 13px var(--font-mono); color: var(--accent-text); }
+.commissioning-state { align-self: flex-start; padding: 4px 10px; border: 1px solid var(--line); font: 600 11px var(--font-body); letter-spacing: .04em; color: var(--muted); }
+.commissioning-state.ready { border-color: var(--accent); color: var(--accent-text); }
+.commissioning-state.caution { border-color: var(--amber); color: var(--amber); }
+.commissioning-state.planned { border-color: var(--line-hover); color: var(--dim); }
+.commissioning-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.commissioning-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--line-faint); min-width: 0; }
+.commissioning-stat small { font: 600 11px var(--font-body); color: var(--dim); }
+.commissioning-stat b { font: 600 22px var(--font-body); color: var(--text); overflow-wrap: anywhere; }
+.commissioning-stat.unmeasured b { font-size: 14px; font-weight: 500; color: var(--dim); }
+.commissioning-stat span { font-size: 11px; color: var(--dim); line-height: 1.4; }
+.commissioning-planned, .commissioning-notes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); }
+.commissioning-planned li { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line-faint); }
+.commissioning-notes li { line-height: 1.45; }
+.commissioning-notes b, .commissioning-planned b { color: var(--text); font-weight: 600; }
+@media (max-width: 760px) { .commissioning-stats { grid-template-columns: 1fr; } }
