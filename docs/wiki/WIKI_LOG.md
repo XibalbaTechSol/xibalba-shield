@@ -1,5 +1,15 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-05] update | Native macOS Support, Universal Desktop DMG, and LaunchDaemon Service
+
+- Added cross-platform Apple Silicon & Intel Universal binary build pipeline (`.github/workflows/build-desktop-macos.yml`) producing `Xibalba Shield_0.1.0_universal.dmg` and `.app` bundles via Tauri v2.
+- Implemented root Darwin LaunchDaemon packaging (`packaging/launchd/com.xibalba.shield.plist`) and runner wrapper (`packaging/launchd/xibalba-shield-run.sh`).
+- Implemented automated root installer `scripts/install_macos_agent.sh` using Darwin `launchctl` service bootstrapping.
+- Added Darwin kernel and subsystem compatibility adapters: POSIX `kill(pid, 0)` liveness probes in `device-core`, Darwin interface route detection (`en0`), strict 104-byte AF_UNIX socket length handling, and `ENOTSOCK` handling in `remove_stale_socket`.
+- Added `macos-tests` runner matrix to CI (`.github/workflows/ci.yml`), passing all 765 tests on Apple Silicon `macos-14`.
+- Created operational runbook `docs/runbooks/macos-agent.md`.
+
+
 ## [2026-08-28] update | Per-attempt invocation correlation
 
 - Added canonical UUID `invocation_id` to agent events, policy decisions, export status, and

@@ -57,12 +57,14 @@ The device app (`device-app/`) is a native Tauri tray and desktop application fo
 
 - `device-core`: 19 unit tests and 3 contract tests passing (`cargo test`).
 - Golden contract: Rust reader verified against real Python `EventRouter`/`EventLog`/`LocalOutcomeLog` outputs via `tests/test_device_contract.py`.
-- Native Shell: `src-tauri` compiled with Tauri v2 (`custom-protocol`, `devtools`), WebKitGTK 4.1, and Wayland DMABuf workaround (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
+- Native Shell (Linux): `src-tauri` compiled with Tauri v2 (`custom-protocol`, `devtools`), WebKitGTK 4.1, and Wayland DMABuf workaround (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
+- Native Shell (macOS): Universal Mach-O binary (`arm64` + `x86_64`) packaged as `.app` and `.dmg` (`Xibalba Shield_0.1.0_universal.dmg`) via `.github/workflows/build-desktop-macos.yml` on Apple Silicon `macos-14`.
 - UI: 9 Playwright E2E specs driving standalone, fresh device, error, phone layout, and paired device views (`npm run test:e2e`).
+- Cross-Platform CI: Full test suite passing across Linux, macOS Apple Silicon (765 passed), and Windows.
 
 ## Known Gaps
 
-- Without `/proc` (Windows, macOS) freeze state shows as *Unverified*. Native sensors on those platforms require ETW/EndpointSecurity drivers.
+- On Darwin/macOS, process liveness falls back to POSIX signal probing (`kill(pid, 0)`) when `/proc` is absent. Windows freeze state without `/proc` or ETW is reported as *Unverified*. Native kernel system call interception on those platforms requires Apple EndpointSecurity or Windows ETW/WFP drivers.
 - The local outcome log is a best-effort convenience view, not the enforcement record: a failed write leaves a freeze missing from it.
 
 ## Related Pages

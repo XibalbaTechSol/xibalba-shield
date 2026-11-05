@@ -354,8 +354,8 @@ Legend: real and tested means there is code and a test or live verification path
 | Exporter remediation queue | Local pilot implementation, tested | An admin may queue only `retry`, `flush`, or `reconnect`; the authenticated device atomically claims one job per watchdog tick and reports a terminal result. This is exporter recovery, not arbitrary endpoint command execution. |
 | Local control-plane mTLS | Implemented for local development, live-verified 2026-09-08 | A dedicated HTTPS listener on `127.0.0.1:8443` requires the local development CA and client certificate. Runtime status, policy delivery, and remediation-worker requests use the configured verified client context. This is not a production CA/deployment claim. |
 | Password-reset delivery | SMTP path implemented, deployment configuration required | Reset tokens are no longer returned by the API. Delivery requires `SHIELD_PASSWORD_RESET_URL`, `SHIELD_SMTP_HOST`, and `SHIELD_SMTP_FROM`; STARTTLS is used and username/password auth is optional. Failed delivery deletes the newly issued token and returns 503. |
-| Windows/macOS sensors | Interface boundary only | Status helpers document ETW/EndpointSecurity target sources; native sensors need target systems. See `docs/SUPPORTED_MATRIX.md`'s Windows track for real scope and why it isn't started (no Windows host available to write against, compile, or verify). |
-| Customer installer/updater | Partial | Linux install and policy-update scripts exist. Signed release tooling (`shield/release/`, `scripts/sign_release.py`/`release_manager.py`) is built and tested (2026-09-05) -- verified wheel signing, versioned releases, atomic symlink rollback -- but not yet wired into the live systemd unit's `ExecStart` or `install_linux_agent.sh`'s upgrade path; see `docs/runbooks/linux-agent.md`'s Rollback section. |
+| Windows/macOS sensors | Operational on macOS (CLI/Desktop/LaunchDaemon); Windows interface boundary | macOS Desktop App, CLI, LaunchDaemon packaging, and semantic guardrail hooks are operational and tested in CI on Apple Silicon (765 passed); native kernel interception (EndpointSecurity/NetworkExtension) remains planned. Windows is interface boundary only (see `docs/SUPPORTED_MATRIX.md`). |
+| Customer installer/updater | Implemented for Linux & macOS | Linux install script (`scripts/install_linux_agent.sh` for systemd) and macOS install script (`scripts/install_macos_agent.sh` for launchd) exist. Universal macOS Desktop DMG (`Xibalba Shield_0.1.0_universal.dmg`) and Linux desktop app packaged and verified. Signed release tooling (`shield/release/`, `scripts/sign_release.py`/`release_manager.py`) built and tested. |
 
 Current root-free validation is obtained with `.venv/bin/python -m pytest`; do not
 freeze a count in this README because the suite changes frequently. Root/live-service
@@ -788,16 +788,20 @@ Systemd artifacts:
 - `packaging/systemd/xibalba-shield-ebpf-helper.service`
 - `packaging/logrotate/xibalba-shield`
 - `packaging/systemd/shield.env.example`
+- `packaging/launchd/com.xibalba.shield.plist` (macOS LaunchDaemon definition)
+- `packaging/launchd/xibalba-shield-run.sh` (macOS POSIX runner wrapper)
 
-Runbook:
+Runbooks:
 
-- `docs/runbooks/linux-agent.md`
+- Linux Agent: `docs/runbooks/linux-agent.md`
+- macOS Agent: `docs/runbooks/macos-agent.md`
 
-The endpoint unit runs `shield run` as a supervised non-root process, using `/etc/xibalba-shield/device.json`, `/etc/xibalba-shield/policies/current.json`, and `/var/log/xibalba-shield/decisions.jsonl`. When `SHIELD_PRIVILEGED_SOCKET` is configured, it requires the root-owned split helper. Only the helper owns `/run/xibalba-shield`; the endpoint consumes the socket and must not declare the same `RuntimeDirectory`, because systemd cleanup would remove the helper's socket pathname during an endpoint restart.
+The endpoint unit runs `shield run` as a supervised process (under systemd on Linux or LaunchDaemon on macOS), using `/etc/xibalba-shield/device.json`, `/etc/xibalba-shield/policies/current.json`, and `/var/log/xibalba-shield/decisions.jsonl`. When `SHIELD_PRIVILEGED_SOCKET` is configured, it requires the root-owned split helper. Only the helper owns `/run/xibalba-shield`; the endpoint consumes the socket and must not declare the same `RuntimeDirectory`, because systemd cleanup would remove the helper's socket pathname during an endpoint restart.
 
 Helper scripts:
 
-- `scripts/install_linux_agent.sh`: installs the package and systemd unit.
+- `scripts/install_linux_agent.sh`: installs the package and systemd unit on Linux.
+- `scripts/install_macos_agent.sh`: installs the package and root LaunchDaemon service on macOS Darwin.
 - `scripts/verify_resource_controls.sh`: verifies live systemd CPU/memory/task ceilings and log rotation; run after a root-level install.
 - `scripts/generate_local_mtls_ca.sh`: creates a local-development CA plus server/client certificates; never use these credentials as a production trust root.
 - `scripts/repair_device_config_tls.sh`: installs the local client credentials, switches the device config to `https://127.0.0.1:8443`, and restarts the endpoint.
