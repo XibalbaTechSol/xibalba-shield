@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import sys
 import threading
 import time
 import urllib.parse
@@ -42,7 +43,8 @@ def test_load_or_create_device_did(tmp_path: Path):
     assert len(pub_b64) > 10
     key_path = shield_home / "private_key.pem"
     assert key_path.exists()
-    assert key_path.stat().st_mode & 0o777 == 0o600
+    if sys.platform != "win32":
+        assert key_path.stat().st_mode & 0o777 == 0o600
 
     # Running a second time reloads the exact same DID
     agent_did_2, pub_b64_2, kp_2 = load_or_create_device_did(shield_home)
