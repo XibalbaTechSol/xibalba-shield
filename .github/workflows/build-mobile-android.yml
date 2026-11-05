@@ -1,0 +1,92 @@
+name: Build Mobile (Android)
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+      - "feat/**"
+    paths:
+      - "device-app/**"
+      - ".github/workflows/build-mobile-android.yml"
+  pull_request:
+    paths:
+      - "device-app/**"
+  workflow_dispatch:
+
+jobs:
+  build-android-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: device-app/package-lock.json
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK and NDK
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "ndk;26.3.11579264" "build-tools;34.0.0" "platforms;android-34"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> $GITHUB_ENV
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            device-app/target/
+          key: ${{ runner.os }}-android-cargo-${{ hashFiles('device-app/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-android-cargo-
+
+      - name: Install npm dependencies
+        working-directory: device-app
+        run: npm ci
+
+      - name: Run device-core unit tests
+        working-directory: device-app
+        run: cargo test --manifest-path device-core/Cargo.toml
+
+      - name: Build web frontend assets
+        working-directory: device-app
+        run: npm run build
+
+      - name: Initialize Tauri Android project
+        working-directory: device-app
+        run: |
+          if [ ! -d "src-tauri/gen/android" ]; then
+            npx tauri android init --ci
+          fi
+
+      - name: Build Android Debug APK
+        working-directory: device-app
+        run: npx tauri android build --apk --debug --target aarch64
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xibalba-shield-mobile-android
+          path: |
+            device-app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+            device-app/src-tauri/gen/android/app/build/outputs/apk/arm64/debug/*.apk
+          if-no-files-found: warn

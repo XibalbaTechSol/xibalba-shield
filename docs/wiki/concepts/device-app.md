@@ -22,7 +22,7 @@ source_files:
 
 - [Overview](#overview)
 - [Visual Interface](#visual-interface)
-- [Data Flow & Architecture](#data-flow--architecture)
+- [Data Flow & Architecture](#data-flow-architecture)
 - [Features](#features)
 - [What is Verified](#what-is-verified)
 - [Known Gaps](#known-gaps)
@@ -59,12 +59,14 @@ The device app (`device-app/`) is a native Tauri tray and desktop application fo
 - Golden contract: Rust reader verified against real Python `EventRouter`/`EventLog`/`LocalOutcomeLog` outputs via `tests/test_device_contract.py`.
 - Native Shell (Linux): `src-tauri` compiled with Tauri v2 (`custom-protocol`, `devtools`), WebKitGTK 4.1, and Wayland DMABuf workaround (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
 - Native Shell (macOS): Universal Mach-O binary (`arm64` + `x86_64`) packaged as `.app` and `.dmg` (`Xibalba Shield_0.1.0_universal.dmg`) via `.github/workflows/build-desktop-macos.yml` on Apple Silicon `macos-14`.
+- Native Shell (Android): Compiled with Tauri v2 Android target (`aarch64-linux-android`) and Gradle 9.6.1 / AGP 9.3.1. Bundles `libshield_device_app_lib.so` in `arm64-v8a` and packaged as universal debug APK (`com.xibalba.shield.device`, version `0.1.0`). Verified via `apkanalyzer apk summary` and automated via `.github/workflows/build-mobile-android.yml`.
 - UI: 9 Playwright E2E specs driving standalone, fresh device, error, phone layout, and paired device views (`npm run test:e2e`).
 - Cross-Platform CI: Full test suite passing across Linux, macOS Apple Silicon (765 passed), and Windows.
 
 ## Known Gaps
 
 - On Darwin/macOS, process liveness falls back to POSIX signal probing (`kill(pid, 0)`) when `/proc` is absent. Windows freeze state without `/proc` or ETW is reported as *Unverified*. Native kernel system call interception on those platforms requires Apple EndpointSecurity or Windows ETW/WFP drivers.
+- On Android and mobile platforms, OS sandboxing prohibits cross-app `SIGSTOP` or eBPF tracing without root. Mobile agent confinement is achieved via an in-process agent middleware SDK, a local loopback VPN packet tunnel (`VpnService`), and the mobile companion app for biometric HITL approvals.
 - The local outcome log is a best-effort convenience view, not the enforcement record: a failed write leaves a freeze missing from it.
 
 ## Related Pages

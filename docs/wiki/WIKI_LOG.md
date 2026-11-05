@@ -1,5 +1,14 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-05] update | Native Android Mobile Companion, Sideloadable APK, and Mobile Architecture
+
+- Configured native Android build target (`aarch64-linux-android`) in Tauri v2 (`com.xibalba.shield.device`).
+- Gated desktop-only system tray and window close APIs in `device-app/src-tauri/src/lib.rs` and `device-app/src-tauri/Cargo.toml` under `#[cfg(desktop)]` and enabled `#[cfg_attr(mobile, tauri::mobile_entry_point)]`.
+- Assembled universal debug APK (`device-app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`) bundling `libshield_device_app_lib.so` in `arm64-v8a` (version code 1000, version name 0.1.0).
+- Published `.github/workflows/build-mobile-android.yml` for automated CI artifact generation on GitHub Actions (`ubuntu-latest`).
+- Formulated 3-pillar mobile security model for sandboxed OS environments: In-Process Agent Middleware SDK, Local Loopback VPN Tunnel (`VpnService`), and Mobile Companion UI with Android Keystore HSM DID anchoring (`did:integrity:...`) and biometric HITL escalation.
+- Created operational runbook `docs/runbooks/android-agent.md`.
+
 ## [2026-11-05] update | Native macOS Support, Universal Desktop DMG, and LaunchDaemon Service
 
 - Added cross-platform Apple Silicon & Intel Universal binary build pipeline (`.github/workflows/build-desktop-macos.yml`) producing `Xibalba Shield_0.1.0_universal.dmg` and `.app` bundles via Tauri v2.

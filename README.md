@@ -315,6 +315,18 @@ A native desktop application built with Tauri v2 and WebKitGTK on Linux. It serv
   - Derives frozen processes from `outcomes.jsonl` and validates them against `/proc/<pid>/stat`.
   - Enables safe process resumption with operator confirmation (`Confirm resume <pid>`).
 
+#### 3. Native Endpoint Mobile Companion (Android)
+
+A native Android application built with Tauri v2, Kotlin, and the Android NDK (`com.xibalba.shield.device`). It extends endpoint visibility and governance to mobile operating systems where process-level `SIGSTOP` or eBPF injection is restricted by OS sandboxing:
+
+- **In-Process Agent Middleware SDK**: PreToolUse OPA evaluator running in `< 5 ms` inside mobile AI applications.
+- **Hardware-Backed Keystore DID**: Cryptographic device identity (`did:integrity:...`) generated and anchored inside Android Keystore / StrongBox HSM.
+- **Biometric HITL Escalation**: Human-in-the-loop authorization via fingerprint and facial recognition before high-risk tools execute.
+- **Local Loopback VPN Filtering**: Uses `VpnService` to capture mobile tool egress and model traffic without root privileges.
+- **Universal Debug APK Package**: Built and verified for `aarch64` (`app-universal-debug.apk`), downloadable and sideloadable via ADB.
+
+See the [Android & Mobile Agent Companion Runbook](docs/runbooks/android-agent.md) for build, sideloading, and architecture details.
+
 ### Console visual contract
 
 The Shield-owned React/Vite console under `ui/` is the operator surface for Posture, Agent,
@@ -795,6 +807,7 @@ Runbooks:
 
 - Linux Agent: `docs/runbooks/linux-agent.md`
 - macOS Agent: `docs/runbooks/macos-agent.md`
+- Android Companion: `docs/runbooks/android-agent.md`
 
 The endpoint unit runs `shield run` as a supervised process (under systemd on Linux or LaunchDaemon on macOS), using `/etc/xibalba-shield/device.json`, `/etc/xibalba-shield/policies/current.json`, and `/var/log/xibalba-shield/decisions.jsonl`. When `SHIELD_PRIVILEGED_SOCKET` is configured, it requires the root-owned split helper. Only the helper owns `/run/xibalba-shield`; the endpoint consumes the socket and must not declare the same `RuntimeDirectory`, because systemd cleanup would remove the helper's socket pathname during an endpoint restart.
 
