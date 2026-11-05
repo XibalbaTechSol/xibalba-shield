@@ -1,0 +1,19 @@
+[package]
+name = "shield-device-app"
+version = "0.1.0"
+edition = "2021"
+description = "Xibalba Shield device app: tray status and manual resume for the local endpoint."
+license = "Apache-2.0"
+
+[lib]
+name = "shield_device_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+device-core = { path = "../device-core" }

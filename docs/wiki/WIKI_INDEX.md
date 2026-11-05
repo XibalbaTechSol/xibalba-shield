@@ -4,7 +4,7 @@
 > now — see the schema's "no aspirational content" rule. This is a focused core set covering
 > Shield's actual architecture, not an exhaustive catalog — contributions adding more pages are
 > welcome.
-> Last updated: 2026-11-03 | Total pages: 15 (10 concepts, 2 entities, 2 architecture, 1 query)
+> Last updated: 2026-11-05 | Total pages: 17 (12 concepts, 2 entities, 2 architecture, 1 query)
 
 ## Acronym glossary
 
@@ -22,6 +22,8 @@
 - [Event Router](concepts/event-router.md) — `EventRouter.handle()`'s exact step ordering: Tier 1 → optional Tier 2 → containment (before any network call) → guardrail hooks → two independent export paths → event log
 - [Policy Engine](concepts/policy-engine.md) — Tier 1; delegates evaluation to a local OPA sidecar with packaged, explicitly selected profile bundles
 - [Action Broker](concepts/action-broker.md) — real SIGSTOP/SIGCONT/cgroup-v2 containment, SIGKILL only via explicit timeout escalation, wired into `shield run`'s live loop by default
+- [Commissioning Ladder](concepts/commissioning-ladder.md) — the console view that shows, per rung from observe to autonomous, only the evidence the control plane holds; missing measurements read "Not measured", never zero
+- [Device App](concepts/device-app.md) — the Tauri tray app that shows what Shield has frozen on this machine, checked against `/proc`, with a confirmed resume; `device-core` is tested, the native shell is not yet built
 - [Guardrail Hooks](concepts/guardrail-hooks.md) — the six real semantic hook points; explains why `shield run` never wires them in, and how that differs from Action Broker
 - [Integrity Exporter](concepts/integrity-exporter.md) — DID + signed BCC commitment + telemetry submission; restored 2026-08-12 after a 2026-08-07 regression
 - [Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md) — Shield ADR, false-positive rate, precision, time-to-contain, and export-success metrics derived from labeled Integrity-backed evidence

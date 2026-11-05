@@ -185,7 +185,7 @@ test.describe('Industry design system conformance', () => {
   /* Every route, in both themes, against the populated control-plane fixture --
      the drifted colour lived in the agent drawer, routing panes, event cards and
      integration badges, which the default empty Posture view never renders. */
-  const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Evidence', 'Configuration']
+  const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Commissioning', 'Evidence', 'Configuration']
   const THEMES = ['command-center'] as const
 
   for (const theme of THEMES) {
@@ -445,7 +445,7 @@ test.describe('Industry design system conformance', () => {
 test.describe('Industry grammar in the rendered console', () => {
   // Industry's fixed scale, plus the component sizes styles.css defines.
   const SCALE = [10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 25, 32, 42]
-  const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Evidence', 'Configuration']
+  const ROUTES = ['Posture', 'Agent', 'Network', 'Decisions', 'Commissioning', 'Evidence', 'Configuration']
 
   const sweep = (page: Page) => page.evaluate((SCALE) => {
     const out: string[] = []

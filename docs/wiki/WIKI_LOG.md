@@ -367,3 +367,39 @@
 - Tests: `tests/test_protected_processes.py` (fake-/proc, deterministic) plus a cgroup test fix
   (`cgroup.procs` now required). Full suite matches `main` on the 80 pre-existing failures/errors
   (no `opa` binary in the CI container); +16 passing.
+
+## [2026-11-05] code | Commissioning-ladder instrumentation (outcome latency, shield resume, metrics endpoint)
+
+- `EnforcementOutcome` gains `handle_to_contain_ms` and `resumes_event_id`; the router measures
+  containment latency on a monotonic clock. New `shield resume` command and
+  `GET /api/shield/commissioning-metrics`. Documented in `concepts/action-broker.md`.
+- Found that `ActionBroker.resume` had no production caller, so a false-freeze rate was
+  unmeasurable until now. Found that event timestamps are whole-second, so sensor-to-freeze
+  latency is `[PLANNED]` and not reported.
+- Tests: `tests/test_commissioning_instrumentation.py` (real subprocess, real signals, end-to-end
+  against a real backend) and three in `tests/test_backend.py`. Suite matches `main`'s 80
+  pre-existing failures/errors (no `opa` binary); +8 passing.
+
+## [2026-11-05] code | Commissioning ladder view added to the cloud console
+
+- New `ui/src/components/CommissioningView.jsx` (Governance > Commissioning) reading
+  `/api/shield/commissioning-metrics`; formatting rule in `ui/src/commissioningFormat.js`.
+  New page `concepts/commissioning-ladder.md`; index updated (15 -> 16 pages).
+- Playwright: `ui/e2e/commissioning.spec.ts` (populated, empty-reads-Not-measured, error, device
+  scope) and the route added to the design-system grammar sweep. All 35+ specs pass.
+- Found the console already covers fleet/device detail (Agent workspace), evidence and
+  receipt verification (Evidence), and conforms to the mock-matched tokens, so no duplicate views
+  or restyle were added.
+
+## [2026-11-05] code | Device app (Tauri) and the local outcome log
+
+- New `device-app/`: `device-core` (plain Rust, tested), `src-tauri` thin shell (NOT compiled in the
+  build sandbox, no webview libs), React UI with 8 Playwright specs. New page `concepts/device-app.md`.
+- Shield now appends every enforcement outcome, with `pid`, to a local 0600 `outcomes.jsonl`
+  (`shield/agent_core/outcome_log.py`), isolated from the backend sink by `fan_out`. `shield resume`
+  writes its reversal there too. Updated `concepts/action-broker.md`.
+- Cross-language contract: golden fixtures from the real Python writers, a Rust test that reads them,
+  and `tests/test_device_contract.py` as the drift guard. A root `*.jsonl` ignore rule was hiding the
+  fixtures; a narrow exception was added.
+- Found by test: a visually-hidden label escaped the table's scroll clipping and caused 5px of
+  page-level horizontal scroll at 390px; fixed by positioning the table.

@@ -1531,6 +1531,103 @@ class ShieldStore:
             ).fetchall()
         return [{"received_at": row["received_at"], "outcome": json.loads(row["outcome_json"])} for row in rows]
 
+    # Outcome rows read per metrics call. A bounded window keeps the endpoint O(1) in table
+    # size; the response states the window so a reader never mistakes it for all-time totals.
+    _METRICS_WINDOW_ROWS = 5000
+
+    @staticmethod
+    def _percentile(sorted_values: list[float], pct: float) -> float | None:
+        """Nearest-rank percentile (https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method).
+        Chosen over interpolation because a latency percentile should be a value that was
+        actually observed. Returns None for an empty sample -- never 0."""
+        if not sorted_values:
+            return None
+        import math
+        rank = max(1, math.ceil(pct / 100.0 * len(sorted_values)))
+        return sorted_values[rank - 1]
+
+    def commissioning_metrics(self, *, tenant_id: str, device_id: str | None = None) -> dict[str, Any]:
+        """Evidence behind the commissioning ladder, computed only from stored rows.
+
+        Every figure is None (not 0) when its inputs do not exist, and `not_instrumented`
+        lists what the data model cannot yet support. Fail posture: this is a read-only
+        aggregation; an empty store returns an all-None document, never an error.
+        """
+        scope_sql = "tenant_id=?" + (" AND device_id=?" if device_id else "")
+        scope_args: tuple[Any, ...] = (tenant_id, device_id) if device_id else (tenant_id,)
+        rows = self._conn.execute(
+            f"SELECT outcome_json FROM enforcement_outcomes WHERE {scope_sql} ORDER BY id DESC LIMIT ?",
+            (*scope_args, self._METRICS_WINDOW_ROWS),
+        ).fetchall()
+        outcomes = [json.loads(row["outcome_json"]) for row in rows]
+
+        # "resume" is the operator reversing a freeze; everything else is a containment attempt.
+        contains = [o for o in outcomes if o.get("action") != "resume"]
+        resumes = [o for o in outcomes if o.get("action") == "resume" and o.get("completed")]
+        completed = [o for o in contains if o.get("completed")]
+        failed = [o for o in contains if not o.get("completed")]
+
+        latencies = sorted(
+            float(o["handle_to_contain_ms"]) for o in completed if o.get("handle_to_contain_ms") is not None
+        )
+
+        # A resume only counts toward the false-freeze rate when it names the freeze it reverses
+        # AND that freeze is in the window; an unlinked resume cannot be attributed, so it is
+        # reported separately instead of silently inflating or deflating the rate.
+        completed_ids = {o.get("event_id") for o in completed}
+        linked = {o.get("resumes_event_id") for o in resumes if o.get("resumes_event_id") in completed_ids}
+        unlinked = sum(1 for o in resumes if o.get("resumes_event_id") not in completed_ids)
+
+        would = self._conn.execute(
+            f"""
+            SELECT
+              SUM(CASE WHEN decision_json LIKE '%observation-only would-action: contain%' THEN 1 ELSE 0 END) AS contain_n,
+              SUM(CASE WHEN decision_json LIKE '%observation-only would-action: deny%' THEN 1 ELSE 0 END) AS deny_n,
+              SUM(CASE WHEN decision_json LIKE '%observation-only would-action: escalate%' THEN 1 ELSE 0 END) AS escalate_n
+            FROM decisions WHERE {scope_sql}
+            """,
+            scope_args,
+        ).fetchone()
+        by_action = {
+            "contain": int(would["contain_n"] or 0),
+            "deny": int(would["deny_n"] or 0),
+            "escalate": int(would["escalate_n"] or 0),
+        }
+
+        return {
+            "scope": {"tenant_id": tenant_id, "device_id": device_id},
+            "window": {"outcome_rows_read": len(outcomes), "max_rows": self._METRICS_WINDOW_ROWS},
+            "containment": {
+                "attempts": len(contains),
+                "completed": len(completed),
+                "failed": len(failed),
+                "escalated": sum(1 for o in contains if o.get("escalated")),
+            },
+            "handle_to_contain_ms": {
+                "n": len(latencies),
+                "p50": self._percentile(latencies, 50),
+                "p95": self._percentile(latencies, 95),
+                "p99": self._percentile(latencies, 99),
+                "max": latencies[-1] if latencies else None,
+            },
+            "false_freeze": {
+                "completed_contains": len(completed),
+                "linked_resumes": len(linked),
+                "unlinked_resumes": unlinked,
+                "rate": (len(linked) / len(completed)) if completed else None,
+            },
+            "observe": {
+                "would_actions_total": sum(by_action.values()),
+                "by_action": by_action,
+            },
+            "not_instrumented": [
+                "event_to_contain_ms: sensor event timestamps are whole-second, so a millisecond "
+                "figure from the kernel event would be fabricated ([PLANNED]: sub-second timestamps)",
+                "high_risk_coverage: the high-risk event-class list is agreed per design partner and "
+                "is not stored in the backend ([PLANNED])",
+            ],
+        }
+
     def record_test_event(
         self, *, tenant_id: str = "dashboard", agent_id: str | None = None,
         test_name: str, status: str, detail: str | None = None, metadata: dict[str, Any] | None = None,

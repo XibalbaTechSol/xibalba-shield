@@ -61,6 +61,7 @@ export class ShieldApi {
   detectionQuality() { return this.request('/api/shield/detection-quality') }
   detectionQualityReport(bccMiddlewareUrl, oracleUrl = '') { return this.request('/api/shield/detection-quality/report', { method: 'POST', body: { tenant_id: this.tenantId, bcc_middleware_url: bccMiddlewareUrl, oracle_url: oracleUrl }, tenant: false }) }
   opaPolicies() { return this.request('/api/shield/opa/policies') }
+  commissioningMetrics(deviceId = '') { return this.request(`/api/shield/commissioning-metrics${deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''}`) }
   enforcementOutcomes(deviceId = '') { return this.request(`/api/shield/enforcement-outcomes${deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''}`) }
   deployPolicy(deviceId, policy) { return this.request(`/api/shield/policies/${encodeURIComponent(this.tenantId)}/${encodeURIComponent(deviceId)}`, { method: 'POST', body: policy, tenant: false }) }
   policyHistory(deviceId) { return this.request(`/api/shield/policy-history?device_id=${encodeURIComponent(deviceId)}`) }

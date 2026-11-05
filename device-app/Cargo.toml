@@ -1,0 +1,10 @@
+# Workspace for the Shield device app.
+#
+# `device-core` is plain Rust with no GUI dependency, so `cargo test` (the workspace default)
+# builds and tests it on any machine. `src-tauri` is the thin native shell and needs the
+# platform webview libraries (webkit2gtk on Linux); it is deliberately NOT a default member, so
+# a bare `cargo test` never fails on a headless CI box. Build the shell with `npm run tauri build`.
+[workspace]
+resolver = "2"
+members = ["device-core", "src-tauri"]
+default-members = ["device-core"]

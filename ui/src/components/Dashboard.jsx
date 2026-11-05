@@ -3,6 +3,7 @@ import {
   Activity,
   Gauge,
   HardDrive,
+  Layers,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -49,6 +50,7 @@ const NAV = [
   ['agent', HardDrive, 'Agent', 'OPERATIONS'],
   ['network', Activity, 'Network', 'OPERATIONS'],
   ['decisions', Workflow, 'Decisions', 'GOVERNANCE'],
+  ['commissioning', Layers, 'Commissioning', 'GOVERNANCE'],
   ['evidence', FileSearch, 'Evidence', 'ASSURANCE'],
   ['configuration', Sliders, 'Configuration', 'SYSTEM'],
 ]
@@ -361,6 +363,7 @@ export function Dashboard({ connection, logout }) {
               ['agent', 'Agent'],
               ['network', 'Network'],
               ['decisions', 'Decisions'],
+              ['commissioning', 'Commissioning'],
               ['evidence', 'Evidence'],
               ['configuration', 'Configuration'],
             ].map(([id, label]) => (

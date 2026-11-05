@@ -1473,3 +1473,79 @@ def test_opa_policies_endpoint_serves_live_status_to_admins(tmp_path, monkeypatc
     assert status == 200
     assert payload["opa_version"] == "9.9.9"  # from the daemon, not a hardcoded string
     assert payload["opa_url"] == url
+
+
+def _enroll(base, tenant, device):
+    _status, enrolled = _request(
+        f"{base}/api/shield/enroll", method="POST", body={"tenant_id": tenant, "device_id": device},
+    )
+    return enrolled["device_token"]
+
+
+def _post_outcome(base, token, tenant, device, outcome):
+    status, _ = _request(
+        f"{base}/api/shield/enforcement-outcomes", method="POST", token=token,
+        body={"tenant_id": tenant, "device_id": device, "outcome": {"device_id": device, **outcome}},
+    )
+    assert status == 201
+
+
+def test_commissioning_metrics_is_all_none_when_nothing_is_recorded(tmp_path):
+    """No data must read as 'not measured' (None), never as a fast or perfect 0."""
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _enroll(base, "tenant-a", "dev-1")
+        _status, m = _request(f"{base}/api/shield/commissioning-metrics?tenant_id=tenant-a&device_id=dev-1")
+        assert m["containment"]["attempts"] == 0
+        assert m["handle_to_contain_ms"] == {"n": 0, "p50": None, "p95": None, "p99": None, "max": None}
+        assert m["false_freeze"]["rate"] is None
+        assert any("event_to_contain_ms" in line for line in m["not_instrumented"])
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_commissioning_metrics_latency_percentiles_and_false_freeze_rate(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        token = _enroll(base, "tenant-a", "dev-1")
+        # Ten completed freezes with known latencies 1..10 ms, so nearest-rank p50 = 5, p95 = 10.
+        for i in range(1, 11):
+            _post_outcome(base, token, "tenant-a", "dev-1", {
+                "event_id": f"evt-{i}", "action": "freeze", "completed": True, "handle_to_contain_ms": float(i),
+            })
+        # One failed attempt must not enter the latency sample or the completed-contain count.
+        _post_outcome(base, token, "tenant-a", "dev-1", {
+            "event_id": "evt-fail", "action": "contain", "completed": False, "error": "no such process",
+        })
+        # Two operator resumes of real freezes, one resume that names nothing in the window.
+        _post_outcome(base, token, "tenant-a", "dev-1", {
+            "event_id": "res-1", "action": "resume", "completed": True, "resumes_event_id": "evt-1"})
+        _post_outcome(base, token, "tenant-a", "dev-1", {
+            "event_id": "res-2", "action": "resume", "completed": True, "resumes_event_id": "evt-2"})
+        _post_outcome(base, token, "tenant-a", "dev-1", {
+            "event_id": "res-3", "action": "resume", "completed": True, "resumes_event_id": "evt-gone"})
+
+        _status, m = _request(f"{base}/api/shield/commissioning-metrics?tenant_id=tenant-a&device_id=dev-1")
+        assert m["containment"] == {"attempts": 11, "completed": 10, "failed": 1, "escalated": 0}
+        assert m["handle_to_contain_ms"]["n"] == 10
+        assert m["handle_to_contain_ms"]["p50"] == 5.0
+        assert m["handle_to_contain_ms"]["p95"] == 10.0
+        assert m["false_freeze"]["linked_resumes"] == 2
+        assert m["false_freeze"]["unlinked_resumes"] == 1
+        assert m["false_freeze"]["rate"] == pytest.approx(0.2)
+    finally:
+        server.shutdown()
+        store.close()
+
+
+def test_commissioning_metrics_requires_admin(tmp_path):
+    server, store, base = _start_backend(tmp_path)
+    try:
+        _enroll(base, "tenant-a", "dev-1")
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            _request(f"{base}/api/shield/commissioning-metrics?tenant_id=tenant-a", token="wrong")
+        assert caught.value.code in (401, 403)
+    finally:
+        server.shutdown()
+        store.close()

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .agent_core.action_broker import ActionBroker
 from .agent_core.eventlog import EventLog
+from .agent_core.outcome_log import LocalOutcomeLog, fan_out
 from .agent_core.registry import AgentRegistry, DeviceContext
 from .agent_core.router import EventRouter
 from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_config, load_policy_bundle
@@ -74,6 +75,14 @@ def _make_sensor(
 
         return DevModeSensor(device_id=device_id, interval_sec=dev_interval, policy_scenario=dev_scenario)
     raise ValueError(f"unknown sensor {name!r}")  # unreachable: argparse `choices` already enforces this
+
+
+def _outcome_log_path(args: argparse.Namespace) -> Path:
+    """Sits beside the decision log unless --outcome-log overrides it."""
+    explicit = getattr(args, "outcome_log", None)
+    if explicit:
+        return Path(explicit)
+    return Path(getattr(args, "log_path", DEFAULT_LOG_PATH)).expanduser().with_name("outcomes.jsonl")
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -645,7 +654,12 @@ def _run(args: argparse.Namespace) -> int:
                          # local-run builds its own Namespace without this flag; default = enforce.
                          enforcement_mode=getattr(args, "enforcement_mode", "enforce"),
                          decision_sink=evidence_publisher.publish_decision,
-                         enforcement_outcome_sink=evidence_publisher.publish_outcome,
+                         # Backend publication AND a local append, isolated from each other: a
+                         # backend outage must not stop the device-side view of what is frozen.
+                         enforcement_outcome_sink=fan_out(
+                             evidence_publisher.publish_outcome,
+                             LocalOutcomeLog(_outcome_log_path(args)),
+                         ),
                          memory_provider=memory_provider, hermes_publisher=hermes_publisher,
                          jev_analyzer=jev_analyzer)
 
@@ -735,6 +749,61 @@ def _preflight(args: argparse.Namespace) -> int:
 
     if not result["did_loaded"] or not result["bcc_middleware_reachable"]:
         return 1
+    return 0
+
+
+def _resume(args: argparse.Namespace) -> int:
+    """Operator reversal of a Shield freeze: SIGCONT the process and record the outcome.
+
+    This is the rollback path the commissioning ladder depends on, and the source of the
+    false-freeze rate: a resume that names the freeze it reverses (--event-id) is counted
+    against that freeze. Fail posture: the resume itself is local and never waits on the
+    backend; if the evidence cannot be recorded, the process is still resumed and the
+    command says plainly that the resume will not count toward the metric.
+    """
+    import uuid
+
+    from .runtime_status import BackendEvidencePublisher
+    from .schemas.events import EnforcementOutcome
+
+    try:
+        result = ActionBroker().resume(args.pid)
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"shield resume: could not resume pid {args.pid}: {exc}", file=sys.stderr)
+        return 1
+    print(f"OK   resumed pid {args.pid} ({result.method})")
+
+    device_config = None
+    if args.device_config:
+        try:
+            device_config = load_device_config(args.device_config)
+        except ConfigError as exc:
+            print(f"warning: device config unusable, backend will not be told: {exc}", file=sys.stderr)
+    outcome = EnforcementOutcome(
+        event_id=f"resume-{uuid.uuid4().hex}",
+        device_id=device_config.device_id if device_config else "local",
+        action="resume", completed=True, resumes_event_id=args.event_id, pid=args.pid,
+    )
+
+    # Local record first, always: it is what the device-side view of "what is frozen" reads,
+    # and it needs no network or config. Best-effort by design (see LocalOutcomeLog).
+    if not LocalOutcomeLog(_outcome_log_path(args)).append(outcome.to_dict()):
+        print("warning: the resume could not be recorded in the local outcome log", file=sys.stderr)
+
+    if device_config is None:
+        print(
+            "note: no usable --device-config; the backend was not told, so this resume will not "
+            "count toward the fleet false-freeze rate",
+            file=sys.stderr,
+        )
+        return 0
+    try:
+        BackendEvidencePublisher(device_config).publish_outcome_sync(outcome)
+    except Exception as exc:  # noqa: BLE001 -- the process is already resumed; report, do not undo
+        print(f"warning: pid {args.pid} resumed, but the backend was not told: {exc}", file=sys.stderr)
+        return 0
+    if not args.event_id:
+        print("note: no --event-id given; recorded as an unlinked resume (not counted in the rate)", file=sys.stderr)
     return 0
 
 
@@ -984,6 +1053,14 @@ def main(argv: list[str] | None = None) -> int:
     p_preflight.add_argument("--timeout", type=float, default=5.0, help="HTTP timeout in seconds")
     p_preflight.set_defaults(func=_preflight)
 
+    p_resume = sub.add_parser("resume", help="resume a process Shield froze, and record the reversal")
+    p_resume.add_argument("--pid", type=int, required=True, help="pid of the frozen process")
+    p_resume.add_argument("--event-id", default=None, help="event_id of the freeze being reversed (links the false-freeze metric)")
+    p_resume.add_argument("--device-config", type=Path, default=None, help="device config; enables recording the reversal in the backend")
+    p_resume.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH, help="decision log path; the outcome log sits beside it")
+    p_resume.add_argument("--outcome-log", type=Path, default=None, help="local outcome log path (default: outcomes.jsonl beside the decision log)")
+    p_resume.set_defaults(func=_resume)
+
     p_verify_log = sub.add_parser("verify-log", help="verify a tamper-evident decision log hash chain")
     p_verify_log.add_argument("--integrity-key", type=Path, required=True, help="HMAC key file used when writing the log")
     p_verify_log.set_defaults(func=_verify_log)
@@ -1065,6 +1142,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--no-exporter", action="store_true", help="local-only enforcement, export nothing")
     p_run.add_argument("--no-containment", action="store_true",
                        help="observe/decide/log/export only -- never actually freeze a process")
+    p_run.add_argument("--outcome-log", type=Path, default=None,
+                       help="local outcome log path (default: outcomes.jsonl beside the decision log)")
     p_run.add_argument("--enforcement-mode", choices=("observe", "enforce"), default="enforce",
                        help="policy-pack execution mode; observe records would-actions without responders, enforce preserves current containment behavior (default)")
     p_run.add_argument("--responder-readiness", type=Path, default=None,
