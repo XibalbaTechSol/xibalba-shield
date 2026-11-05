@@ -390,3 +390,16 @@
 - Found the console already covers fleet/device detail (Agent workspace), evidence and
   receipt verification (Evidence), and conforms to the mock-matched tokens, so no duplicate views
   or restyle were added.
+
+## [2026-11-05] code | Device app (Tauri) and the local outcome log
+
+- New `device-app/`: `device-core` (plain Rust, tested), `src-tauri` thin shell (NOT compiled in the
+  build sandbox, no webview libs), React UI with 8 Playwright specs. New page `concepts/device-app.md`.
+- Shield now appends every enforcement outcome, with `pid`, to a local 0600 `outcomes.jsonl`
+  (`shield/agent_core/outcome_log.py`), isolated from the backend sink by `fan_out`. `shield resume`
+  writes its reversal there too. Updated `concepts/action-broker.md`.
+- Cross-language contract: golden fixtures from the real Python writers, a Rust test that reads them,
+  and `tests/test_device_contract.py` as the drift guard. A root `*.jsonl` ignore rule was hiding the
+  fixtures; a narrow exception was added.
+- Found by test: a visually-hidden label escaped the table's scroll clipping and caused 5px of
+  page-level horizontal scroll at 390px; fixed by positioning the table.

@@ -11,6 +11,7 @@ source_files:
   - shield/agent_core/protected_processes.py
   - shield/agent_core/router.py
   - shield/cli.py
+  - shield/agent_core/outcome_log.py
   - docs/audits/2026-08-07-action-broker.md
 ---
 
@@ -105,6 +106,9 @@ Added 2026-11-05 so the commissioning ladder has measurable evidence.
   outcome whose `resumes_event_id` names the freeze reversed. Before this command, `resume` had
   no caller in the product. The resume itself never waits on the backend; if the outcome cannot be
   recorded the command says so and the resume does not count toward the metric.
+- **Local outcome log (`outcomes.jsonl`)**: `shield run` also appends every outcome, now carrying `pid`,
+  to a 0600 file beside the decision log (`LocalOutcomeLog`, bounded by one-backup rotation, best-effort).
+  `shield resume` writes its reversal there too. The [Device App](device-app.md) reads it.
 - **`GET /api/shield/commissioning-metrics?tenant_id=&device_id=`** (admin): latency p50/p95/p99
   (nearest-rank), containment counts, false-freeze rate (linked resumes over completed freezes),
   and observe-mode would-actions. Every figure is `None`, not 0, when its inputs do not exist, and

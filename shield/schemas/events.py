@@ -319,6 +319,8 @@ class EnforcementOutcome:
     # resumes_event_id: set only on action == "resume". Names the event_id of the earlier
     # contain outcome an operator reversed, which is what a false-freeze rate is built from.
     resumes_event_id: str | None = None
+    # pid the action targeted, so a device-side tool can list what is frozen and undo it.
+    pid: int | None = None
     time: str = field(default_factory=_now_iso)
     klass: str = field(default="enforcement_outcome", init=False)
 
@@ -335,6 +337,7 @@ class EnforcementOutcome:
             "error": self.error,
             "handle_to_contain_ms": self.handle_to_contain_ms,
             "resumes_event_id": self.resumes_event_id,
+            "pid": self.pid,
         }
 
 

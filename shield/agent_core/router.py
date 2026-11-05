@@ -234,7 +234,7 @@ class EventRouter:
                                 action=getattr(result, "action", "contain"),
                                 completed=getattr(result, "completed", True),
                                 escalated=getattr(result, "escalated", False),
-                                error=getattr(result, "error", None), agent_id=agent_id,
+                                error=getattr(result, "error", None), agent_id=agent_id, pid=pid,
                                 # Only a completed freeze has a meaningful latency; a failed
                                 # attempt reports None rather than a misleading fast number.
                                 handle_to_contain_ms=(
@@ -254,7 +254,7 @@ class EventRouter:
                     self._report_enforcement_outcome(
                         EnforcementOutcome(
                             event_id=decision.event_ref.event_id, device_id=self.device.device_id,
-                            action="contain", completed=False, error=str(exc), agent_id=agent_id,
+                            action="contain", completed=False, error=str(exc), agent_id=agent_id, pid=pid,
                         )
                     )
             else:
