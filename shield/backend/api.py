@@ -40,6 +40,12 @@ from integrity_sdk.agent_identity import resolve_agent_identities
 from ..config import ConfigError
 from .store import ShieldStore
 from . import remediation
+from .supabase_persistence import (
+    checkpoint_database,
+    get_configured_dsn,
+    restore_database,
+    start_periodic_checkpoint,
+)
 from ..transaction_gateway import TransactionIntent, TransactionPolicy, evaluate_transaction_intent
 from ..transaction_simulator import SimulationError, simulate_transaction_intent
 from ..device_assertion import ASSERTION_SCHEME, ReplayGuard, verify_assertion
@@ -2825,7 +2831,18 @@ def run_server(
             loopback_host = False
         if not loopback_host:
             raise ValueError("development auth bypass requires a loopback host")
+    dsn = get_configured_dsn()
+    if dsn:
+        try:
+            restore_database(dsn, db_path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"shield-backend: warning: failed to restore database from Supabase: {exc}", file=sys.stderr)
     store = ShieldStore(db_path)
+    if dsn:
+        try:
+            start_periodic_checkpoint(dsn, db_path, interval=30.0)
+        except Exception as exc:  # noqa: BLE001
+            print(f"shield-backend: warning: failed to start Supabase checkpoint worker: {exc}", file=sys.stderr)
     resolved_ui_dir = ui_dir if ui_dir is not None else default_ui_dir()
     handler = make_handler(
         store=store,

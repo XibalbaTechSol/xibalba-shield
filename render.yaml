@@ -28,3 +28,7 @@ services:
         generateValue: true
       - key: SHIELD_PUBLIC_BASE_URL
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: XIBALBA_CORTEX_URL
+        sync: false
