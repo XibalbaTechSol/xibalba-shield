@@ -46,8 +46,39 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    // Automatically restore session if an active cookie exists (e.g. returning from Google OAuth)
-    const checkMe = async () => {
+    // Automatically restore session if returning from Supabase OAuth or active cookie exists
+    const checkOAuthAndSession = async () => {
+      const hash = window.location.hash || ''
+      if (hash && hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash.replace(/^#/, ''))
+        const accessToken = params.get('access_token')
+        if (accessToken) {
+          try {
+            const response = await fetch('/api/shield/auth/supabase/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ access_token: accessToken }),
+            })
+            if (response.ok) {
+              const payload = await response.json()
+              if (payload && payload.account && payload.tenant_id) {
+                window.history.replaceState(null, '', window.location.pathname)
+                connect({
+                  tenant: payload.tenant_id,
+                  token: '',
+                  baseUrl: window.location.origin,
+                  account: { ...payload.account, session_expires_at: payload.session_expires_at },
+                })
+                return
+              }
+            }
+          } catch {
+            /* fall back to normal checkMe */
+          }
+        }
+      }
+
       try {
         const response = await fetch('/api/shield/auth/me', { credentials: 'include' })
         if (response.ok) {
@@ -74,7 +105,7 @@ export default function App() {
         /* local sign-out / network error */
       }
     }
-    checkMe()
+    checkOAuthAndSession()
   }, [])
 
   const logout = async (notice = '') => {

@@ -622,6 +622,10 @@ from .oidc import (
     sign_oauth_state,
     verify_oauth_state,
 )
+from .supabase_auth import (
+    SupabaseAuthError,
+    SupabaseAuthVerifier,
+)
 
 
 def init_oidc_client() -> OIDCClient | None:
@@ -640,6 +644,13 @@ def init_oidc_client() -> OIDCClient | None:
 
 
 oidc_client = init_oidc_client()
+
+
+def init_supabase_verifier() -> SupabaseAuthVerifier:
+    return SupabaseAuthVerifier()
+
+
+supabase_verifier = init_supabase_verifier()
 
 # Shield's Rego policy packs (shield/policies/rego/<id>.rego) and their display names.
 SHIELD_POLICY_PACKS = (
@@ -729,11 +740,17 @@ def make_handler(
     oidc_client: OIDCClient | None = None,
     auth_secret: str = "",
     ui_dir: Path | None = None,
+    supabase_verifier: SupabaseAuthVerifier | None = None,
 ):
     # Resolved once: the containment check below compares against this, and resolving per
     # request would let a symlink swapped in mid-flight change what counts as inside.
     static_root = ui_dir.resolve() if ui_dir is not None else None
     active_oidc_client = oidc_client if oidc_client is not None else globals().get("oidc_client")
+    active_supabase_verifier = (
+        supabase_verifier
+        if supabase_verifier is not None
+        else (globals().get("supabase_verifier") or SupabaseAuthVerifier())
+    )
     state_signing_secret = (
         auth_secret
         or os.environ.get("SESSION_SECRET")
@@ -799,14 +816,42 @@ def make_handler(
                 return
 
             if parsed.path == "/api/shield/auth/providers":
-                self._send_json({"google": active_oidc_client is not None})
+                self._send_json({"google": True, "github": False})
+                return
+
+            if parsed.path in ("/api/shield/auth/oauth/google/authorize", "/api/shield/auth/oauth/authorize"):
+                default_redirect = f"{public_base_url or self._request_base_url().rstrip('/')}/"
+                redirect_to = query.get("redirect_to", [""])[0] or default_redirect
+                try:
+                    auth_url = active_supabase_verifier.get_authorization_url("google", redirect_to)
+                except Exception as exc:
+                    self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+                    return
+                accept = self.headers.get("Accept", "")
+                if query.get("redirect", ["1"])[0] in {"1", "true"} or ("text/html" in accept and "application/json" not in accept):
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", auth_url)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return
+                self._send_json({"authorization_url": auth_url})
                 return
 
             if parsed.path == "/api/shield/auth/oidc/login":
-                if not active_oidc_client:
-                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC / Google OAuth is not configured on this server")
-                    return
                 tenant_id = query.get("tenant_id", [""])[0]
+                if not active_oidc_client:
+                    default_redirect = f"{public_base_url or self._request_base_url().rstrip('/')}/"
+                    redirect_to = query.get("redirect_to", [""])[0] or default_redirect
+                    auth_url = active_supabase_verifier.get_authorization_url("google", redirect_to)
+                    accept = self.headers.get("Accept", "")
+                    if query.get("redirect", ["1"])[0] in {"1", "true"} or ("text/html" in accept and "application/json" not in accept):
+                        self.send_response(HTTPStatus.SEE_OTHER)
+                        self.send_header("Location", auth_url)
+                        self.send_header("Cache-Control", "no-store")
+                        self.end_headers()
+                        return
+                    self._send_json({"redirect_url": auth_url, "state": "supabase"})
+                    return
                 redirect_uri = self._oidc_redirect_uri()
                 code_verifier, code_challenge = generate_pkce()
                 state = sign_oauth_state(
@@ -1387,7 +1432,9 @@ def make_handler(
 
             if parsed.path == "/api/shield/auth/oidc/login":
                 if not active_oidc_client:
-                    self._send_error(HTTPStatus.NOT_IMPLEMENTED, "OIDC / Google OAuth is not configured on this server")
+                    redirect_uri = str(body.get("redirect_uri") or "") or f"{public_base_url or self._request_base_url().rstrip('/')}/"
+                    url = active_supabase_verifier.get_authorization_url("google", redirect_uri)
+                    self._send_json({"redirect_url": url, "state": "supabase"})
                     return
                 tenant_id = str(body.get("tenant_id") or "")
                 redirect_uri = str(body.get("redirect_uri") or "") or self._oidc_redirect_uri()
@@ -1447,6 +1494,60 @@ def make_handler(
                 cookie = _session_cookie(token, max_age=_SESSION_TTL_SECONDS)
                 self._send_json(
                     {"ok": True, "account": account, "tenant_id": account["tenant_id"], "tenants": store.list_account_tenants(account_id=account["id"]), "session_expires_at": store.session_for_token(token)["expires_at"]},
+                    extra_headers=(("Set-Cookie", cookie),),
+                )
+                return
+
+            if parsed.path == "/api/shield/auth/supabase/session":
+                access_token = str(body.get("access_token") or "").strip()
+                if not access_token:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "access_token is required")
+                    return
+                try:
+                    claims = active_supabase_verifier.verify_token(access_token)
+                except SupabaseAuthError as exc:
+                    self._send_error(HTTPStatus.UNAUTHORIZED, f"Invalid Supabase token: {exc}")
+                    return
+
+                email = str(claims.get("email") or "").strip().lower()
+                sub = str(claims.get("sub") or "").strip()
+                if not email or not sub:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "Supabase token missing email or subject")
+                    return
+
+                user_meta = claims.get("user_metadata") or {}
+                app_meta = claims.get("app_metadata") or {}
+                display_name = str(
+                    user_meta.get("full_name")
+                    or user_meta.get("name")
+                    or user_meta.get("user_name")
+                    or email.split("@")[0]
+                ).strip()
+                provider = str(app_meta.get("provider") or "google").strip()
+                tenant_id = str(body.get("tenant_id") or "") or None
+
+                try:
+                    account, token = store.authenticate_or_create_oauth_account(
+                        email=email,
+                        provider=provider,
+                        provider_user_id=sub,
+                        display_name=display_name,
+                        tenant_id=tenant_id,
+                    )
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, f"OAuth authentication failed: {exc}")
+                    return
+
+                cookie = _session_cookie(token, max_age=_SESSION_TTL_SECONDS)
+                session_info = store.session_for_token(token)
+                self._send_json(
+                    {
+                        "ok": True,
+                        "account": account,
+                        "tenant_id": account["tenant_id"],
+                        "tenants": store.list_account_tenants(account_id=account["id"]),
+                        "session_expires_at": session_info["expires_at"] if session_info else None,
+                    },
                     extra_headers=(("Set-Cookie", cookie),),
                 )
                 return
@@ -2711,6 +2812,7 @@ def run_server(
     oidc_client: OIDCClient | None = None,
     auth_secret: str = "",
     ui_dir: Path | None = None,
+    supabase_verifier: SupabaseAuthVerifier | None = None,
 ) -> ThreadingHTTPServer:
     if bool(tls_cert) != bool(tls_key):
         raise ValueError("TLS requires both --tls-cert and --tls-key")
@@ -2734,6 +2836,7 @@ def run_server(
         oidc_client=oidc_client,
         auth_secret=auth_secret,
         ui_dir=resolved_ui_dir,
+        supabase_verifier=supabase_verifier,
     )
     server = _BoundedThreadingHTTPServer((host, port), handler)
     server.ui_dir_in_use = resolved_ui_dir  # type: ignore[attr-defined]
