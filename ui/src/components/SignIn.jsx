@@ -32,6 +32,44 @@ export function SignIn({ back, connect }) {
 
   useEffect(() => {
     removeSession('shield-auth-notice')
+    const hash = window.location.hash || ''
+    if (hash && hash.includes('access_token=')) {
+      const params = new URLSearchParams(hash.replace(/^#/, ''))
+      const accessToken = params.get('access_token')
+      if (accessToken) {
+        setBusy(true)
+        setError('')
+        fetch('/api/shield/auth/supabase/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ access_token: accessToken }),
+        })
+          .then(async (res) => {
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+              throw new Error(data.error || 'Failed to authenticate with Supabase')
+            }
+            window.history.replaceState(null, '', window.location.pathname)
+            const tenant = data.tenant_id
+            const api = new ShieldApi(DEFAULT_CONTROL_PLANE, tenant, '')
+            await api.dashboard()
+            connect({
+              tenant,
+              token: '',
+              baseUrl: DEFAULT_CONTROL_PLANE,
+              account: { ...data.account, session_expires_at: data.session_expires_at },
+            })
+          })
+          .catch((err) => {
+            setError(err instanceof Error ? err.message : String(err))
+          })
+          .finally(() => {
+            setBusy(false)
+          })
+      }
+    }
+
     fetch('/api/shield/auth/providers')
       .then((res) => (res.ok ? res.json() : {}))
       .then((data) => {
@@ -134,7 +172,7 @@ export function SignIn({ back, connect }) {
           {providers.google && (
             <>
               <a
-                href="/api/shield/auth/oidc/login?redirect=1"
+                href="/api/shield/auth/oauth/google/authorize"
                 className="google-sso-btn"
                 id="google-sso-login-btn"
               >
