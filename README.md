@@ -1,83 +1,63 @@
 # Xibalba Shield
 
-Xibalba Shield is a Linux-first endpoint security agent for the age of AI agents.
+> **"The EDR detects and acts. Shield proves who acted, under what authority, and that the record is untampered."**
 
-It is built around a simple premise: if the most powerful software now running on a vulnerable device is an agent that can plan, call tools, route to models, read data sources, write files, and open network paths, then endpoint security has to become agent-aware too. Shield fights fire with fire: it uses local agent-runtime guardrails, kernel-level telemetry, deterministic policy, and Integrity-backed evidence to constrain the agents operating on the device.
+Xibalba Shield provides cryptographic topology, boundary gating, and verifiable response governance for autonomous AI agents and enterprise endpoints.
 
-Shield is not a chatbot wrapper and not a dashboard-only compliance tool. It is the local sensor and enforcement layer. Integrity Protocol is the identity, BCC, telemetry, scoring, and evidence substrate that receives Shield's signed decisions.
+## The Paradigm Shift: From Thermodynamic Friction to Geometric Bounds
 
-The cross-product execution authority is [integrity-core/docs/ecosystem/INTEGRITY_ECOSYSTEM_PLAN.md](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/ecosystem/INTEGRITY_ECOSYSTEM_PLAN.md). Shield-specific documents define implementation and operations only; they do not redefine cross-product identity, pack, receipt, evidence, or product boundaries.
+Conventional endpoint security and AI safety rely on "guardrails"—software wrappers that filter outputs or block actions after the fact. From a first-principles physics standpoint, software guardrails fail because they are merely artificial thermodynamic friction: in any Reinforcement Learning (RL) environment, an autonomous agent will mathematically optimize for its goal by finding the lowest-energy path around them.
 
-## Shield is a standalone product
+Shield fundamentally changes the physics of the environment:
+1. **Geometric Boundary Gating:** If Cortex is the terrain and Integrity-Core is the physics engine, Shield dictates the absolute topological boundaries. It transforms protected data enclaves (EHRs, PHI) and destructive OS commands into zero-probability state spaces for unauthorized agents.
+2. **Response Governance Over Any EDR:** Shield does not attempt to rebuild or replace enterprise EDRs (CrowdStrike Falcon, Microsoft Defender, SentinelOne). The EDR owns detection, sensor deployment, and process telemetry. Shield sits directly above the EDR, intercepting response intents (`contain_host`, `kill_process`, `quarantine_file`, `rtr_command`), gating them through hash-bound policy evaluations (`allow`, `deny`, `escalate`), requiring single-use human/two-person sign-off, and logging every state transition to a tamper-evident ledger anchored to the Integrity Protocol.
+3. **Provable Compliance for Regulated Industries:** For healthcare systems and critical infrastructure, Shield turns response actions into verifiable HIPAA (§164.308 activity review, §164.312 audit controls) compliance packets with cryptographic proofs of custody.
 
-Shield runs and enforces policy on its own — a laptop, an SMB workstation, a regulated desktop —
-with no dependency on any other repository to function. `shield run` senses, decides, contains,
-and logs locally with zero cloud round-trip; that loop works today with `--no-exporter` and no
-Integrity Protocol account of any kind. Evidence export to Integrity Protocol (signed BCC
-commitments, SIEM/SOAR forwarding) is additive value on top of a product that already does its
-core job — real-time containment of risky processes and agent tool calls — by itself. The
-"Ecosystem Role" section below describes how Shield plugs into the broader Integrity Protocol
-ecosystem; it is not a description of a dependency Shield needs in order to work.
+The cross-product execution authority is maintained in [integrity-core/docs/ecosystem/INTEGRITY_ECOSYSTEM_PLAN.md](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/ecosystem/INTEGRITY_ECOSYSTEM_PLAN.md).
 
-Full technical detail lives in the [wiki](../../wiki) (`docs/wiki/` in this repository) and
-[`SPECIFICATION.md`](SPECIFICATION.md).
+## Ecosystem Topology
 
-## Local supervised OPA profile smoke runs
+The Integrity Ecosystem operates as a cohesive, physics-aligned machine economy across four specialized repositories:
 
-For a local, sidecar-free smoke loop, use `shield local-run --profile smb` (or
-`professional-services` or `regulated`). The command chooses exactly one allowlisted Rego bundle,
-performs a profile-specific readiness rule evaluation, binds the selected file's SHA-256 identity into
-policy metadata, and cleans up the OPA child process. This is local smoke/runtime hardening only; it
-does not claim production supervision, deployment readiness, Windows lifecycle coverage, or live
-Integrity export.
-
-## Hermes Shield agent boundary
-
-The Settings → Hermes Agent panel configures a tenant-scoped, analysis-only profile. Enrolled
-agents fetch the validated profile at startup and apply only bounded delivery controls:
-enablement, event scope, batch size, and the 16 MiB spool ceiling. The HMAC key and spool
-directory remain host-managed through `SHIELD_HERMES_KEY` and `SHIELD_HERMES_SPOOL`; saving the
-browser profile never creates, reads, or rotates key material. Operators can inspect safe local
-transport counters through the authenticated `GET /api/shield/hermes-status` endpoint. Hermes
-does not authorize Shield decisions or enforcement.
-
-**Shield Hermes analyst.** It is deployed in shadow mode as of 2026-09-27. Shield's DID is the
-Hermes `xibalba-shield` agent. `shield/hermes_analyst.py` gives it a toolless, analysis-only
-judgment step over its own material events (scope `material`: contain, deny, escalate):
-
-- **Model call:** at most one per event, through the memory-off `xibalba-shield-analyst`
-  profile, and only after a preflight proves the profile exposes zero tools.
-- **Spend:** capped at 6 per hour and 40 per day.
-- **Output:** strictly validated advisories stored in a local ledger, plus one
-  `shield_advisory` memory in Shield's Cortex. The Cortex memory carries no model free text.
-
-It never requests or performs enforcement. Operations, invariants and rollback are in
-[`docs/runbooks/hermes-analyst.md`](docs/runbooks/hermes-analyst.md).
-
-This repository is the **immune system** in a four-repository ecosystem designed as a living
-organism. (`integrity-dashboard`, the operator presentation layer, moved with the userapi from
-`integrity-core` to [`integrity-console`](https://github.com/XibalbaTechSol/integrity-console)
-in integrity-core's 2026-09-28 restructure, Phase A1.)
-
-| Repository | Analogy | Role |
+| Repository | Role | Purpose |
 |---|---|---|
-| `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
-| **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
-| `integrity-core` | 🦴 The Unifying Backend (+ 👁️ Control Center) | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts. The operator dashboard lives in `integrity-console` |
-
-Integrity Protocol is specified in [`XibalbaTechSol/integrity-core`](https://github.com/XibalbaTechSol/integrity-core) [`docs/SPEC.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/SPEC.md). This repository does not define protocol invariants. Shield is a producer of signed evidence and a local enforcement agent.
-
-**How the Immune System connects:**
-- **Inbound:** Agents route system calls and tool executions through Shield's 6 guardrail hooks. OS-level eBPF sensors observe process, file, and network activity.
-- **Outbound (to Backbone):** The Integrity Exporter signs BCC commitments using `integrity-sdk` and submits signed decisions + telemetry to integrity-core's BCC middleware and Oracle, running alongside an independent OpenTelemetry span for every decision.
-- **Outbound (to Control Center):** `integrity-console`'s `integrity-dashboard/` surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield page.
+| **`integrity-core`** | **The Physics Engine of the Machine Economy** | Implements the Autonomous Integrity Score (AIS) as the deterministic reward function ($R_{\text{total}} = R_{\text{task}} + \lambda \cdot \text{AIS}$). Governs on-chain DIDs, Behavioral Commitment Chains (BCC), Merkle state anchors, and cryptographic state verification. |
+| **`xibalba-cortex`** | **The Navigational Engine for Verifiable Autonomy** | Neuro-symbolic knowledge graph and active inference engine. Replaces probabilistic token generation with geometric graph traversal (R-GCN + TKGE), dynamic logit masking, temporal event reification, and domain connectors (Biomedical/MIMIC-IV, FHIR, ChEMBL, CMS cost friction). |
+| **`xibalba-shield`** | **Cryptographic Topology & Response Governance** | Enforces topological boundary gating, zero-probability unauthorized state spaces, and vendor-neutral response governance across EDRs and AI agents. Produces tamper-evident audit ledgers and signed evidence. |
+| **`integrity-console`** | **The Universal Verifiable Operator Window** | The unified presentation and account layer. Visualizes agent graph trajectories, multi-agent DID credentials, AIS score distributions, real-time response approval queues, and cryptographic Merkle verification. |
 
 ```mermaid
 flowchart LR
-    Agent["🤖 Agent"] -->|"System calls &<br/>tool execution"| Immune["🛡️ xibalba-shield<br/>(This repo)"]
-    Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["🦴 integrity-core<br/>(BCC → Oracle → Chain)"]
-    Brain["🧠 xibalba-cortex"] -->|"Session Merkle roots"| Backbone
-    Backbone -->|"AIS, identity, evidence"| Eyes["👁️ integrity-console/integrity-dashboard<br/>(Shield page)"]
+    subgraph Agents["Autonomous AI Agents & Runtimes"]
+        A["Agent / SOAR / MCP"] -->|"Response intent<br/>(hash-bound)"| S["🛡️ xibalba-shield"]
+        A -->|"Geometric graph traversal<br/>(path is proof)"| C["🧠 xibalba-cortex"]
+    end
+    subgraph EDR["Enterprise EDR (CrowdStrike / Defender)"]
+        E["EDR Sensors & Console"] <-->|"Host telemetry &<br/>gated execution"| S
+    end
+    subgraph Core["Integrity Protocol"]
+        S -->|"Signed action receipts &<br/>HIPAA audit packets"| P["🦴 integrity-core<br/>(AIS Reward Engine & Chain)"]
+        C -->|"Session Merkle roots &<br/>provenance hashes"| P
+    end
+    subgraph Console["Auditor & Operator Surface"]
+        P -->|"Verified AIS & chain state"| O["👁️ integrity-console<br/>(Approval queue, ledger, graph)"]
+    end
+```
+
+## Shield Architecture & Capabilities
+
+### 1. Hash-Bound Response Gateway & Action Ledger
+Every response action begins as a normalized, canonicalized `ResponseIntent` carrying a cryptographic SHA-256 hash. The gateway evaluates deterministic tenant policy:
+- `allow`: Immediate execution authorized.
+- `escalate`: Transferred to the **Approval Queue** requiring human or two-person rule sign-off with mandatory justification.
+- `deny`: Blocked; terminal state.
+Approved intents are consumed atomically for single-use execution through the vendor-neutral `EndpointProvider` abstraction (built on official SDKs such as `crowdstrike-falconpy`). Every state transition (`decided`, `approval_recorded`, `consumed`, `executed`) appends to an internal hash-chained ledger and spools signed receipts to `integrity_exporter`.
+
+### 2. Standalone Host Enforcement
+Shield runs and enforces policy on its own — on a laptop, an SMB workstation, or a regulated server — with no dependency on any cloud service to function. `shield run` senses, decides, contains, and logs locally with zero cloud round-trip (`--no-exporter` works out of the box). Containment via `ActionBroker` uses OS-level SIGSTOP and cgroup v2 freeze mechanisms.
+
+### 3. Hermes Shield Agent Boundary
+The Settings → Hermes Agent panel configures a tenant-scoped, analysis-only profile. Enrolled agents fetch the validated profile at startup and apply bounded delivery controls. The Hermes analyst profile (`shield/hermes_analyst.py`) operates in shadow mode with strictly validated advisories, zero tool exposure, and rate/spend caps. It provides cognitive advisory analysis without holding execution authority.
     Eyes -->|"Operator interventions<br/>& policy updates"| Agent
 ```
 
