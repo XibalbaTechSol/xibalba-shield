@@ -49,6 +49,15 @@ from .supabase_persistence import (
 from ..transaction_gateway import TransactionIntent, TransactionPolicy, evaluate_transaction_intent
 from ..transaction_simulator import SimulationError, simulate_transaction_intent
 from ..device_assertion import ASSERTION_SCHEME, ReplayGuard, verify_assertion
+from ..edr import (
+    ResponseIntent,
+    ResponsePolicy,
+    evaluate_response_intent,
+    VerifiedDetection,
+    Host,
+)
+from ..edr.simulated import SimulatedProvider
+from ..edr.connectors.crowdstrike import CrowdStrikeConnector
 
 try:
     from integrity_sdk.did import fingerprint_for_pubkey, verify_signature
@@ -1249,6 +1258,62 @@ def make_handler(
                     item["available_agents"] = store.discover_agent_ids(tenant_id=tenant_id, device_id=str(device.get("device_id")))
                 self._send_json({"agents": list(grouped.values())})
                 return
+
+            if parsed.path.startswith("/api/shield/response-ledger/"):
+                intent_hash = parsed.path.removeprefix("/api/shield/response-ledger/")
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                try:
+                    chain = store.response.chain(tenant_id=tenant_id, intent_hash=intent_hash)
+                except KeyError:
+                    self._send_error(HTTPStatus.NOT_FOUND, "response intent not found")
+                    return
+                self._send_json(chain)
+                return
+
+            if parsed.path in ("/api/shield/response-intents", "/api/shield/response-ledger"):
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                raw_statuses = query.get("status") or query.get("statuses") or []
+                statuses: list[str] | None = None
+                if raw_statuses:
+                    statuses = [s.strip() for item in raw_statuses for s in item.split(",") if s.strip()]
+                try:
+                    limit = int(query.get("limit", [50])[0])
+                    offset = int(query.get("offset", [0])[0])
+                except (ValueError, IndexError):
+                    limit, offset = 50, 0
+                intents = store.response.list_intents(
+                    tenant_id=tenant_id, statuses=statuses, limit=limit, offset=offset
+                )
+                verify = store.response.verify_chain(tenant_id=tenant_id)
+                self._send_json({"intents": intents, "verify": verify})
+                return
+
+            if parsed.path == "/api/shield/edr/connectors":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                integrations = store.list_integrations(tenant_id=tenant_id)
+                edr_connectors = []
+                for it in integrations:
+                    if it["kind"] in ("crowdstrike", "edr", "simulated", "sentinelone", "defender"):
+                        cfg = dict(it["config"])
+                        if "client_secret" in cfg:
+                            cfg["client_secret"] = "***"
+                        edr_connectors.append({**it, "config": cfg})
+                if not any(c["kind"] == "simulated" for c in edr_connectors):
+                    edr_connectors.append({
+                        "integration_id": "edr-simulated",
+                        "kind": "simulated",
+                        "config": {"status": "ready", "enabled": True},
+                        "created_at": "system",
+                    })
+                self._send_json({"connectors": edr_connectors})
+                return
+
             # Last, so every API route above wins: static files from the built console.
             if self._serve_ui(parsed.path):
                 return
@@ -2187,6 +2252,152 @@ def make_handler(
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json(response)
+                return
+
+            if parsed.path == "/api/shield/response-intents":
+                tenant_id = str(body.get("tenant_id") or self.headers.get("X-Shield-Tenant-ID", ""))
+                device_id = str(body.get("device_id") or self.headers.get("X-Shield-Device-ID", ""))
+                authorized = False
+                token = self._current_admin_token()
+                if token and (
+                    (admin_token and secrets.compare_digest(token, admin_token))
+                    or store.authenticate_tenant_admin(tenant_id=tenant_id, token=token)
+                ):
+                    authorized = True
+                elif device_id and self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    authorized = True
+                elif dev_disable_admin_auth:
+                    authorized = self._require_admin(tenant_id=tenant_id)
+
+                if not authorized:
+                    if not self._require_admin(tenant_id=tenant_id):
+                        return
+
+                try:
+                    raw_intent = dict(body)
+                    raw_intent["tenant_id"] = tenant_id
+                    intent = ResponseIntent.from_dict(raw_intent)
+                    settings = store.get_tenant_settings(tenant_id=tenant_id)
+                    policy_data = settings.get("response_policy")
+                    policy = ResponsePolicy.from_dict(policy_data) if policy_data else ResponsePolicy()
+                    decision = evaluate_response_intent(intent, policy)
+                    record = store.response.record_intent(intent=intent.canonical(), decision=decision.as_dict())
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                self._send_json({"decision": decision.as_dict(), "intent": record}, status=HTTPStatus.CREATED)
+                return
+
+            if parsed.path == "/api/shield/response-approvals":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                actor_type = str(body.get("actor_type") or "").strip().lower()
+                if actor_type == "agent":
+                    self._send_error(HTTPStatus.FORBIDDEN, "agents are not permitted to approve or deny intents")
+                    return
+                try:
+                    record = store.response.record_approval(
+                        tenant_id=tenant_id,
+                        intent_hash=str(body.get("intent_hash") or ""),
+                        approver_id=str(body.get("approver_id") or ""),
+                        verdict=str(body.get("verdict") or ""),
+                        reason=str(body.get("reason") or ""),
+                    )
+                except PermissionError as exc:
+                    self._send_error(HTTPStatus.FORBIDDEN, str(exc))
+                    return
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                self._send_json(record)
+                return
+
+            if parsed.path == "/api/shield/response-approvals/consume":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                intent_hash = str(body.get("intent_hash") or "")
+                try:
+                    auth = store.response.consume(tenant_id=tenant_id, intent_hash=intent_hash)
+                except KeyError as exc:
+                    self._send_error(HTTPStatus.NOT_FOUND, str(exc))
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.CONFLICT, str(exc))
+                    return
+
+                execute_now = body.get("execute", True)
+                result_payload = None
+                if execute_now:
+                    chain = store.response.chain(tenant_id=tenant_id, intent_hash=intent_hash)
+                    intent_obj = ResponseIntent.from_dict(chain["intent"])
+                    if intent_obj.vendor == "simulated":
+                        sim = SimulatedProvider(hosts=[Host("simulated", intent_obj.host_id, "sim-host", "Linux", "normal")])
+                        res = sim.execute(intent_obj, auth)
+                        result_payload = res.as_dict()
+                        store.response.record_result(tenant_id=tenant_id, intent_hash=intent_hash, result=result_payload)
+                    elif intent_obj.vendor == "crowdstrike":
+                        integrations = store.list_integrations(tenant_id=tenant_id)
+                        cs_cfg = next((it["config"] for it in integrations if it["kind"] == "crowdstrike"), None)
+                        if cs_cfg and "client_id" in cs_cfg and "client_secret" in cs_cfg:
+                            try:
+                                conn = CrowdStrikeConnector.from_credentials(
+                                    client_id=cs_cfg["client_id"],
+                                    client_secret=cs_cfg["client_secret"],
+                                    cloud=cs_cfg.get("cloud", "us-1"),
+                                )
+                                res = conn.execute(intent_obj, auth)
+                                result_payload = res.as_dict()
+                                store.response.record_result(tenant_id=tenant_id, intent_hash=intent_hash, result=result_payload)
+                            except Exception as exc:
+                                err_res = {"vendor": "crowdstrike", "action": intent_obj.action, "host_id": intent_obj.host_id, "status": "failed", "detail": str(exc), "simulated": False}
+                                result_payload = err_res
+                                store.response.record_result(tenant_id=tenant_id, intent_hash=intent_hash, result=err_res)
+                        else:
+                            err_res = {"vendor": "crowdstrike", "action": intent_obj.action, "host_id": intent_obj.host_id, "status": "failed", "detail": "CrowdStrike connector credentials not configured", "simulated": False}
+                            result_payload = err_res
+                            store.response.record_result(tenant_id=tenant_id, intent_hash=intent_hash, result=err_res)
+
+                self._send_json({
+                    "authorization": {
+                        "intent_hash": auth.intent_hash,
+                        "consumed_at": auth.consumed_at,
+                        "decision": auth.decision,
+                        "approvals": auth.approvals,
+                    },
+                    "result": result_payload,
+                })
+                return
+
+            if parsed.path == "/api/shield/edr/connectors/test":
+                tenant_id = str(body.get("tenant_id") or "")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                vendor = str(body.get("vendor") or "simulated").lower()
+                if vendor == "simulated":
+                    self._send_json({"ok": True, "vendor": "simulated", "status": "connected", "latency_ms": 1})
+                    return
+                if vendor == "crowdstrike":
+                    client_id = body.get("client_id")
+                    client_secret = body.get("client_secret")
+                    cloud = body.get("cloud", "us-1")
+                    if not client_id or not client_secret:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "client_id and client_secret are required")
+                        return
+                    try:
+                        conn = CrowdStrikeConnector.from_credentials(client_id=client_id, client_secret=client_secret, cloud=cloud)
+                        self._send_json({"ok": True, "vendor": "crowdstrike", "status": "authenticated", "cloud": cloud})
+                    except Exception as exc:
+                        self._send_json({"ok": False, "vendor": "crowdstrike", "error": str(exc)}, status=HTTPStatus.BAD_GATEWAY)
+                    return
+                self._send_error(HTTPStatus.BAD_REQUEST, f"unknown vendor {vendor}")
                 return
 
             if parsed.path in (

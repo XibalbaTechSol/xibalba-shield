@@ -73,4 +73,50 @@ export class ShieldApi {
   createApproval(body) { return this.request('/api/shield/transaction-approvals', { method: 'POST', body: { ...body, tenant_id: this.tenantId }, tenant: false }) }
   consumeApproval(body) { return this.request('/api/shield/transaction-approvals/consume', { method: 'POST', body: { ...body, tenant_id: this.tenantId }, tenant: false }) }
   verifyApproval(deviceId, intentHash, deviceToken) { return this.request('/api/shield/transaction-approvals/verify', { method: 'POST', body: { tenant_id: this.tenantId, device_id: deviceId, intent_hash: intentHash }, tenant: false, token: deviceToken }) }
+  responseIntents(status = '', limit = 50, offset = 0) {
+    const q = new URLSearchParams()
+    if (status) q.set('status', status)
+    if (limit) q.set('limit', limit)
+    if (offset) q.set('offset', offset)
+    const qs = q.toString() ? `?${q.toString()}` : ''
+    return this.request(`/api/shield/response-intents${qs}`)
+  }
+  submitResponseIntent(intent) {
+    return this.request('/api/shield/response-intents', { method: 'POST', body: { ...intent, tenant_id: this.tenantId }, tenant: false })
+  }
+  approveResponse(intentHash, approverId, verdict, reason) {
+    return this.request('/api/shield/response-approvals', {
+      method: 'POST',
+      body: { tenant_id: this.tenantId, intent_hash: intentHash, approver_id: approverId, verdict, reason },
+      tenant: false,
+    })
+  }
+  consumeResponseApproval(intentHash, execute = true) {
+    return this.request('/api/shield/response-approvals/consume', {
+      method: 'POST',
+      body: { tenant_id: this.tenantId, intent_hash: intentHash, execute },
+      tenant: false,
+    })
+  }
+  responseLedger(limit = 50, offset = 0, status = '') {
+    const q = new URLSearchParams()
+    if (status) q.set('status', status)
+    if (limit) q.set('limit', limit)
+    if (offset) q.set('offset', offset)
+    const qs = q.toString() ? `?${q.toString()}` : ''
+    return this.request(`/api/shield/response-ledger${qs}`)
+  }
+  responseChain(intentHash) {
+    return this.request(`/api/shield/response-ledger/${encodeURIComponent(intentHash)}`)
+  }
+  edrConnectors() {
+    return this.request('/api/shield/edr/connectors')
+  }
+  testEdrConnector(vendor, config = {}) {
+    return this.request('/api/shield/edr/connectors/test', {
+      method: 'POST',
+      body: { tenant_id: this.tenantId, vendor, ...config },
+      tenant: false,
+    })
+  }
 }

@@ -16,6 +16,7 @@ import { AgentView } from './AgentView'
 import { CommissioningView } from './CommissioningView'
 import { NetworkView } from './NetworkView'
 import { HermesAgentView } from './HermesAgentView'
+import { ResponseWorkspace } from './ResponseWorkspace'
 
 export function RollbackForm({ api }) {
   const [message, setMessage] = useState('')
@@ -383,6 +384,7 @@ function ConfigurationWorkspace({ connection, logout, data, api, refresh }) {
 export function ResourceView({ view, data, api, refresh, connection, logout, timeRange }) {
   if (view === 'agent') return <AgentWorkspace data={data} api={api} refresh={refresh} />
   if (view === 'network') return <NetworkWorkspace api={api} />
+  if (view === 'response') return <ResponseWorkspace api={api} refresh={refresh} timeRange={timeRange} connection={connection} />
   if (view === 'commissioning') return <CommissioningView data={data} api={api} />
   if (view === 'decisions') return <DecisionsWorkspace data={data} api={api} refresh={refresh} timeRange={timeRange} />
   if (view === 'evidence') return <EvidenceWorkspace data={data} api={api} />

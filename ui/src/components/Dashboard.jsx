@@ -13,6 +13,7 @@ import {
   X,
   Workflow,
   FileSearch,
+  ShieldAlert,
 } from 'lucide-react'
 import { ShieldApi } from '../api'
 import { Brand } from './Brand'
@@ -49,6 +50,7 @@ const NAV = [
   ['overview', Gauge, 'Posture', 'COMMAND CENTER'],
   ['agent', HardDrive, 'Agent', 'OPERATIONS'],
   ['network', Activity, 'Network', 'OPERATIONS'],
+  ['response', ShieldAlert, 'Response', 'GOVERNANCE'],
   ['decisions', Workflow, 'Decisions', 'GOVERNANCE'],
   ['commissioning', Layers, 'Commissioning', 'GOVERNANCE'],
   ['evidence', FileSearch, 'Evidence', 'ASSURANCE'],

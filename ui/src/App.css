@@ -10216,3 +10216,158 @@ h1, h2, h3, h4, b {
 .commissioning-notes li { line-height: 1.45; }
 .commissioning-notes b, .commissioning-planned b { color: var(--text); font-weight: 600; }
 @media (max-width: 760px) { .commissioning-stats { grid-template-columns: 1fr; } }
+
+/* ── EDR Response Governance Workspace ────────────────────────────────────────── */
+.response-workspace-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.response-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.panel-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.panel-header-row h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.panel-header-row p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ledger-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tab-count {
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: var(--panel-elevated);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+}
+.response-intent-table header,
+.response-intent-table .event-row {
+  display: grid;
+  grid-template-columns: 140px 140px 180px 160px 150px 90px;
+  align-items: center;
+  gap: 12px;
+}
+.response-ledger-table header,
+.response-ledger-table .event-row {
+  display: grid;
+  grid-template-columns: 130px 130px 180px 130px 140px 150px 80px;
+  align-items: center;
+  gap: 12px;
+}
+.response-row {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.vendor-console-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+.vendor-console-link:hover {
+  text-decoration: underline;
+}
+.status-badge.actor-agent {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.status-badge.decision-allow {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.status-badge.decision-deny {
+  border-color: var(--red, #ef4444);
+  color: var(--red, #ef4444);
+}
+.status-badge.decision-escalate {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.status-badge.receipt-anchored {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.connectors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 20px;
+}
+.connector-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.connector-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chain-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.timeline-node {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-elevated);
+}
+.timeline-seq {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent-text);
+}
+.timeline-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.decision-controls textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--panel-elevated);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+

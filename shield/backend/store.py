@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config.loader import ConfigError, PolicyBundle, load_policy_bundle
+from .response_store import ResponseLedgerStore
 
 
 def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
@@ -120,6 +121,8 @@ class ShieldStore:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
         self.init_schema()
+        self.response = ResponseLedgerStore(self._conn)
+        self.response.init_schema()
 
     def close(self) -> None:
         self._conn.close()
