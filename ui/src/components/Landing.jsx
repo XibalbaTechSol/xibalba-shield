@@ -1,37 +1,38 @@
-import { Activity, ArrowRight, Crosshair, FileCheck2, Fingerprint, LockKeyhole, Radar, RotateCcw, Settings2, Shield, SquareTerminal, Workflow, X } from 'lucide-react'
+import { Activity, ArrowRight, Crosshair, FileCheck2, Fingerprint, LockKeyhole, Radar, RotateCcw, Settings2, Shield, ShieldCheck, SquareTerminal, Workflow } from 'lucide-react'
 import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
 const DECISION_FLOW = `flowchart LR
-  A[Kernel telemetry<br/>process · file · network] --> B[Normalize<br/>deduplicate · enrich]
-  B --> C{Local policy<br/>signed · deterministic}
-  C -->|allow| D[Continue]
-  C -->|contain| E[Bounded response]
-  D --> F[Evidence receipt]
-  E --> F
-  F -. links to source .-> A`
+  A[Kernel & EDR telemetry<br/>Falcon · Defender · eBPF] --> B[Normalize<br/>deduplicate · enrich]
+  B --> C{Response Gateway<br/>hash-bound intent}
+  C -->|allow| D[Endpoint execution]
+  C -->|escalate| G[Operator approval queue]
+  G -->|approved| D
+  C -->|deny| H[Terminal block]
+  D --> F[Integrity Receipt<br/>tamper-evident ledger]
+  F -. anchored to .-> P[Integrity Protocol]`
 
 const RESPONSE_FLOW = `flowchart LR
-  A[Runtime probe] --> E{Every proof valid?}
-  B[Device identity] --> E
-  C[Policy signature] --> E
-  D[Operator approval] --> E
-  E -->|yes| F[Fresh readiness artifact]
-  E -->|no| G[Fail closed]
-  F --> H[Freeze cgroup]
-  F --> I[Kill process]
-  F --> J[Block network flow]`
+  A[Response Intent] --> E{Cryptographic Gate}
+  B[Actor DID & role] --> E
+  C[Policy hash] --> E
+  D[Two-person approval] --> E
+  E -->|allow / approved| F[Atomic Consume]
+  E -->|deny / expired| G[Fail Closed]
+  F --> H[EDR: Contain Host]
+  F --> I[EDR: Kill Process]
+  F --> J[OS: cgroup freeze]`
 
 const AGENT_FLOW = `flowchart LR
-  A[Agent request] --> B[Ingress guardrail]
-  B --> C[Model and retrieval checks]
-  C --> D[Tool pre-action gate]
-  D --> E[Kernel-observed execution]
+  A[Agent intent] --> B[Cryptographic boundary gate]
+  B --> C[Geometric traversal checks]
+  C --> D[Response intent gateway]
+  D --> E[EDR / Kernel execution]
   E --> F[Post-action verification]
-  F --> G[Correlated evidence]
-  H[Signed local policy] -. governs .-> B
+  F --> G[Attested evidence chain]
+  H[Signed tenant policy] -. governs .-> B
   H -. governs .-> D
-  I[Process · file · network sensors] -. observes .-> E`
+  I[Sensors & EDR connectors] -. observes .-> E`
 
 export function Landing({ next }) {
   return (
@@ -63,14 +64,14 @@ export function Landing({ next }) {
             height="691"
           />
           <p className="eyebrow">
-            <span aria-hidden="true" /> LINUX-FIRST AGENT SECURITY
+            <span aria-hidden="true" /> VERIFIABLE RESPONSE GOVERNANCE &amp; BOUNDARY GATING
           </p>
           <h1>
-            Trust every action.<br />
-            <em>Contain every threat.</em>
+            The EDR detects and acts.<br />
+            <em>Shield proves who authorized it.</em>
           </h1>
           <p className="lede">
-            Observe, evaluate, and enforce policy at the edge—a verifiable security boundary built for autonomous agents.
+            Cryptographic topology, zero-probability boundary gating, and verifiable response governance across enterprise EDRs and autonomous AI agents. Anchored to the Integrity Protocol.
           </p>
           <div className="hero-actions">
             <button className="primary big" onClick={next}>
@@ -79,9 +80,9 @@ export function Landing({ next }) {
             <a href="#platform" className="learn-more-link">See how it works</a>
           </div>
           <div className="checks">
-            <span><X aria-hidden="true" /> Kernel telemetry</span>
-            <span><X aria-hidden="true" /> Signed policies</span>
-            <span><X aria-hidden="true" /> Receipt-backed enforcement</span>
+            <span><ShieldCheck aria-hidden="true" /> Zero-probability boundary gating</span>
+            <span><ShieldCheck aria-hidden="true" /> Hash-bound EDR response governance</span>
+            <span><ShieldCheck aria-hidden="true" /> Tamper-evident ledger &amp; HIPAA packets</span>
           </div>
         </div>
 
@@ -91,14 +92,14 @@ export function Landing({ next }) {
           <div className="preview-body">
             <div className="preview-capabilities">
               {[
-                ['Endpoint observation', 'Verified locally', 'green'],
-                ['Local policy engine', 'Verified locally', 'green'],
-                ['Hermes', 'Analysis only', 'blue'],
-                ['Gateway authority', 'Awaiting authorization', 'amber'],
-                ['Backend ownership', 'Requires operator review', 'red'],
+                ['Response Gateway', 'Active & hash-bound', 'green'],
+                ['EDR Connectors (CrowdStrike)', 'Verified via SDK', 'green'],
+                ['Action Ledger', 'Tamper-evident chain', 'green'],
+                ['Hermes Analyst', 'Analysis only', 'blue'],
+                ['Integrity Protocol Exporter', 'Anchoring verified', 'green'],
               ].map(([label, state, tone]) => <div className="preview-row" key={label}><span className={`preview-dot ${tone}`} /><b>{label}</b><em>{state}</em><span className="preview-arrow">→</span></div>)}
             </div>
-            <aside className="preview-actions"><h3>Next operator actions</h3><ol><li>Identify gateway model/API</li><li>Define disposable lab scope</li><li>Resolve service ownership</li></ol><small>External control stays blocked until authorized.</small></aside>
+            <aside className="preview-actions"><h3>Next operator actions</h3><ol><li>Review escalated response intents</li><li>Configure tenant containment mode</li><li>Generate HIPAA audit packet</li></ol><small>Actions remain blocked until cryptographic authorization passes.</small></aside>
           </div>
           <div className="preview-footer"><span><Activity size={13} /> Observed locally</span><span><FileCheck2 size={13} /> Evaluated deterministically</span><span><LockKeyhole size={13} /> Containment remains host-authoritative</span></div>
         </div>

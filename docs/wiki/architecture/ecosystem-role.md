@@ -19,35 +19,31 @@ source_files:
 
 ## Overview
 
-Xibalba Shield is one of three repositories in a living-organism-shaped ecosystem, described in
-`README.md`'s "Ecosystem Role" section. Shield is **🛡️ The Immune System**. (`integrity-dashboard`
-— the operator presentation layer, previously developed as a separate `integrity-mvp` repository
-— now lives inside `integrity-core` as a component, not a fourth sibling repository.)
+Xibalba Shield is the **Cryptographic Topology & Response Governance Layer** in a four-repository ecosystem architected around a unified physical principle: **logic is geometric graph traversal, and compliance is the native reward function.**
 
-| Repository | Analogy | Role |
+| Repository | Role | Paradigm & Function |
 |---|---|---|
-| `xibalba-cortex` | 🧠 The Brain | Local cognitive store — memories, context, reasoning provenance, session Merkle roots |
-| **`xibalba-shield`** | **🛡️ The Immune System** | Endpoint enforcement, kernel sensing, policy gating, semantic guardrails |
-| `integrity-core` | 🦴 The Unifying Backend + 👁️ Control Center | Protocol backbone — on-chain identity, BCC, Oracle scoring, smart contracts — plus `integrity-dashboard/`, the operator presentation layer |
+| `xibalba-cortex` | 🧠 The Navigational Engine | Neuro-symbolic knowledge graph and active inference engine. Replaces probabilistic text generation with geometric graph traversal (R-GCN + TKGE), dynamic logit masking, temporal event reification, and domain connectors (Biomedical/MIMIC-IV, FHIR, ChEMBL, CMS cost friction). |
+| **`xibalba-shield`** | **🛡️ Cryptographic Topology & Response Governance** | Enforces topological boundary gating, zero-probability unauthorized state spaces, and vendor-neutral response governance across enterprise EDRs (CrowdStrike, Defender) and AI agents (MCP, SOAR). *"The EDR detects and acts; Shield proves who authorized it."* Produces tamper-evident audit ledgers and HIPAA assurance packets. |
+| `integrity-core` | 🦴 The Physics Engine of the Machine Economy | Implements the Autonomous Integrity Score (AIS) as the deterministic reward function ($R_{\text{total}} = R_{\text{task}} + \lambda \cdot \text{AIS}$). Governs on-chain DIDs, Behavioral Commitment Chains (BCC), Merkle state anchors, and cryptographic state verification. |
+| `integrity-console` | 👁️ The Universal Verifiable Operator Window | Operator presentation layer. Visualizes agent graph navigation trajectories, multi-agent DID credentials, AIS score distributions, real-time response approval queues, and cryptographic Merkle verification. |
 
-## How the Immune System connects
+## How Shield Connects
 
-- **Inbound.** Agents route system calls and tool executions through Shield's six
-  [Guardrail Hooks](../concepts/guardrail-hooks.md) (when an instrumented runtime calls them).
-  OS-level eBPF [sensors](../concepts/sensor-model.md) observe process, file, and network
-  activity independently of that.
-- **Outbound, to the Backbone.** The [Integrity Exporter](../concepts/integrity-exporter.md)
-  signs BCC commitments using `integrity-sdk` and submits signed decisions plus telemetry to
-  `integrity-core`'s BCC middleware and Oracle, running alongside an independent OpenTelemetry
-  span for every decision — see [Event Router](../concepts/event-router.md).
-- **Outbound, to the Control Center.** `integrity-core`'s `integrity-dashboard/` component
-  surfaces Shield evidence, sensor status, guardrail decisions, and export status on its Shield
-  page (a consumer of Shield's exported data, not documented in this wiki — see
-  `integrity-core`'s own repository).
+- **Inbound, from Agents:** Autonomous agents submit hash-bound response intents (`contain_host`, `kill_process`, `rtr_command`). Shield evaluates deterministic tenant policy, routing high-impact operations into the **Approval Queue** for human/two-person sign-off.
+- **Inbound, from EDRs:** Enterprise EDRs (CrowdStrike Falcon, Microsoft Defender) provide endpoint telemetry and detection signals. Shield normalizes detections and verifies severity without duplicating EDR consoles.
+- **Outbound, to Endpoint Responders:** Only upon atomic consume of a cryptographically valid `ExecutionAuthorization` does Shield dispatch containment/remediation commands via the `EndpointProvider` connector interface.
+- **Outbound, to Integrity Protocol:** Every decision, approval, and execution event is appended to a local hash-chained ledger and spooled to `integrity_exporter` for anchoring into `integrity-core`.
+- **Outbound, to Integrity Console:** Surfaces real-time approval queues, tamper-evident action ledgers, and auditor-ready compliance bundles.
 
 ```mermaid
 flowchart LR
-    Agent["Agent"] -->|"System calls &<br/>tool execution"| Immune["xibalba-shield<br/>(this repo)"]
+    Agent["🤖 AI Agent / SOAR"] -->|"Response intent<br/>(hash-bound)"| Shield["🛡️ xibalba-shield<br/>(Response Gateway)"]
+    EDR["🏢 Enterprise EDR<br/>(CrowdStrike / Defender)"] <-->|"Telemetry &<br/>gated execution"| Shield
+    Shield -->|"Signed action receipts &<br/>audit packets"| Core["🦴 integrity-core<br/>(AIS Physics Engine)"]
+    Cortex["🧠 xibalba-cortex<br/>(Navigational Engine)"] -->|"Session Merkle roots"| Core
+    Core -->|"AIS, identity, evidence"| Console["👁️ integrity-console<br/>(Operator Window)"]
+```
     Immune -->|"Signed BCC commitments<br/>+ telemetry"| Backbone["integrity-core<br/>(BCC to Oracle to Chain)"]
     Brain["xibalba-cortex"] -->|"Session Merkle roots"| Backbone
     Backbone -->|"AIS, identity, evidence"| Eyes["integrity-core/integrity-dashboard<br/>(Shield page)"]
