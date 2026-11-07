@@ -4,7 +4,7 @@ Xibalba Shield provides cryptographic topology, boundary gating, and verifiable 
 
 > **"The EDR detects and acts. Shield proves who authorized it, under what authority, and that the record is untampered."**
 
-Shield enforces zero-probability state spaces for unauthorized operations and gates response intents across enterprise EDRs (CrowdStrike Falcon, Microsoft Defender) and agent runtimes. It is the boundary and response enforcement layer; `integrity-core` is the physics engine computing the Autonomous Integrity Score (AIS) as the native reward function; `xibalba-cortex` is the navigational knowledge engine.
+Shield enforces zero-probability state spaces for unauthorized operations and gates response intents across enterprise EDRs (CrowdStrike Falcon, Microsoft Defender) and agent runtimes. It is the boundary and response enforcement layer; `integrity-core` is the physics engine computing the Autonomous Integrity Score (AIS) as the native reward function; `xibalba-cortex` is the navigational knowledge engine; and `integrity-console` is the universal operator window.
 
 Governance/conventions live in `WIKI_SCHEMA.md`; the full catalog with one-line descriptions is `WIKI_INDEX.md`; the change history is `WIKI_LOG.md`.
 
@@ -14,10 +14,10 @@ Governance/conventions live in `WIKI_SCHEMA.md`; the full catalog with one-line 
 [Action Broker & Response Governance](concepts/action-broker.md) (OS-level containment & EDR response gateway) →
 [Policy Engine](concepts/policy-engine.md) (Tier 1 deterministic policy & OPA) →
 [Exporter Remediation](concepts/exporter-remediation.md) (bounded exporter recovery) →
-[Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md) (ADR and
-false-positive measurements from labeled evidence) →
-[SLM Cascade Tiers](concepts/slm-cascade-tiers.md) (what's real vs. `[PLANNED]` in the 3-tier
-architecture).
+[Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md) (ADR and false-positive measurements from labeled evidence) →
+[SLM Cascade Tiers](concepts/slm-cascade-tiers.md) (what's real vs. `[PLANNED]` in the 3-tier architecture).
+
+Production Cloud Console: [`https://xibalba-shield.onrender.com`](https://xibalba-shield.onrender.com)
 
 ## System at a glance
 
@@ -36,7 +36,6 @@ flowchart TD
     Log --> Exporter
     Exporter --> Backbone["integrity-core<br/>Oracle, BCC middleware, evidence, AIS reward engine"]
 ```
-```
 
 ## Pages by category
 
@@ -45,6 +44,8 @@ flowchart TD
 - [Event Router](concepts/event-router.md)
 - [Policy Engine](concepts/policy-engine.md)
 - [Action Broker](concepts/action-broker.md)
+- [Commissioning Ladder](concepts/commissioning-ladder.md)
+- [Device App](concepts/device-app.md)
 - [Guardrail Hooks](concepts/guardrail-hooks.md)
 - [Integrity Exporter](concepts/integrity-exporter.md)
 - [Shield Detection Quality Metrics](concepts/shield-detection-quality-metrics.md)
@@ -62,16 +63,3 @@ flowchart TD
 
 ### Queries
 - [Compliance Evidence Trail](queries/compliance-evidence-trail.md)
-
-## Reference
-
-- [WIKI_INDEX.md](WIKI_INDEX.md) — full catalog, one-line description per page
-- [WIKI_LOG.md](WIKI_LOG.md) — chronological record of every wiki change, append-only
-- [WIKI_SCHEMA.md](WIKI_SCHEMA.md) — page format, frontmatter, tag taxonomy
-
-## No aspirational content
-
-Every page here documents what exists in the code right now. A feature described in a spec or a
-README but not yet implemented — or implemented differently than other repository documentation
-claims — is stated explicitly, never written as if it matches the more flattering description.
-See `WIKI_SCHEMA.md` for the full convention.
