@@ -84,9 +84,9 @@ class ClinicalAISRewardStep:
 
 def load_nurse_rachel_policy_pack(pack_dir: Path = PACK_DIR) -> PolicyPackManifest:
     """Load and verify the file digests of the signed `nurse-rachel-wi-medicaid` pack."""
-    pack_yaml_bytes = (pack_dir / "pack.yaml").read_bytes()
-    controls_yaml_bytes = (pack_dir / "controls.yaml").read_bytes()
-    policy_rego_bytes = (pack_dir / "policy.rego").read_bytes()
+    pack_yaml_bytes = (pack_dir / "pack.yaml").read_bytes().replace(b"\r\n", b"\n")
+    controls_yaml_bytes = (pack_dir / "controls.yaml").read_bytes().replace(b"\r\n", b"\n")
+    policy_rego_bytes = (pack_dir / "policy.rego").read_bytes().replace(b"\r\n", b"\n")
     sig_json = json.loads((pack_dir / "pack.sig.json").read_text(encoding="utf-8"))
 
     expected_files = sig_json["signed_manifest"]["files"]
