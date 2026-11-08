@@ -13,6 +13,12 @@ from shield.nurse_rachel.models import (
     QueryCarePlanAction,
     RecordADLAction,
 )
+from shield.nurse_rachel.policy_pack import (
+    ClinicalAISRewardStep,
+    NurseRachelPolicyEvaluator,
+    PolicyDecisionResult,
+    compute_clinical_ais_and_reward,
+)
 from shield.nurse_rachel.vault import PatientVault
 
 
@@ -25,6 +31,8 @@ class GateEvaluationResult:
     reason: str
     receipt_hash: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
+    policy_decision: Optional[PolicyDecisionResult] = None
+    reward_step: Optional[ClinicalAISRewardStep] = None
 
 
 class GatedActionBroker:
@@ -56,6 +64,7 @@ class GatedActionBroker:
             "azure-openai-eastus.openai.azure.com",
             "local.edge.shield",
         }
+        self.policy_evaluator = NurseRachelPolicyEvaluator()
         self.receipts: list = []
 
     def _generate_receipt(self, action_name: str, args: Dict[str, Any], allowed: bool, reason: str) -> str:
@@ -83,10 +92,27 @@ class GatedActionBroker:
     ) -> GateEvaluationResult:
         """Synchronous PreToolUse gate and clinical dispatcher."""
 
+        prev_ais_1000 = self.governor.current_ais * 1000.0
+        policy_decision = self.policy_evaluator.evaluate(
+            {
+                "event_class": arguments.get("event_class", "agent.tool_call"),
+                "target_endpoint": target_endpoint,
+                "baa_verified_endpoint": target_endpoint in self.trusted_baa_endpoints,
+                "serialized_args": f"{action_name} {json.dumps(arguments)}",
+                **arguments,
+            }
+        )
+
         # 1. Verify BAA Endpoint Whitelist (HIPAA §164.502)
         if target_endpoint not in self.trusted_baa_endpoints:
             self.governor.penalize_violation(f"Attempted transmission to non-BAA endpoint: {target_endpoint}", 0.30)
             receipt = self._generate_receipt(action_name, arguments, False, "DENY_NON_BAA_ENDPOINT")
+            reward_step = compute_clinical_ais_and_reward(
+                r_task=1.0,
+                penalty_severity=1.0 - self.governor.current_ais,
+                prev_ais_1000=prev_ais_1000,
+                policy_denied=True,
+            )
             return GateEvaluationResult(
                 allowed=False,
                 action_name=action_name,
@@ -94,12 +120,20 @@ class GatedActionBroker:
                 current_ais=self.governor.current_ais,
                 reason="Denied: Target endpoint does not hold an active Business Associate Agreement (BAA).",
                 receipt_hash=receipt,
+                policy_decision=policy_decision,
+                reward_step=reward_step,
             )
 
         # 2. Check Action-Space Zone Governor (Integrity Protocol Closed Loop)
         if not self.governor.is_action_permitted(action_name):
             self.governor.penalize_violation(f"Action '{action_name}' exceeds current zone permissions", 0.10)
             receipt = self._generate_receipt(action_name, arguments, False, "DENY_ACTION_SPACE_RESTRICTION")
+            reward_step = compute_clinical_ais_and_reward(
+                r_task=1.0,
+                penalty_severity=1.0 - self.governor.current_ais,
+                prev_ais_1000=prev_ais_1000,
+                policy_denied=True,
+            )
             return GateEvaluationResult(
                 allowed=False,
                 action_name=action_name,
@@ -107,6 +141,8 @@ class GatedActionBroker:
                 current_ais=self.governor.current_ais,
                 reason=f"Action '{action_name}' is prohibited in {self.governor.current_zone.value.upper()} zone.",
                 receipt_hash=receipt,
+                policy_decision=policy_decision,
+                reward_step=reward_step,
             )
 
         # 3. Clinical Boundary Check: Prohibit Autonomous Prescribing & Diagnosis
@@ -115,6 +151,12 @@ class GatedActionBroker:
             if kw in serialized_args or kw in action_name.lower():
                 self.governor.penalize_violation(f"Unauthorized medical practice attempt: keyword '{kw}' detected", 0.25)
                 receipt = self._generate_receipt(action_name, arguments, False, "DENY_UNAUTHORIZED_CLINICAL_ORDER")
+                reward_step = compute_clinical_ais_and_reward(
+                    r_task=1.0,
+                    penalty_severity=1.0 - self.governor.current_ais,
+                    prev_ais_1000=prev_ais_1000,
+                    policy_denied=True,
+                )
                 return GateEvaluationResult(
                     allowed=False,
                     action_name=action_name,
@@ -122,7 +164,30 @@ class GatedActionBroker:
                     current_ais=self.governor.current_ais,
                     reason=f"Denied: Clinical boundary breach. Nurse Rachel cannot diagnose, prescribe, or titrate medications ({kw}).",
                     receipt_hash=receipt,
+                    policy_decision=policy_decision,
+                    reward_step=reward_step,
                 )
+
+        # 3b. Wisconsin Medicaid Statutory Policy Pack Gate (EVV, 60-day RN, Hospital Hold, PA Cap, CMS-485)
+        if not policy_decision.allowed:
+            self.governor.penalize_violation(f"Policy pack violation: {policy_decision.reason_code}", 0.20)
+            receipt = self._generate_receipt(action_name, arguments, False, policy_decision.reason_code)
+            reward_step = compute_clinical_ais_and_reward(
+                r_task=1.0,
+                penalty_severity=1.0 - self.governor.current_ais,
+                prev_ais_1000=prev_ais_1000,
+                policy_denied=True,
+            )
+            return GateEvaluationResult(
+                allowed=False,
+                action_name=action_name,
+                zone=self.governor.current_zone,
+                current_ais=self.governor.current_ais,
+                reason=f"Denied by Nurse Rachel Policy Pack ({policy_decision.control_id}): {policy_decision.reason_code}",
+                receipt_hash=receipt,
+                policy_decision=policy_decision,
+                reward_step=reward_step,
+            )
 
         # 4. Resolve Patient Identity Locally
         patient_id = self.vault.resolve_token(patient_token)
@@ -179,6 +244,12 @@ class GatedActionBroker:
                 output = {"status": "executed", "action": action_name}
 
             receipt = self._generate_receipt(action_name, arguments, True, "PERMITTED_CLINICAL_ACTION")
+            reward_step = compute_clinical_ais_and_reward(
+                r_task=1.0,
+                penalty_severity=1.0 - self.governor.current_ais,
+                prev_ais_1000=prev_ais_1000,
+                policy_denied=False,
+            )
             return GateEvaluationResult(
                 allowed=True,
                 action_name=action_name,
@@ -187,6 +258,8 @@ class GatedActionBroker:
                 reason="Action permitted and executed within clinical bounds.",
                 receipt_hash=receipt,
                 output_payload=output,
+                policy_decision=policy_decision,
+                reward_step=reward_step,
             )
 
         except Exception as e:

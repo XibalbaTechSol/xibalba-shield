@@ -1,0 +1,17 @@
+US-CURES-12006(a):
+  - evv_six_statutory_elements
+  - evv_gps_geofence_250m
+WI-DHS-105.17(2)(b):
+  - rn_60_day_supervisory_visit
+WI-DHS-107.112(4):
+  - inpatient_hospital_billing_hold
+WI-DHS-107.112(1)-(3):
+  - prior_authorization_weekly_unit_cap
+US-ACA-6407-42CFR440.70:
+  - physician_signed_cms_485_poc
+  - face_to_face_encounter_window
+WI-NPA-441.06:
+  - clinical_scope_of_practice_containment
+HIPAA-164.312(b)-164.502(e):
+  - baa_verified_endpoint
+  - immutable_audit_receipt

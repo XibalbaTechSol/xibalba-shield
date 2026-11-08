@@ -150,3 +150,96 @@ def test_patient_vault_isolation(temp_vault: PatientVault):
 
     assert len(hist2["vitals"]) == 1
     assert hist2["vitals"][0]["systolic_bp"] == 145
+
+
+def test_nurse_rachel_signed_policy_pack_and_ais_reward_validation():
+    """Verify the signed nurse-rachel-wi-medicaid policy pack and AIS reward function."""
+    from shield.nurse_rachel.policy_pack import (
+        NurseRachelPolicyEvaluator,
+        compute_clinical_ais_and_reward,
+        load_nurse_rachel_policy_pack,
+    )
+
+    manifest = load_nurse_rachel_policy_pack()
+    assert manifest.name == "nurse-rachel-wi-medicaid"
+    assert manifest.pack_format == "integrity.pack/1"
+    assert manifest.pack_hash.startswith("sha256:")
+    assert len(manifest.signature) == 128
+
+    evaluator = NurseRachelPolicyEvaluator()
+
+    # 1. EVV Geofence Breach (>250m without CMS manual edit code) -> DENY
+    evv_breach = evaluator.evaluate(
+        {
+            "event_class": "clinical.evv",
+            "evv_six_elements_complete": True,
+            "gps_distance_meters": 410.0,
+        }
+    )
+    assert evv_breach.allowed is False
+    assert evv_breach.reason_code == "NR_CURES_EVV_GEOFENCE_BREACH"
+    assert evv_breach.control_id == "US-CURES-12006(a)"
+
+    # 2. EVV Geofence >250m WITH valid CMS manual edit reason code -> PERMIT
+    evv_valid_override = evaluator.evaluate(
+        {
+            "event_class": "clinical.evv",
+            "evv_six_elements_complete": True,
+            "gps_distance_meters": 410.0,
+            "cms_manual_edit_reason_code": "CMS_GPS_INDOOR_ATTENUATION_04",
+        }
+    )
+    assert evv_valid_override.allowed is True
+
+    # 3. Wis. DHS 105.17(2)(b) 60-day RN supervisory visit overdue -> DENY
+    rn_overdue = evaluator.evaluate(
+        {
+            "event_class": "clinical.claim",
+            "days_since_last_rn_supervisory_visit": 64,
+            "member_inpatient_admitted": False,
+            "weekly_units_requested": 16,
+            "weekly_units_used": 60,
+            "weekly_units_authorized": 112,
+            "cms_485_physician_signed": True,
+            "face_to_face_within_window": True,
+        }
+    )
+    assert rn_overdue.allowed is False
+    assert rn_overdue.reason_code == "NR_WI_DHS_105_17_SUPERVISORY_OVERDUE"
+
+    # 4. Wis. DHS 107.112(4) Inpatient Hospital Hold -> DENY
+    hosp_hold = evaluator.evaluate(
+        {
+            "event_class": "clinical.claim",
+            "days_since_last_rn_supervisory_visit": 30,
+            "member_inpatient_admitted": True,
+            "weekly_units_requested": 16,
+            "weekly_units_used": 60,
+            "weekly_units_authorized": 112,
+            "cms_485_physician_signed": True,
+            "face_to_face_within_window": True,
+        }
+    )
+    assert hosp_hold.allowed is False
+    assert hosp_hold.reason_code == "NR_WI_DHS_107_112_HOSPITAL_HOLD"
+
+    # 5. Validate AIS reward function behavior (compliant vs policy violation)
+    reward_ok = compute_clinical_ais_and_reward(
+        r_task=1.0,
+        penalty_severity=0.0,
+        prev_ais_1000=950.0,
+        policy_denied=False,
+    )
+    reward_denied = compute_clinical_ais_and_reward(
+        r_task=1.0,
+        penalty_severity=1.0,
+        prev_ais_1000=950.0,
+        policy_denied=True,
+    )
+    assert reward_ok.gated_by_compliance is False
+    assert reward_ok.r_total > 1.40
+    assert reward_denied.gated_by_compliance is True
+    assert reward_denied.r_task == 0.0
+    assert reward_denied.ais_score_1000 == 0.0
+    assert reward_denied.r_total < -1.0
+

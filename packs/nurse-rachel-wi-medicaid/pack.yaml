@@ -1,0 +1,13 @@
+pack_format: integrity.pack/1
+name: nurse-rachel-wi-medicaid
+version: 1.0.0
+kernel_range: ">=1.0.0 <2.0.0"
+decision_contract: integrity.decision/1
+entrypoint: data.integrity.pack.decision
+event_classes:
+  clinical.evv: {no_match: deny}
+  clinical.supervisory: {no_match: deny}
+  clinical.claim: {no_match: deny}
+  clinical.autofill: {no_match: deny}
+  clinical.chat: {no_match: deny}
+  agent.tool_call: {no_match: deny}
