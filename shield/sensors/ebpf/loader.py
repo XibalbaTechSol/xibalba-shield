@@ -141,6 +141,58 @@ def _recover_exec_path(pid: int, recorded: str) -> str:
         return recorded
 
 
+def _parse_stat_start_time(raw: str) -> int:
+    """Parse field 22 (``starttime``) out of a ``/proc/<pid>/stat`` line.
+
+    ``comm`` (field 2) is parenthesized and may itself contain spaces and ``)`` (e.g. a process
+    named ``weird ) name``); proc(5) guarantees ``comm`` is wrapped in the only parentheses on
+    the line, so splitting on the LAST ``)`` isolates the fixed-format tail regardless of
+    ``comm`` content. The tail's first space-separated token is field 3 (``state``), so
+    ``starttime`` (field 22) is tail index 19. Raises on a malformed line; the caller maps that
+    to 0 (unknown), never a fabricated value.
+    """
+    tail = raw.rsplit(")", 1)[1].split()
+    return int(tail[19])
+
+
+def _read_proc_start_time(pid: int) -> int:
+    """Read the process start time (``/proc/<pid>/stat`` field 22) without reading content.
+
+    Field 22 (``starttime``) is the process's start time in clock ticks since boot; combined
+    with ``pid`` it is (in principle) a kernel-stable identity that survives pid reuse.
+
+    BEST-EFFORT, NOT RACE-FREE: this reads /proc after the exec event has already been delivered
+    to userspace (see ``LinuxEbpfSensor._on_perf_event``). A short-lived process can exit before
+    the read -> 0 (unknown); worse, if its pid was already reused by the time we read, we capture
+    the *successor's* starttime, not the exec'd process's. The race-free source is the BPF probe
+    itself (``task->start_boottime`` at exec time); this /proc path is a strict improvement for
+    the common still-alive case, not a reliable pid-reuse guard. Returns 0 on any race or parse
+    failure -- an exited process is simply unknown, never a fabricated value.
+    """
+    try:
+        return _parse_stat_start_time(Path(f"/proc/{int(pid)}/stat").read_text())
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def _read_proc_cgroup(pid: int) -> str:
+    """Read the process's cgroup path (``/proc/<pid>/cgroup``) without reading content.
+
+    A second, namespace-aware tree anchor: for a containerized agent whose children live in a
+    pid namespace, the ``ppid`` chain can cross the namespace boundary, but the cgroup path is
+    stable and shared across the tree. Under cgroup v2 the file is a single ``0::<path>`` line;
+    we return the path of the first entry. Same best-effort caveat as ``_read_proc_start_time``:
+    read post-delivery, so it is subject to the pid-reuse race; the race-free source is
+    ``bpf_get_current_cgroup_id()`` in the exec probe. Returns "" on any race or parse failure.
+    """
+    try:
+        first = Path(f"/proc/{int(pid)}/cgroup").read_text().splitlines()[0]
+        # Format: "hierarchy-ID:controller-list:path" (cgroup v2: "0::/path").
+        return first.split(":", 2)[2][:255]
+    except (OSError, ValueError, IndexError):
+        return ""
+
+
 class SensorAttachError(RuntimeError):
     """Raised when BPF load or kprobe/kretprobe attach fails, carrying which stage failed
     ("bpf_load", "kprobe", "kretprobe", "perf_buffer") so an operator (or a verify script)
@@ -217,6 +269,8 @@ class LinuxEbpfSensor:
                     name=rec.comm.decode("utf-8", errors="replace"),
                     exe_path=exe_path,
                     ppid=rec.ppid,
+                    start_time=_read_proc_start_time(rec.pid),
+                    cgroup=_read_proc_cgroup(rec.pid),
                 ),
                 activity=Activity(type="launch", severity="medium", outcome="success"),
             )
