@@ -141,6 +141,16 @@ def _recover_exec_path(pid: int, recorded: str) -> str:
         return recorded
 
 
+# Nanoseconds per /proc clock tick, so field-22 starttime (clock ticks) can be normalized to the
+# same nanosecond unit the BPF path reports (task->start_boottime). Computed from SC_CLK_TCK;
+# defaults to CLK_TCK=100 (10ms) if sysconf is unavailable (e.g. importing this module under a
+# non-Linux test runner), which never runs the /proc path anyway.
+try:
+    _NS_PER_TICK = 1_000_000_000 // os.sysconf("SC_CLK_TCK")
+except (AttributeError, ValueError, OSError):
+    _NS_PER_TICK = 10_000_000
+
+
 def _parse_stat_start_time(raw: str) -> int:
     """Parse field 22 (``starttime``) out of a ``/proc/<pid>/stat`` line.
 
@@ -156,21 +166,20 @@ def _parse_stat_start_time(raw: str) -> int:
 
 
 def _read_proc_start_time(pid: int) -> int:
-    """Read the process start time (``/proc/<pid>/stat`` field 22) without reading content.
+    """Start time in NANOSECONDS since boot, from ``/proc/<pid>/stat`` field 22.
 
-    Field 22 (``starttime``) is the process's start time in clock ticks since boot; combined
-    with ``pid`` it is (in principle) a kernel-stable identity that survives pid reuse.
+    This is the FALLBACK to the race-free BPF capture (``task->start_boottime`` in the exec
+    probe); the eBPF path only calls it when the kernel field is unavailable (0). Field 22 is in
+    clock ticks and in modern kernels is ``nsec_to_clock_t(task->start_boottime)``, i.e. the same
+    CLOCK_BOOTTIME clock -- so multiplying by ``_NS_PER_TICK`` recovers the BPF path's unit
+    (tick-rounded), keeping start times comparable across sources.
 
-    BEST-EFFORT, NOT RACE-FREE: this reads /proc after the exec event has already been delivered
-    to userspace (see ``LinuxEbpfSensor._on_perf_event``). A short-lived process can exit before
-    the read -> 0 (unknown); worse, if its pid was already reused by the time we read, we capture
-    the *successor's* starttime, not the exec'd process's. The race-free source is the BPF probe
-    itself (``task->start_boottime`` at exec time); this /proc path is a strict improvement for
-    the common still-alive case, not a reliable pid-reuse guard. Returns 0 on any race or parse
-    failure -- an exited process is simply unknown, never a fabricated value.
+    BEST-EFFORT, NOT RACE-FREE: it reads /proc after the fact, so a short-lived process can exit
+    before the read -> 0 (unknown), or, if its pid was reused, yield the successor's value. Returns
+    0 on any race or parse failure -- never a fabricated value.
     """
     try:
-        return _parse_stat_start_time(Path(f"/proc/{int(pid)}/stat").read_text())
+        return _parse_stat_start_time(Path(f"/proc/{int(pid)}/stat").read_text()) * _NS_PER_TICK
     except (OSError, ValueError, IndexError):
         return 0
 
@@ -191,6 +200,23 @@ def _read_proc_cgroup(pid: int) -> str:
         return first.split(":", 2)[2][:255]
     except (OSError, ValueError, IndexError):
         return ""
+
+
+def _read_proc_cgroup_id(pid: int) -> int:
+    """Best-effort cgroup id (u64), the /proc FALLBACK to the race-free ``bpf_get_current_cgroup_id()``.
+
+    For cgroup v2 the kernel's cgroup id is the inode number of the cgroup directory under
+    ``/sys/fs/cgroup``, so ``stat()`` of that directory recovers the same id the BPF helper returns.
+    Only used when the BPF path reports 0. Returns 0 on any failure -- never a fabricated value.
+    """
+    try:
+        path = _read_proc_cgroup(pid)
+        if not path:
+            return 0
+        # path starts with "/"; the cgroup v2 hierarchy is mounted at /sys/fs/cgroup.
+        return os.stat(f"/sys/fs/cgroup{path}").st_ino
+    except (OSError, ValueError):
+        return 0
 
 
 class SensorAttachError(RuntimeError):
@@ -260,6 +286,11 @@ class LinuxEbpfSensor:
         rec = self._bpf["process_exec_events"].event(data)
         self._last_event_at = _now_iso()
         exe_path = _recover_exec_path(rec.pid, rec.filename.decode("utf-8", errors="replace"))
+        # Prefer the RACE-FREE values captured in-kernel at exec (immune to pid reuse); only fall
+        # back to the best-effort /proc read when the kernel field was unavailable (0). The cgroup
+        # PATH is always best-effort /proc context -- it is not the matching key, cgroup_id is.
+        start_time = int(rec.start_boottime) or _read_proc_start_time(rec.pid)
+        cgroup_id = int(rec.cgroup_id) or _read_proc_cgroup_id(rec.pid)
         self._pending.append(
             ProcessActivity(
                 device_id=self._device_id,
@@ -269,8 +300,9 @@ class LinuxEbpfSensor:
                     name=rec.comm.decode("utf-8", errors="replace"),
                     exe_path=exe_path,
                     ppid=rec.ppid,
-                    start_time=_read_proc_start_time(rec.pid),
+                    start_time=start_time,
                     cgroup=_read_proc_cgroup(rec.pid),
+                    cgroup_id=cgroup_id,
                 ),
                 activity=Activity(type="launch", severity="medium", outcome="success"),
             )

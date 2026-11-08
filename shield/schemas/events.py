@@ -53,18 +53,25 @@ class ProcessInfo:
     ppid: int = 0
     parent_name: str = ""
     # Process-tree-stable identity for witness lineage (spec: shield-observation-reconciliation §Phase 0).
-    # start_time: process start time, meant to disambiguate a reused pid so a tree rooted at an
-    #   attributed agent process is not conflated with a later unrelated process reusing that pid.
-    # cgroup: the process's cgroup, a second (namespace-aware) tree anchor for containerized agents
-    #   whose ppid chains cross a pid namespace.
-    # 0 / "" = unknown. BOTH are populated best-effort by the eBPF loader from /proc AFTER the perf
-    # event is delivered to userspace, so a short-lived process (exactly the intermediate npm/sh/node
-    # hops in an agent command tree) can exit before the read and yield unknown -- or, worse, a wrong
-    # non-zero value if its pid was already reused. Race-free capture (reading task->start_boottime and
-    # the cgroup id inside the BPF exec probe) is the real fix and is tracked as the remaining half of
-    # Phase 0; until then these fields are a strict improvement, not a reliable pid-reuse guard.
+    # start_time: process start time in NANOSECONDS since boot (CLOCK_BOOTTIME). With pid it
+    #   disambiguates pid reuse so a tree rooted at an attributed agent process is not conflated with a
+    #   later unrelated process reusing that pid.
+    # cgroup_id: the kernel cgroup id (u64) -- the namespace-stable tree anchor for containerized agents
+    #   whose ppid chains cross a pid namespace. Preferred over the `cgroup` path for matching.
+    # cgroup: the human-readable cgroup path; best-effort context, NOT the matching key.
+    # 0 / "" = unknown.
+    #
+    # Capture quality differs BY SOURCE:
+    #  - eBPF exec probe (the real sensor): start_time and cgroup_id are read RACE-FREE inside the
+    #    kernel at exec (task->start_boottime, bpf_get_current_cgroup_id()), so they cannot be
+    #    corrupted by pid reuse. The `cgroup` path is still enriched best-effort from /proc afterward.
+    #  - Non-BPF sources (dev/windows) and the /proc fallback: best-effort, read after the fact, so a
+    #    short-lived process can yield unknown or (if its pid was reused) a wrong value. The /proc path
+    #    normalizes field-22 clock ticks to ns (ticks * 1e9 / CLK_TCK) so values are comparable across
+    #    sources; cgroup_id there comes from the cgroup dir's inode (st_ino), 0 if unresolved.
     start_time: int = 0
     cgroup: str = ""
+    cgroup_id: int = 0
 
 
 @dataclass
