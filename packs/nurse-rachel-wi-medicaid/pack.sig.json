@@ -1,0 +1,39 @@
+{
+  "pack_hash": "sha256:47ccbd08a52d4c1136e77d75fb96ba8c43403cb76799e291a838463e916fb053",
+  "signature": "735983c3c08609e14830e624d589405f209f9950f13cf26345b3e8a6b296bfb9bbc85fec727e87ff76c85c78f8cda75cc7884c762aa6bceae06294e0f0317309",
+  "signature_version": "integrity.pack-signature/1",
+  "signed_manifest": {
+    "decision_contract": "integrity.decision/1",
+    "entrypoint": "data.integrity.pack.decision",
+    "event_classes": {
+      "agent.tool_call": {
+        "no_match": "deny"
+      },
+      "clinical.autofill": {
+        "no_match": "deny"
+      },
+      "clinical.chat": {
+        "no_match": "deny"
+      },
+      "clinical.claim": {
+        "no_match": "deny"
+      },
+      "clinical.evv": {
+        "no_match": "deny"
+      },
+      "clinical.supervisory": {
+        "no_match": "deny"
+      }
+    },
+    "files": {
+      "controls.yaml": "sha256:7f4d0d9e1c61a359a7484ad4332972248514612d343bce1eec79a4c5c7b9b554",
+      "pack.yaml": "sha256:d09bf3ae86dd47b65e788c001f095e6a8d0a3d344029f4d02264d172739b2a49",
+      "policy.rego": "sha256:8f2cf73b4a1a62888903750671fc89f724a1da7510278e5841db82447e241c15"
+    },
+    "kernel_range": ">=1.0.0 <2.0.0",
+    "name": "nurse-rachel-wi-medicaid",
+    "pack_format": "integrity.pack/1",
+    "version": "1.0.0"
+  },
+  "signer_key": "z6MkvnoTtbKg6ESy786ixtdsMYsu6gQGgsaijYyftyMPtTdA"
+}

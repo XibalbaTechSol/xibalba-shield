@@ -539,6 +539,20 @@ Default packs live under `policies/defaults/`:
 - `regulated.json`: unregistered agents, PHI-class context, high-risk output, regulated sensitive writes.
   **Has a real Rego translation** (`shield/policies/rego/regulated.rego`) for selected-profile OPA evaluation.
 
+### Signed Healthcare Vertical Policy Pack: `nurse-rachel-wi-medicaid`
+
+Located in `packs/nurse-rachel-wi-medicaid/` and integrated into the runtime PreToolUse broker (`shield/nurse_rachel/policy_pack.py` and `shield/nurse_rachel/executor.py`), this cryptographically signed `integrity.pack/1` bundle (`pack_hash: sha256:47ccbd08a52d4c1136e77d75fb96ba8c43403cb76799e291a838463e916fb053`, Ed25519 signer `z6MkvnoTtbKg6ESy786ixtdsMYsu6gQGgsaijYyftyMPtTdA`) enforces 7 statutory healthcare controls and drives the closed-loop AIS reward function ($R_{\text{total}} = R_{\text{task}} + \lambda \cdot \text{AIS}$):
+
+| Control ID | Statutory Authority | Reason Code (`integrity.decision/1`) | Deterministic Enforcement |
+|---|---|---|---|
+| `US-CURES-12006(a)` | 21st Century Cures Act § 12006(a) | `NR_CURES_EVV_MISSING_STATUTORY_FIELDS`, `NR_CURES_EVV_GEOFENCE_BREACH` | Requires all 6 statutory EVV elements and GPS distance $\le 250\text{m}$ (unless accompanied by a valid CMS manual edit reason code). |
+| `WI-DHS-105.17(2)(b)` | Wis. Admin. Code § DHS 105.17(2)(b) | `NR_WI_DHS_105_17_SUPERVISORY_OVERDUE` | Blocks claim release when `days_since_last_rn_supervisory_visit > 60`. |
+| `WI-DHS-107.112(4)` | Wis. Admin. Code § DHS 107.112(4) | `NR_WI_DHS_107_112_HOSPITAL_HOLD` | Blocks personal care billing while `member_inpatient_admitted == true`. |
+| `WI-DHS-107.112(1)-(3)` | Wis. Admin. Code § DHS 107.112 | `NR_WI_DHS_107_112_PA_UNIT_CAP_EXCEEDED` | Blocks `T1019` unit consumption exceeding weekly Prior Authorization (`PA/RF F-11018`) allocation unless co-signed by the supervising RN. |
+| `US-ACA-6407-42CFR440.70` | ACA § 6407 / 42 CFR § 440.70 | `NR_ACA_6407_UNSIGNED_POC_OR_F2F` | Requires physician-signed `CMS-485` Plan of Care and documented Face-to-Face encounter within the statutory window. |
+| `WI-NPA-441.06` | Wis. Stat. § 441.06 (Nurse Practice Act) | `NR_CONTAIN_UNAUTHORIZED_MEDICAL_PRACTICE` | Halts autonomous prescribing, diagnosing, or medication titration attempts. |
+| `HIPAA-164.312(b)-164.502(e)` | 45 CFR § 164.312(b) & § 164.502(e) | `NR_HIPAA_NON_BAA_ENDPOINT` | Blocks PHI transmission to any endpoint lacking an active Business Associate Agreement (BAA). |
+
 Validate them:
 
 ```bash

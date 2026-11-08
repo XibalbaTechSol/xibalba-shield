@@ -834,6 +834,25 @@ def make_handler(
                 self._send_json({"google": True, "github": False})
                 return
 
+            if parsed.path == "/api/shield/nurse-rachel/policy-pack":
+                from ..nurse_rachel.policy_pack import load_nurse_rachel_policy_pack
+                manifest = load_nurse_rachel_policy_pack()
+                self._send_json(
+                    {
+                        "name": manifest.name,
+                        "version": manifest.version,
+                        "pack_format": manifest.pack_format,
+                        "decision_contract": manifest.decision_contract,
+                        "entrypoint": manifest.entrypoint,
+                        "pack_hash": manifest.pack_hash,
+                        "signer_key": manifest.signer_key,
+                        "signature": manifest.signature,
+                        "event_classes": manifest.event_classes,
+                        "controls": manifest.controls,
+                    }
+                )
+                return
+
             if parsed.path in ("/api/shield/auth/oauth/google/authorize", "/api/shield/auth/oauth/authorize"):
                 default_redirect = f"{public_base_url or self._request_base_url().rstrip('/')}/"
                 redirect_to = query.get("redirect_to", [""])[0] or default_redirect
@@ -1326,6 +1345,54 @@ def make_handler(
                 body = self._read_json()
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+
+            if parsed.path == "/api/shield/nurse-rachel/evaluate":
+                from ..nurse_rachel.policy_pack import (
+                    NurseRachelPolicyEvaluator,
+                    compute_clinical_ais_and_reward,
+                )
+
+                evaluator = NurseRachelPolicyEvaluator()
+                decision = evaluator.evaluate(body)
+                reward_step = compute_clinical_ais_and_reward(
+                    r_task=float(body.get("r_task", 1.0)),
+                    entropy_variance=float(body.get("entropy_variance", 0.05)),
+                    grounding_ratio=float(body.get("grounding_ratio", 1.0)),
+                    graph_contribution=float(body.get("graph_contribution", 500.0)),
+                    penalty_severity=0.0 if decision.allowed else float(body.get("penalty_severity", 1.0)),
+                    zk_coverage_ratio=float(body.get("zk_coverage_ratio", 0.5)),
+                    prev_ais_1000=float(body.get("prev_ais_1000", 1000.0)),
+                    policy_denied=not decision.allowed,
+                )
+                self._send_json(
+                    {
+                        "decision": {
+                            "effect": decision.effect,
+                            "allowed": decision.allowed,
+                            "reason_code": decision.reason_code,
+                            "control_id": decision.control_id,
+                            "pack_hash": decision.pack_hash,
+                            "severity": decision.severity,
+                            "obligations": list(decision.obligations),
+                        },
+                        "ais_reward": {
+                            "formula_version": "ais/v1-geometric-1",
+                            "s_entropy": round(reward_step.s_entropy, 6),
+                            "s_grounding": round(reward_step.s_grounding, 6),
+                            "s_contribution": round(reward_step.s_contribution, 6),
+                            "s_compliance": round(reward_step.s_compliance, 6),
+                            "ais_score_1000": round(reward_step.ais_score_1000, 6),
+                            "ais_normalized": round(reward_step.ais_normalized, 6),
+                            "r_task": round(reward_step.r_task, 6),
+                            "ais_reward_term": round(reward_step.ais_reward_term, 6),
+                            "potential_shaping": round(reward_step.potential_shaping, 6),
+                            "violation_penalty": round(reward_step.violation_penalty, 6),
+                            "r_total": round(reward_step.r_total, 6),
+                            "gated_by_compliance": reward_step.gated_by_compliance,
+                        },
+                    }
+                )
                 return
 
             if parsed.path == "/api/v1/policy/push":
