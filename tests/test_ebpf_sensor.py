@@ -71,22 +71,39 @@ def test_proc_lineage_readers_on_self_and_dead_pid():
     Linux-only: /proc does not exist on macOS/Windows CI, where the readers correctly return
     their unknown sentinels (0 / "") -- which is the right production behavior there, not a
     failure, so the live-/proc assertions below are simply skipped off-Linux."""
-    from shield.sensors.ebpf.loader import _read_proc_cgroup, _read_proc_start_time
+    from shield.sensors.ebpf.loader import (
+        _NS_PER_TICK,
+        _read_proc_cgroup,
+        _read_proc_cgroup_id,
+        _read_proc_start_time,
+    )
 
     me = os.getpid()
     st = _read_proc_start_time(me)
     assert st > 0  # a live process always has a positive starttime
-    # Independent cross-check against the kernel's own field 22, proving the parse is right.
-    expected = int(Path(f"/proc/{me}/stat").read_text().rsplit(")", 1)[1].split()[19])
-    assert st == expected
+    # Cross-check against the kernel's own field 22, NORMALIZED to ns -- proving both the parse
+    # and the tick->ns conversion (the reader must agree with the BPF path's nanosecond unit).
+    ticks = int(Path(f"/proc/{me}/stat").read_text().rsplit(")", 1)[1].split()[19])
+    assert st == ticks * _NS_PER_TICK
+    assert _NS_PER_TICK > 0
 
     cg = _read_proc_cgroup(me)
     assert cg.startswith("/")  # a cgroup path, not a hierarchy id or controller list
+
+    cgid = _read_proc_cgroup_id(me)
+    # The /proc cgroup-id fallback resolves the cgroup dir inode under the unified (v2) hierarchy.
+    # On a cgroup-v1 or non-cgroupns runner the path won't resolve under /sys/fs/cgroup, so the
+    # reader correctly returns its 0 sentinel there -- assert the behavior that matches the host.
+    if Path("/sys/fs/cgroup/cgroup.controllers").exists():  # cgroup v2 unified hierarchy present
+        assert cgid > 0  # the cgroup dir inode == the kernel cgroup id
+    else:
+        assert cgid == 0
 
     # pid 2^31-1 is above the kernel pid_max ceiling -> guaranteed absent -> sentinels.
     dead = 2**31 - 1
     assert _read_proc_start_time(dead) == 0
     assert _read_proc_cgroup(dead) == ""
+    assert _read_proc_cgroup_id(dead) == 0
 
 
 def test_tcp_connect_source_avoids_net_sock_header_chain():
@@ -151,22 +168,75 @@ def test_sensor_observes_a_real_execve():
     import subprocess
     import time
 
-    from shield.sensors.ebpf.loader import LinuxEbpfSensor
+    from shield.sensors.ebpf.loader import LinuxEbpfSensor, _read_proc_cgroup_id
 
     sensor = LinuxEbpfSensor(device_id="test-device", tenant_id="pytest")
 
     proc = subprocess.Popen(["/usr/bin/true"])
     target_pid = proc.pid
-    proc.wait()
+    proc.wait()  # the child is REAPED before we drain -- a /proc read of its pid now returns 0
 
-    found = False
+    matched = None
     deadline = time.time() + 5
-    while time.time() < deadline and not found:
+    while time.time() < deadline and matched is None:
         for event in sensor.poll(timeout_ms=500):
             if event.process.pid == target_pid:
-                found = True
+                matched = event.process
 
-    assert found, f"never observed real execve for pid {target_pid} within 5s"
+    assert matched is not None, f"never observed real execve for pid {target_pid} within 5s"
+    print(f"\n[real_execve] attach_mode={sensor._attach_mode} "
+          f"start_time={matched.start_time} cgroup_id={matched.cgroup_id}")
+    # Race-free proof: the process is already gone, so the /proc fallback would yield 0/0. These
+    # being populated means they were captured IN-KERNEL at exec (task->start_boottime,
+    # bpf_get_current_cgroup_id()), which is the entire point of this change.
+    now_boottime_ns = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+    assert 0 < matched.start_time <= now_boottime_ns, (
+        f"start_time {matched.start_time} not a plausible CLOCK_BOOTTIME ns value "
+        f"(now={now_boottime_ns}) -- expected the in-kernel race-free capture"
+    )
+    assert matched.cgroup_id > 0, "cgroup_id not captured in-kernel (bpf_get_current_cgroup_id)"
+    # cgroup_id AGREEMENT: the reaped child inherited THIS test process's cgroup, so the in-kernel
+    # id must equal what the /proc st_ino fallback resolves for our own pid -- proving the two
+    # sources name the same cgroup (the basis for cross-source tree matching in Phase 1).
+    assert matched.cgroup_id == _read_proc_cgroup_id(os.getpid()), (
+        "in-kernel cgroup_id disagrees with the /proc st_ino fallback for the shared cgroup"
+    )
+
+
+@pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")
+@pytest.mark.skipif(os.geteuid() != 0, reason="requires root (CAP_BPF) to load/attach the real BPF program")
+def test_sensor_start_time_matches_proc_for_live_child():
+    """start_time COMPARABILITY: the in-kernel ns value and the /proc tick->ns fallback must land
+    on the same CLOCK_BOOTTIME clock (the basis for the 'ns everywhere' normalization). Spawn a
+    still-LIVE child and compare the BPF start_time against _read_proc_start_time while it is alive;
+    they must agree to within one clock tick (the /proc field's granularity)."""
+    import subprocess
+    import time
+
+    from shield.sensors.ebpf.loader import _NS_PER_TICK, LinuxEbpfSensor, _read_proc_start_time
+
+    sensor = LinuxEbpfSensor(device_id="test-device", tenant_id="pytest")
+    child = subprocess.Popen(["/usr/bin/sleep", "3"])
+    try:
+        matched = None
+        deadline = time.time() + 5
+        while time.time() < deadline and matched is None:
+            for event in sensor.poll(timeout_ms=500):
+                if event.process.pid == child.pid:
+                    matched = event.process
+        assert matched is not None, f"never observed execve for live child {child.pid}"
+        proc_ns = _read_proc_start_time(child.pid)  # child still alive -> non-zero
+        assert proc_ns > 0, "live child's /proc start_time unexpectedly 0"
+        print(f"\n[live_child] attach_mode={sensor._attach_mode} "
+              f"bpf={matched.start_time} proc={proc_ns} delta={matched.start_time - proc_ns}")
+        # Same clock; /proc is tick-rounded, BPF is exact ns -> agree to within one tick.
+        assert 0 <= matched.start_time - proc_ns < _NS_PER_TICK, (
+            f"BPF start_time {matched.start_time} and /proc {proc_ns} differ by more than one "
+            f"tick ({_NS_PER_TICK} ns) -- the two sources are NOT on the same clock"
+        )
+    finally:
+        child.kill()
+        child.wait()
 
 
 @pytest.mark.skipif(not _bcc_available(), reason="bcc (python3-bpfcc) not installed")

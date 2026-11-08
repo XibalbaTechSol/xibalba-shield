@@ -7,11 +7,16 @@
 #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
 
+/* Must stay BYTE-IDENTICAL to the struct in process_exec.bpf.c (same `process_exec_events`
+ * perf table, one userspace decoder). Change both together. */
 struct process_exec_record {
     u32 pid;
     u32 ppid;
     char comm[TASK_COMM_LEN];
     char filename[256];
+    /* Race-free witness lineage, read in-kernel at exec time (spec §Phase 0): */
+    u64 start_boottime;   /* task->start_boottime: ns since boot (CLOCK_BOOTTIME) */
+    u64 cgroup_id;        /* bpf_get_current_cgroup_id(): namespace-stable u64 cgroup id */
 };
 
 BPF_PERF_OUTPUT(process_exec_events);
@@ -29,6 +34,9 @@ TRACEPOINT_PROBE(sched, sched_process_exec)
      * filename field as a typed member.  Userspace recovers argv[0] from
      * /proc/<pid>/cmdline, exactly as the kprobe path does when its bounded
      * user-string read is empty. */
+    /* Race-free: read the live exec'ing task in-kernel (pid reuse cannot corrupt these). */
+    rec.start_boottime = task->start_boottime;
+    rec.cgroup_id = bpf_get_current_cgroup_id();
     process_exec_events.perf_submit(args, &rec, sizeof(rec));
     return 0;
 }

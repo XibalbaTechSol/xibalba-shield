@@ -31,11 +31,17 @@
 #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
 
+/* NOTE: this struct is decoded by loader.py's single `_on_perf_event` and must stay
+ * BYTE-IDENTICAL to the one in process_exec_tracepoint.bpf.c (the attach-mode fallback feeds
+ * the same `process_exec_events` perf table). Change both together. */
 struct process_exec_record {
     u32 pid;
     u32 ppid;
     char comm[TASK_COMM_LEN];
     char filename[256];
+    /* Race-free witness lineage, read in-kernel at exec time (spec §Phase 0): */
+    u64 start_boottime;   /* task->start_boottime: ns since boot (CLOCK_BOOTTIME) */
+    u64 cgroup_id;        /* bpf_get_current_cgroup_id(): namespace-stable u64 cgroup id */
 };
 
 BPF_PERF_OUTPUT(process_exec_events);
@@ -56,6 +62,11 @@ int on_execve(struct pt_regs *ctx, const char __user *filename)
      * zero-initialized record still guarantees NUL termination when the path is shorter
      * than the field), matching the proven execsnoop-bpfcc approach. */
     bpf_probe_read_user(&rec.filename, sizeof(rec.filename), filename);
+
+    /* Race-free: these read the live exec'ing task in-kernel, so pid reuse cannot corrupt them
+     * (BCC rewrites the task-> field load into a bounded bpf_probe_read). */
+    rec.start_boottime = task->start_boottime;
+    rec.cgroup_id = bpf_get_current_cgroup_id();
 
     process_exec_events.perf_submit(ctx, &rec, sizeof(rec));
     return 0;
