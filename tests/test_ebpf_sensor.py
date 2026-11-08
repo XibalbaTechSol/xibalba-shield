@@ -20,6 +20,7 @@ exercise them.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,9 +63,14 @@ def test_parse_stat_start_time_survives_pathological_comm():
     assert _parse_stat_start_time(f"4242 ((nested)) paren) {tail}") == 17
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc is Linux-only")
 def test_proc_lineage_readers_on_self_and_dead_pid():
     """``_read_proc_start_time``/``_read_proc_cgroup`` read real /proc for THIS process (no
-    root, no bcc) and return the exited-process sentinels for a pid that cannot exist."""
+    root, no bcc) and return the exited-process sentinels for a pid that cannot exist.
+
+    Linux-only: /proc does not exist on macOS/Windows CI, where the readers correctly return
+    their unknown sentinels (0 / "") -- which is the right production behavior there, not a
+    failure, so the live-/proc assertions below are simply skipped off-Linux."""
     from shield.sensors.ebpf.loader import _read_proc_cgroup, _read_proc_start_time
 
     me = os.getpid()
