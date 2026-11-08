@@ -243,3 +243,76 @@ def test_nurse_rachel_signed_policy_pack_and_ais_reward_validation():
     assert reward_denied.ais_score_1000 == 0.0
     assert reward_denied.r_total < -1.0
 
+
+def test_render_shield_backend_nurse_rachel_endpoints(tmp_path: Path):
+    """Verify the Render shield-backend HTTP endpoints for Nurse Rachel Policy Pack & AIS Reward."""
+    import json
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from shield.backend.api import make_handler
+    from shield.backend.store import ShieldStore
+
+    store = ShieldStore(tmp_path / "shield_render.sqlite3")
+    handler = make_handler(store=store, admin_token="test-admin-token")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # 1. GET /api/shield/nurse-rachel/policy-pack
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/shield/nurse-rachel/policy-pack") as resp:
+            pack_data = json.loads(resp.read().decode("utf-8"))
+        assert pack_data["name"] == "nurse-rachel-wi-medicaid"
+        assert pack_data["pack_hash"].startswith("sha256:")
+
+        # 2. POST /api/shield/nurse-rachel/evaluate (Compliant claim)
+        req_ok = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/shield/nurse-rachel/evaluate",
+            data=json.dumps(
+                {
+                    "event_class": "clinical.claim",
+                    "days_since_last_rn_supervisory_visit": 20,
+                    "member_inpatient_admitted": False,
+                    "weekly_units_requested": 16,
+                    "weekly_units_used": 40,
+                    "weekly_units_authorized": 112,
+                    "cms_485_physician_signed": True,
+                    "face_to_face_within_window": True,
+                    "r_task": 1.0,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_ok) as resp:
+            eval_ok = json.loads(resp.read().decode("utf-8"))
+        assert eval_ok["decision"]["allowed"] is True
+        assert eval_ok["ais_reward"]["gated_by_compliance"] is False
+        assert eval_ok["ais_reward"]["r_total"] > 1.40
+
+        # 3. POST /api/shield/nurse-rachel/evaluate (Hospital Hold violation -> DENY & AIS Reward Gated)
+        req_deny = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/shield/nurse-rachel/evaluate",
+            data=json.dumps(
+                {
+                    "event_class": "clinical.claim",
+                    "days_since_last_rn_supervisory_visit": 20,
+                    "member_inpatient_admitted": True,
+                    "r_task": 1.0,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_deny) as resp:
+            eval_deny = json.loads(resp.read().decode("utf-8"))
+        assert eval_deny["decision"]["allowed"] is False
+        assert eval_deny["decision"]["reason_code"] == "NR_WI_DHS_107_112_HOSPITAL_HOLD"
+        assert eval_deny["ais_reward"]["gated_by_compliance"] is True
+        assert eval_deny["ais_reward"]["r_task"] == 0.0
+        assert eval_deny["ais_reward"]["r_total"] < -1.0
+    finally:
+        server.shutdown()
+        server.server_close()
+
