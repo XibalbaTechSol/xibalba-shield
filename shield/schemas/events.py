@@ -52,6 +52,19 @@ class ProcessInfo:
     hash_sha256: str = ""
     ppid: int = 0
     parent_name: str = ""
+    # Process-tree-stable identity for witness lineage (spec: shield-observation-reconciliation §Phase 0).
+    # start_time: process start time, meant to disambiguate a reused pid so a tree rooted at an
+    #   attributed agent process is not conflated with a later unrelated process reusing that pid.
+    # cgroup: the process's cgroup, a second (namespace-aware) tree anchor for containerized agents
+    #   whose ppid chains cross a pid namespace.
+    # 0 / "" = unknown. BOTH are populated best-effort by the eBPF loader from /proc AFTER the perf
+    # event is delivered to userspace, so a short-lived process (exactly the intermediate npm/sh/node
+    # hops in an agent command tree) can exit before the read and yield unknown -- or, worse, a wrong
+    # non-zero value if its pid was already reused. Race-free capture (reading task->start_boottime and
+    # the cgroup id inside the BPF exec probe) is the real fix and is tracked as the remaining half of
+    # Phase 0; until then these fields are a strict improvement, not a reliable pid-reuse guard.
+    start_time: int = 0
+    cgroup: str = ""
 
 
 @dataclass

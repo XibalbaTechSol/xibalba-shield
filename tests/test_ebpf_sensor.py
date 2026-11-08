@@ -47,6 +47,42 @@ def test_sensitive_path_filter_matches_globs_without_root():
     assert _matches_sensitive_path("/tmp/notes.txt", []) is True
 
 
+def test_parse_stat_start_time_survives_pathological_comm():
+    """Field 22 must be recovered even when ``comm`` contains spaces and a literal ``)`` --
+    the exact case a naive ``split()[21]`` corrupts. Synthetic lines, so this asserts the
+    parse rule itself, not whatever this test process happens to be named."""
+    from shield.sensors.ebpf.loader import _parse_stat_start_time
+
+    # Fields: 1=pid 2=(comm) 3=state 4=ppid ... 22=starttime. Build a tail whose field 22 is
+    # a sentinel (987654) and whose comm is hostile.
+    tail = "S 1 " + " ".join(str(i) for i in range(100))  # field3=S, field4=1, then 0,1,2,...
+    # After "S 1", tokens are 0,1,2,... so field 22 (tail index 19) == 17.
+    assert _parse_stat_start_time(f"4242 (normal) {tail}") == 17
+    assert _parse_stat_start_time(f"4242 (weird ) name) {tail}") == 17
+    assert _parse_stat_start_time(f"4242 ((nested)) paren) {tail}") == 17
+
+
+def test_proc_lineage_readers_on_self_and_dead_pid():
+    """``_read_proc_start_time``/``_read_proc_cgroup`` read real /proc for THIS process (no
+    root, no bcc) and return the exited-process sentinels for a pid that cannot exist."""
+    from shield.sensors.ebpf.loader import _read_proc_cgroup, _read_proc_start_time
+
+    me = os.getpid()
+    st = _read_proc_start_time(me)
+    assert st > 0  # a live process always has a positive starttime
+    # Independent cross-check against the kernel's own field 22, proving the parse is right.
+    expected = int(Path(f"/proc/{me}/stat").read_text().rsplit(")", 1)[1].split()[19])
+    assert st == expected
+
+    cg = _read_proc_cgroup(me)
+    assert cg.startswith("/")  # a cgroup path, not a hierarchy id or controller list
+
+    # pid 2^31-1 is above the kernel pid_max ceiling -> guaranteed absent -> sentinels.
+    dead = 2**31 - 1
+    assert _read_proc_start_time(dead) == 0
+    assert _read_proc_cgroup(dead) == ""
+
+
 def test_tcp_connect_source_avoids_net_sock_header_chain():
     source = _TCP_CONNECT_SOURCE.read_text()
     include_lines = [line.strip() for line in source.splitlines() if line.strip().startswith("#include")]
