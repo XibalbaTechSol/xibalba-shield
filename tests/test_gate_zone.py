@@ -497,7 +497,8 @@ def test_the_watchdog_writes_what_the_gate_reads(_publish, tmp_path):
 
     status = read_sensor_status(path)
     assert status["sensors"] == {"attached": True, "lost_events": 0, "last_event_at": None}
-    assert (path.stat().st_mode & 0o777) == 0o600
+    if os.name == "posix":  # Windows has no owner-only mode bits to assert on
+        assert (path.stat().st_mode & 0o777) == 0o600
     assert SensorSilenceZoneProvider(StaticZoneProvider("green"), status_path=path).sensor_state() == "fresh"
     assert list(path.parent.iterdir()) == [path]  # the temp file used for the atomic replace is gone
 
@@ -599,6 +600,7 @@ def test_an_observe_mode_restriction_is_a_shadow_receipt_of_the_deny(tmp_path, k
 # ---------------------------------------------------------------- over the real socket
 
 
+@pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="the gate daemon listens on a Unix socket")
 def test_the_daemon_applies_the_mask_over_a_real_socket(tmp_path):
     path = tmp_path / "gate.sock"
     server = GateServer(path, evaluator=_evaluator(), ctx=_ctx(), device_id="dev-1", zone_mask=_mask("yellow"))
