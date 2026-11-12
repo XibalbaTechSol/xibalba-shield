@@ -86,11 +86,12 @@ import signal
 import socket
 import socketserver
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
 from .gate_receipts import GateReceiptWriter, ReceiptWriteError
+from .gate_zone import MODE_ENFORCE, REASON_ZONE_RESTRICTED, RULE_ID_ZONE_MASK, ZoneMask
 from .policy_engine.engine import NO_PACK_HASH, DecisionBasis, EvaluationContext, PolicyEngine
 from .schemas.events import AgentActivity, AgentContext, AgentEvent, AgentInfo, PolicyDecision
 
@@ -190,8 +191,13 @@ def evaluate_pre_tool_use(
     basis_evaluator: Optional[BasisEvaluator] = None,
     receipts: Optional[GateReceiptWriter] = None,
     strict_receipts: bool = True,
+    zone_mask: Optional[ZoneMask] = None,
 ) -> dict[str, Any]:
     """Answer one PreToolUse question. Never raises; fails closed in enforce mode.
+
+    `zone_mask` (`shield.gate_zone`) is consulted after the pack has answered and can only turn a
+    permit into a deny. None, or a mask whose mode is `off`, leaves this function exactly as it was:
+    the provider is not called and neither the response nor the receipt gains anything.
 
     `evaluator` is normally a bound `PolicyEngine.evaluate`. With `receipts`, the answer comes
     from `basis_evaluator` (a bound `PolicyEngine.evaluate_with_basis`) instead, because a
@@ -243,12 +249,76 @@ def evaluate_pre_tool_use(
             enforcement_mode=enforcement_mode,
         )
 
+    if zone_mask is not None and zone_mask.active:
+        basis = _apply_zone_mask(
+            response, zone_mask=zone_mask, request=request, basis=basis, enforcement_mode=enforcement_mode)
+
     if receipts is not None and basis is not None:
         _record_receipt(
             response, receipts=receipts, request=request, device_id=device_id,
             basis=basis, enforcement_mode=enforcement_mode, strict=strict_receipts,
         )
     return response
+
+
+def _apply_zone_mask(
+    response: dict[str, Any],
+    *,
+    zone_mask: ZoneMask,
+    request: GateRequest,
+    basis: Optional[DecisionBasis],
+    enforcement_mode: str,
+) -> Optional[DecisionBasis]:
+    """Fold the zone mask's verdict into `response` (mutated) and return the basis to record.
+
+    The mask only removes permission: it acts only on a call the pack permitted, so a pack denial
+    keeps its own action, reason and reason code in every zone. `applied` says whether the mask
+    changed the verdict; in shadow mode it never does, and the would-be restriction is reported in
+    `restricted`, logged, and tagged on the receipt instead.
+    """
+    assessment = zone_mask.assess(request.agent_id, request.tool_name)
+    pack_permitted = response["action"] in PERMITTING_ACTIONS
+    would_restrict = assessment.restricted and pack_permitted
+    applied = would_restrict and zone_mask.mode == MODE_ENFORCE
+    response["zone_mask"] = {
+        "mode": zone_mask.mode,
+        "zone": assessment.zone,
+        "action_class": assessment.action_class,
+        "restricted": assessment.restricted,
+        "applied": applied,
+        "source": assessment.source,
+        "sensor": assessment.sensor,
+    }
+    controls = (
+        f"ais_zone:{assessment.zone}",
+        f"ais_action_class:{assessment.action_class}",
+        f"ais_zone_source:{assessment.source}",
+    )
+    if applied:
+        enforced = enforcement_mode != "observe"
+        response.update(
+            # Observe is the gate-wide "never block" switch and outranks the mask: the call
+            # proceeds and `action` carries the verdict that would have been enforced.
+            decision="deny" if enforced else "allow",
+            action="deny",
+            rule_id=RULE_ID_ZONE_MASK,
+            reason=(
+                f"{REASON_ZONE_RESTRICTED}: zone {assessment.zone} does not permit "
+                f"{assessment.action_class} calls (zone source: {assessment.source})"
+            ),
+        )
+    elif would_restrict:
+        controls += ("ais_zone_mask:shadow_restricted",)
+        logger.info(
+            "zone mask (shadow) would restrict tool=%s class=%s zone=%s source=%s",
+            request.tool_name, assessment.action_class, assessment.zone, assessment.source,
+        )
+    if basis is None:
+        return None
+    if applied:
+        return replace(
+            basis, decision="deny", reason_code=REASON_ZONE_RESTRICTED, controls=(*basis.controls, *controls))
+    return replace(basis, controls=(*basis.controls, *controls))
 
 
 def _record_receipt(
@@ -398,6 +468,7 @@ class _GateHandler(socketserver.StreamRequestHandler):
             basis_evaluator=server.basis_evaluator,
             receipts=server.receipts,
             strict_receipts=server.strict_receipts,
+            zone_mask=server.zone_mask,
         )
         # tool_name and the client-supplied digest only; tool_input is never read. See Privacy.
         logger.info(
@@ -443,9 +514,11 @@ class GateServer(_BaseGateServer):
         basis_evaluator: Optional[BasisEvaluator] = None,
         receipts: Optional[GateReceiptWriter] = None,
         strict_receipts: bool = True,
+        zone_mask: Optional[ZoneMask] = None,
     ) -> None:
         if receipts is not None and basis_evaluator is None:
             raise ValueError("receipts require a basis_evaluator (PolicyEngine.evaluate_with_basis)")
+        self.zone_mask = zone_mask
         self.evaluator = evaluator
         self.basis_evaluator = basis_evaluator
         self.receipts = receipts
@@ -559,6 +632,7 @@ def serve_forever(
     ready: Optional[threading.Event] = None,
     receipts: Optional[GateReceiptWriter] = None,
     strict_receipts: bool = True,
+    zone_mask: Optional[ZoneMask] = None,
 ) -> GateServer:
     """Bind `socket_path` and serve until shut down. Returns the server for the caller to close.
 
@@ -571,7 +645,7 @@ def serve_forever(
         Path(socket_path), evaluator=engine.evaluate, ctx=ctx,
         device_id=device_id, enforcement_mode=enforcement_mode,
         basis_evaluator=engine.evaluate_with_basis if receipts is not None else None,
-        receipts=receipts, strict_receipts=strict_receipts,
+        receipts=receipts, strict_receipts=strict_receipts, zone_mask=zone_mask,
     )
     if ready is not None:
         ready.set()
