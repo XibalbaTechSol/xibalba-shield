@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..gate_zone import GateZoneSettings
 from ..pack_profiles import PACK_DIRS_BY_PROFILE
 from ..schemas.policy_rule import PolicyRule
 
@@ -190,6 +191,9 @@ class DeviceConfig:
     # hash-allowlist-only behavior for existing deployments that haven't opted in.
     trusted_signing_keys: list[str] = field(default_factory=list)
     require_signed_policy: bool = False
+    # The gate daemon's zone mask (`shield.gate_zone.GateZoneSettings`), kept as the raw object the
+    # file held. Empty == the mask is off, which is the default.
+    gate_zone: dict[str, Any] = field(default_factory=dict)
     # Populated only after authenticated tenant-settings synchronization; never loaded
     # from the device JSON file.
     effective_settings: dict[str, Any] = field(default_factory=dict, repr=False)
@@ -232,6 +236,7 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         "require_signed_policy",
         "policy_profile",
         "trusted_pack_signers",
+        "gate_zone",
     }
     unknown = set(doc.keys()) - known_fields
     if unknown:
@@ -264,4 +269,10 @@ def load_device_config(path: Path | str) -> DeviceConfig:
         raise ConfigError(f"device config file {p}: \"trusted_pack_signers\" must be an array")
     if any(not isinstance(key, str) for key in kwargs.get("trusted_pack_signers", [])):
         raise ConfigError(f"device config file {p}: every \"trusted_pack_signers\" entry must be a string")
+    if "gate_zone" in kwargs:
+        try:
+            GateZoneSettings.from_mapping(kwargs["gate_zone"])
+        except (ValueError, TypeError) as exc:
+            raise ConfigError(f"device config file {p}: \"gate_zone\" is invalid: {exc}") from exc
+        kwargs["gate_zone"] = dict(kwargs["gate_zone"])
     return DeviceConfig(**kwargs)

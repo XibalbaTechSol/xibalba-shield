@@ -2,7 +2,7 @@
 title: Guardrail Hooks
 acronyms: []
 created: 2026-08-12
-updated: 2026-10-07
+updated: 2026-11-12
 type: concept
 tags: [enforcement, compliance]
 confidence: high
@@ -15,6 +15,9 @@ source_files:
   - shield/guardrail_hooks/post_action_verification.py
   - shield/gate_daemon.py
   - shield/gate_receipts.py
+  - shield/gate_zone.py
+  - shield/sensor_status.py
+  - shield/watchdog.py
   - shield/agent_core/router.py
   - shield/cli.py
 ---
@@ -25,6 +28,7 @@ source_files:
 - [These are library calls an agent runtime makes — not a sensor loop](#these-are-library-calls-an-agent-runtime-makes-not-a-sensor-loop)
 - [The out-of-process gate: shield gate-daemon](#the-out-of-process-gate-shield-gate-daemon)
   - [Signed, chained receipts (--receipt-dir)](#signed-chained-receipts-receipt-dir)
+  - [The zone mask (--zone-mode)](#the-zone-mask-zone-mode)
 - [Related pages](#related-pages)
 
 ## Overview
@@ -181,6 +185,45 @@ Verification is `integrity verify --receipts bundle.json --trusted-signer <key>`
 receipts from `bcc_middleware`) and the shared conformance vectors.
 
 `integrity_sdk.hook_runner --gate shield` speaks to this socket (integrity-core #166).
+
+### The zone mask (`--zone-mode`)
+
+Off by default. `shield/gate_zone.py` adds one check after the policy pack has answered: the
+agent's control zone restricts which *class* of tool call may run. It needs no chain, token or
+hosted oracle in the request path.
+
+| Zone | Permits |
+|---|---|
+| green | read, draft, execute, escalate |
+| yellow | read, draft, escalate |
+| red | read, escalate |
+
+- **Classes.** A tool name maps to `read`, `draft`, `execute` or `escalate`
+  (`--zone-tool-class TOOL=CLASS`, over a short default map). A tool in no map is `execute`.
+- **Only removes permission.** The mask acts only on a call the pack permitted. A pack denial keeps
+  its own action, reason and reason code in every zone.
+- **Modes.** `off` builds no mask and calls no provider. `shadow` allows everything and reports what
+  it would have restricted (`zone_mask.restricted` in the response, an INFO log line, and the control
+  `ais_zone_mask:shadow_restricted` on the receipt). `enforce` denies with reason code
+  `AIS_ZONE_RESTRICTED`. `--enforcement-mode observe` still never blocks.
+- **Where the zone comes from.** A zone provider is a callable `agent_id -> zone`. The shipped one
+  is static (`--zone`, `--zone-agent AGENT=ZONE`). A scorer attaches with
+  `register_zone_provider(name, factory)` or `--zone-provider package.module:factory`. A provider
+  that raises or answers with something that is not a zone is `unknown` (yellow by default,
+  `--zone-unknown-as`), never green.
+- **Sensor silence is a fault.** `shield run --sensor-status-file PATH` makes the watchdog write the
+  sensor's health to a local 0600 file every tick. `shield gate-daemon --zone-sensor-status-file PATH`
+  reads it on every decision; a stale (default 60 s), missing, unreadable or unhealthy status caps
+  every agent's zone at red (`--zone-sensor-demote-to yellow` to soften). A gate with no status
+  file configured is never demoted. The file is unsigned: it detects a sensor that died or was
+  stopped, not one whose owner forges the file.
+- **Receipts.** While the mask is on, every receipt carries the controls `ais_zone:<zone>`,
+  `ais_action_class:<class>` and `ais_zone_source:<source>`. The receipt format is unchanged, so
+  existing verifiers accept them.
+
+The same settings can live in the device config as a `gate_zone` object; a flag overrides the
+matching field. Not built: a provider that computes the zone from an Agent Integrity Score. Until
+one is registered the zone is whatever the operator configures.
 
 ## Related pages
 

@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 from typing import Any
 
 from .config import DeviceConfig
 from .config import fetch_device_settings
 from .runtime_status import publish_runtime_status
+from .sensor_status import write_sensor_status
 
 logger = logging.getLogger("shield.watchdog")
 
@@ -46,8 +48,12 @@ class Watchdog:
         remediation_worker: Any | None = None,
         evidence_publisher: Any | None = None,
         responder_status: dict[str, Any] | None = None,
+        sensor_status_file: Path | str | None = None,
     ) -> None:
         self._interval = interval
+        # Opt-in (`shield run --sensor-status-file`): a local copy of each tick's sensor health for
+        # the gate daemon's sensor-silence check (`shield.gate_zone`). None writes nothing.
+        self._sensor_status_file = Path(sensor_status_file) if sensor_status_file is not None else None
         self._device_config = device_config
         self._policy_engine = policy_engine
         self._reloader = reloader
@@ -134,6 +140,14 @@ class Watchdog:
                 sensors_status = {"attached": False, "error": str(exc)}
         else:
             sensors_status = {"attached": True}
+
+        if self._sensor_status_file is not None:
+            # Written before anything else that can be slow or fail, and never allowed to stop the
+            # tick: a file that cannot be written goes stale, which the gate reads as silence.
+            try:
+                write_sensor_status(self._sensor_status_file, sensors_status)
+            except Exception:  # noqa: BLE001
+                logger.exception("watchdog: could not write sensor status file %s", self._sensor_status_file)
 
         if self._remediation_worker is not None:
             try:

@@ -27,6 +27,7 @@ from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_
 from .config.hot_reload import PolicyHotReloader
 from .pack_loading import PackLoadError, resolve_pack
 from .gate_daemon import default_socket_path, serve_forever
+from .gate_zone import MODE_OFF, ZONE_MODES, GateZoneSettings, ZoneMask, build_zone_mask
 from .policy_engine import PolicyEngine
 from .policy_engine.engine import EvaluationContext
 from .policy_engine.jev_shadow import JevShadowAnalyzer, JsonlDecisionTraceSink
@@ -180,6 +181,55 @@ def _validate(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _parse_pairs(values: list[str] | None, flag: str) -> dict[str, str]:
+    """`NAME=VALUE` occurrences of a repeatable flag as a dict. Raises `ValueError` naming the flag."""
+    pairs: dict[str, str] = {}
+    for item in values or []:
+        name, separator, value = item.partition("=")
+        if not separator or not name or not value:
+            raise ValueError(f"{flag} takes NAME=VALUE, got {item!r}")
+        pairs[name] = value
+    return pairs
+
+
+def _gate_zone_mask(args: argparse.Namespace, device_config: DeviceConfig) -> ZoneMask | None:
+    """The zone mask the device config and the `--zone-*` flags describe; None when it is off.
+
+    A flag overrides the same field of the config's `gate_zone` object (`--zone-agent` and
+    `--zone-tool-class` add to, and win over, the config's maps). Raises `ValueError` for a
+    malformed option, and for any zone option given while the mode is off -- an option that would
+    be silently ignored is a restriction the operator believes in and does not have.
+    """
+    # Read with a default: `_gate_daemon` is also called with a hand-built namespace that predates
+    # these options, and an absent option is an option that was not given.
+    def opt(name: str):
+        return getattr(args, name, None)
+
+    document = dict(device_config.gate_zone)
+    status_file = opt("zone_sensor_status_file")
+    overrides = {
+        "mode": opt("zone_mode"), "zone": opt("zone"), "unknown_as": opt("zone_unknown_as"),
+        "provider": opt("zone_provider"), "sensor_max_age_seconds": opt("zone_sensor_max_age"),
+        "sensor_demote_to": opt("zone_sensor_demote_to"), "sensor_expect": opt("zone_sensor_expect"),
+        "sensor_status_file": str(status_file) if status_file is not None else None,
+    }
+    given = {name: value for name, value in overrides.items() if value is not None}
+    agent_zones = _parse_pairs(opt("zone_agents"), "--zone-agent")
+    tool_classes = _parse_pairs(opt("zone_tool_classes"), "--zone-tool-class")
+    document.update(given)
+    if agent_zones:
+        document["agent_zones"] = {**document.get("agent_zones", {}), **agent_zones}
+    if tool_classes:
+        document["tool_classes"] = {**document.get("tool_classes", {}), **tool_classes}
+
+    settings = GateZoneSettings.from_mapping(document)
+    if settings.mode == MODE_OFF and (set(given) - {"mode"} or agent_zones or tool_classes):
+        raise ValueError(
+            "zone options were given but the zone mask is off; pass --zone-mode shadow or "
+            "--zone-mode enforce (or set gate_zone.mode in the device config)")
+    return build_zone_mask(settings)
+
+
 def _gate_daemon(args: argparse.Namespace) -> int:
     """Serve PreToolUse decisions on a Unix socket (docs/EXECUTION_PLAN.md B2).
 
@@ -214,6 +264,16 @@ def _gate_daemon(args: argparse.Namespace) -> int:
             device_id=args.device_id, tenant_id=args.tenant_id or "",
             device_role=args.device_role or "",
         )
+
+    # Before the pack is resolved: a mistyped zone option should be reported as that, not hidden
+    # behind whatever else is wrong.
+    try:
+        zone_mask = _gate_zone_mask(args, device_config)
+    except (ValueError, TypeError) as exc:
+        print(f"shield gate-daemon: {exc}", file=sys.stderr)
+        return 2
+    if zone_mask is not None:
+        print(f"shield gate-daemon: zone mask {zone_mask.mode}", file=sys.stderr)
 
     receipts = None
     if args.receipt_dir is None:
@@ -301,6 +361,7 @@ def _gate_daemon(args: argparse.Namespace) -> int:
             socket_path, engine=policy_engine, ctx=ctx,
             device_id=device_config.device_id, enforcement_mode=args.enforcement_mode,
             receipts=receipts, strict_receipts=not args.lenient_receipts,
+            zone_mask=zone_mask,
         )
     except OSError as exc:
         print(f"shield gate-daemon: {exc}", file=sys.stderr)
@@ -694,6 +755,8 @@ def _run(args: argparse.Namespace) -> int:
         remediation_worker=remediation_worker,
         evidence_publisher=evidence_publisher,
         responder_status=action_broker.status() if action_broker is not None else {"capabilities": {}, "readiness": {"ready": {}, "proofs": {}, "missing": {}}},
+        # `local-run` reaches here with its own namespace, which has no such option.
+        sensor_status_file=getattr(args, "sensor_status_file", None),
     )
     watchdog.start()
 
@@ -1175,6 +1238,10 @@ def main(argv: list[str] | None = None) -> int:
                             "publish covering policy/opa/sensors/exporter) -- runs "
                             "independent of event traffic, so an idle or stalled sensor "
                             "stream no longer freezes health reporting")
+    p_run.add_argument("--sensor-status-file", type=Path, default=None,
+                       help="also write each watchdog tick's sensor health to this local file (0600), "
+                            "so a gate daemon on this device can treat a silent sensor as a fault "
+                            "(shield gate-daemon --zone-sensor-status-file). Off by default")
     p_run.set_defaults(func=_run)
 
     p_gate = sub.add_parser(
@@ -1217,6 +1284,36 @@ def main(argv: list[str] | None = None) -> int:
                              "says receipt_status=failed). Default is STRICT: in enforce mode such a "
                              "call is denied, so a full disk stops tool calls rather than leaving "
                              "unrecorded decisions")
+    p_gate.add_argument("--zone-mode", choices=ZONE_MODES, default=None,
+                        help="zone mask: off (default) leaves the gate unchanged; shadow reports and "
+                             "records what the mask would restrict without blocking; enforce denies a "
+                             "call whose class the agent's zone does not permit. The mask only ever "
+                             "removes permission. Overrides gate_zone.mode in the device config")
+    p_gate.add_argument("--zone", default=None,
+                        help="zone (green|yellow|red) the static provider reports for every agent; "
+                             "unset leaves it unknown")
+    p_gate.add_argument("--zone-agent", action="append", default=None, dest="zone_agents",
+                        metavar="AGENT_ID=ZONE", help="a per-agent zone for the static provider; repeatable")
+    p_gate.add_argument("--zone-unknown-as", default=None,
+                        help="zone an unknown zone is treated as (default yellow)")
+    p_gate.add_argument("--zone-tool-class", action="append", default=None, dest="zone_tool_classes",
+                        metavar="TOOL=CLASS",
+                        help="classify a tool as read|draft|execute|escalate; repeatable. A tool in no "
+                             "map is execute")
+    p_gate.add_argument("--zone-provider", default=None,
+                        help="zone provider: 'static' (default), a registered name, or an import path "
+                             "'package.module:factory'")
+    p_gate.add_argument("--zone-sensor-status-file", type=Path, default=None,
+                        help="sensor status file written by `shield run --sensor-status-file`. Giving "
+                             "it says a sensor is expected: a stale, missing, unreadable or unhealthy "
+                             "status then caps every agent's zone")
+    p_gate.add_argument("--zone-sensor-max-age", type=float, default=None,
+                        help="seconds after which the sensor status is stale (default 60)")
+    p_gate.add_argument("--zone-sensor-demote-to", default=None,
+                        help="zone ceiling while the sensor is silent: red (default) or yellow")
+    p_gate.add_argument("--zone-sensor-expect", default=None,
+                        help="always (default): a missing status file is silence; when-seen: excuse a "
+                             "file that has never existed since this daemon started")
     p_gate.set_defaults(func=_gate_daemon)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")

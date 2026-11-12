@@ -422,3 +422,13 @@
   fixtures; a narrow exception was added.
 - Found by test: a visually-hidden label escaped the table's scroll clipping and caused 5px of
   page-level horizontal scroll at 390px; fixed by positioning the table.
+
+## [2026-11-12] code | Gate zone mask and the sensor-silence fault
+
+- New `shield/gate_zone.py`: an off-by-default zone mask on `shield gate-daemon` (`--zone-mode
+  off|shadow|enforce`). It runs after the pack and can only turn a permit into a deny. Zones come
+  from a pluggable provider; the shipped one is static. No AIS scorer is attached yet.
+- New `shield/sensor_status.py`: `shield run --sensor-status-file` makes the watchdog write sensor
+  health locally each tick, and the gate caps every zone while that status is stale, missing,
+  unreadable or unhealthy.
+- `DeviceConfig` gained `gate_zone`. Updated `concepts/guardrail-hooks.md`.
