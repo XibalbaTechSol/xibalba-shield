@@ -191,6 +191,16 @@ def test_the_json_catalog_configures_plans():
     assert catalog["team"].max_devices == 50 and "pro" not in catalog
 
 
+def test_a_paid_plan_constructed_directly_must_price_seats_and_overage():
+    fields = dict(id="pro", name="Pro", per_device_monthly_cents=1500, included_decisions_per_device=1,
+                  overage_cents_per_1k=20, max_devices=None, zone_enforce=True)
+    ShieldPlan(**fields)
+    with pytest.raises(PlanConfigError):
+        ShieldPlan(**{**fields, "overage_cents_per_1k": None})
+    with pytest.raises(PlanConfigError):
+        ShieldPlan(**{**fields, "per_device_monthly_cents": 0})
+
+
 def test_shield_plan_refuses_a_bool_as_an_int():
     with pytest.raises(PlanConfigError):
         ShieldPlan(**{**FREE_DEFAULTS, "id": "free", "included_decisions_per_device": True})

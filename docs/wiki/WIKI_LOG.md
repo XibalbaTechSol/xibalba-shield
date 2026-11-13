@@ -453,3 +453,15 @@
   `ais_zone_entitlement:<status>`.
 - New gate flags `--zone-entitlement-file` and `--zone-entitlement-key`, with config fields
   `gate_zone.entitlement_file` and `gate_zone.entitlement_keys`. Updated `concepts/guardrail-hooks.md`.
+
+## [2026-11-13] code | Plans catalog, tenant plans, entitlement issuing and fetch
+
+- New `shield/backend/plans.py` (`ShieldPlan` and an env-loaded catalog that fails closed) and
+  `shield/backend/plans_store.py` (the `tenant_plans` table, where no row means free).
+- New `shield/backend/entitlement_issuer.py`, which serves `GET /api/shield/entitlement` and signs with
+  `SHIELD_ENTITLEMENT_SIGNING_KEY` through the existing `sign_entitlement`. With no key, nothing is
+  issued. Enrollment pins the key as `gate_zone.entitlement_keys`.
+- New `shield/entitlement_sync.py` and `shield entitlement-fetch`. The fetcher writes atomically, only
+  verified documents replace the file, and the gate never imports the fetcher.
+- Updated `concepts/guardrail-hooks.md`. Setting the new env vars on Render is an operator action.
+

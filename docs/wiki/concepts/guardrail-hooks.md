@@ -218,6 +218,33 @@ hosted oracle in the request path.
   `plan`. The response's `zone_mask` carries both `mode` (the mode applied) and `requested_mode`.
   This is a licence check, not a security boundary: whoever owns the device can change the code.
   Design: `docs/superpowers/specs/2026-11-12-shield-plans-metering-design.md` §6.
+- **Where the entitlement comes from.** The backend issues it at `GET /api/shield/entitlement?tenant_id=&device_id=`
+  (device credential required; a device can only fetch its own). `shield entitlement-fetch --device-config
+  FILE [--entitlement-file PATH] [--once]` fetches it and writes it atomically (temp file, fsync, rename),
+  but only after it verifies against the keys pinned at enrollment as `ok` or `plan`. A failed fetch, a
+  503, or a document that does not verify leaves the existing file untouched, so the gate keeps its last
+  valid entitlement until that document's own `not_after`. It is a separate process: the gate never
+  imports it. Enrollment pins the signer key(s) in the device config as `gate_zone.entitlement_keys`
+  when issuing is configured.
+  - **Who gets `zone_enforce: true`:** a configured paid plan that includes enforce, with status
+    `active`, `trialing` or `past_due`, a `period_end`, `period_end + grace` still ahead, and a device
+    that is not synthetic. Such a document is valid until `period_end + grace`. Everything else, free
+    included, gets a signed document with `zone_enforce: false`, valid for `grace` from now. A cancelled
+    tenant's file is therefore replaced rather than left enforcing.
+  - **Plans** (`shield/backend/plans.py`, `ShieldPlan`): `free` defaults to the §9 suggestions (2
+    devices, 5,000 decisions per device, no enforce). `pro` and `team` exist only once their price,
+    allowance and overage are set. Any invalid value means that plan is not loaded, and the reason is logged. A tenant's
+    plan is the `tenant_plans` row (`shield/backend/plans_store.py`). No row means free. No HTTP setter
+    exists yet, because tenant-scoped admin tokens would let a tenant upgrade itself. Phase 3c's Stripe webhook will
+    write it.
+  - **Environment variables. Setting them on Render is an operator action:**
+    `SHIELD_ENTITLEMENT_SIGNING_KEY` (Ed25519 private key as inline PKCS#8 PEM; `\n` escapes
+    accepted) or `SHIELD_ENTITLEMENT_SIGNING_KEY_FILE` (a path to it). Set exactly one. If neither is set,
+    or the key is invalid, nothing is issued (503), devices stay in shadow, and no key is ever generated.
+    `SHIELD_ENTITLEMENT_PREVIOUS_KEYS` (comma-separated base64 public keys still pinned during a
+    rotation). `SHIELD_ENTITLEMENT_GRACE_DAYS` (1 to 90, default 7). The plan catalog uses
+    `SHIELD_PLAN_<ID>_<FIELD>`, for example
+    `SHIELD_PLAN_PRO_PER_DEVICE_MONTHLY_CENTS`, or `SHIELD_PLAN_CATALOG_JSON` for all plans at once.
 - **Where the zone comes from.** A zone provider is a callable `agent_id -> zone`. Two ship:
   `static` (the default: `--zone`, `--zone-agent AGENT=ZONE`) and `ais` (below). Another scorer
   attaches with `register_zone_provider(name, factory)` or `--zone-provider package.module:factory`.
