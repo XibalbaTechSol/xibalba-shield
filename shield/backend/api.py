@@ -60,6 +60,9 @@ from ..edr import (
 from ..edr.simulated import SimulatedProvider
 from ..edr.connectors.crowdstrike import CrowdStrikeConnector
 from .entitlement_issuer import handle_entitlement_request
+from .shield_billing import (
+    BILLING_POST_ROUTES, WEBHOOK_ROUTE, handle_billing_get, handle_billing_post, handle_stripe_webhook,
+)
 
 try:
     from integrity_sdk.did import fingerprint_for_pubkey, verify_signature
@@ -1232,6 +1235,9 @@ def make_handler(
             if parsed.path == "/api/shield/entitlement":
                 handle_entitlement_request(self, store, query)
                 return
+            if parsed.path == "/api/shield/billing":
+                handle_billing_get(self, store.billing, query)
+                return
             if parsed.path == "/api/shield/detection-quality":
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
@@ -1356,10 +1362,20 @@ def make_handler(
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
             parts = [part for part in parsed.path.split("/") if part]
+            if parsed.path == WEBHOOK_ROUTE:
+                # Stripe signs the exact bytes: read them raw, before any JSON parsing. No admin auth;
+                # the signature is the authentication.
+                handle_stripe_webhook(self, store.billing)
+                return
             try:
                 body = self._read_json()
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+
+            if parsed.path in BILLING_POST_ROUTES:
+                handle_billing_post(self, store.billing, parsed.path, body,
+                                    public_base_url or self._request_base_url())
                 return
 
             if parsed.path == "/api/shield/usage":
@@ -1825,6 +1841,8 @@ def make_handler(
                 except ConfigError as exc:
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
+                # Seat count changed: prorate the subscription off-thread; enrollment never waits on Stripe.
+                store.billing.sync_seats_soon(enrollment.tenant_id)
                 self._send_json(
                     {
                         "tenant_id": enrollment.tenant_id,

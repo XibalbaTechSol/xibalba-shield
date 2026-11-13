@@ -22,6 +22,7 @@ from .entitlement_issuer import enrollment_gate_zone
 from .plans_store import PlanStore
 from .response_store import ResponseLedgerStore
 from .usage_ledger import UsageLedgerStore
+from .shield_billing import ShieldBilling, supabase_durability
 
 
 def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
@@ -130,6 +131,8 @@ class ShieldStore:
         self.response.init_schema()
         self.usage = UsageLedgerStore(self._conn, enrolled_agent_id=self.enrolled_agent_id)
         self.usage.init_schema()
+        self.billing = ShieldBilling(self._conn, self.plans, durable=supabase_durability(self.db_path))
+        self.billing.init_schema()
 
     def close(self) -> None:
         self._conn.close()

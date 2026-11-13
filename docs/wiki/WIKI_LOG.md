@@ -475,3 +475,22 @@
   verified documents replace the file, and the gate never imports the fetcher.
 - Updated `concepts/guardrail-hooks.md`. Setting the new env vars on Render is an operator action.
 
+
+## [2026-11-13] code | Stripe checkout, portal, webhook and seat sync (billing phase 3c)
+
+- New `shield/backend/shield_billing.py`. Each paid plan is one subscription with two prices: a
+  licensed per-device seat, and a metered overage backed by a Billing Meter. Both prices are checked
+  against the plan catalog on every checkout, and a mismatch answers 503.
+- Routes: `POST /api/shield/billing/{checkout,portal,sync}` and `GET /api/shield/billing` (admin).
+  `POST /api/shield/stripe/webhook` reads the raw body before any JSON parsing, and the signature is
+  its only authentication.
+- The webhook is the only writer of `tenant_plans`. It re-reads the subscription from Stripe, so an
+  event body never decides the plan. The event id and the plan are written in one transaction. On
+  Render it forces a Supabase checkpoint and answers 503 if that fails, so Stripe redelivers.
+- Trial: a tenant's first checkout gets 14 days (`SHIELD_STRIPE_TRIAL_DAYS`) with the card collected
+  up front. There is one trial per tenant (`billing_customers.trial_used_at`).
+- Enrollment syncs the seat count off the request thread, with prorations. Each change gets its own
+  idempotency key from a `seat_syncs` row id, and phase 3d reads those rows for the period's device
+  maximum.
+- Design §9 now records the price suggestions and the trial decision. `render.yaml` declares the
+  `SHIELD_STRIPE_*` keys, which the operator sets.

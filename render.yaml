@@ -36,3 +36,19 @@ services:
       # gate stays in shadow. Operator-set in the dashboard; never generateValue (it must be a key).
       - key: SHIELD_ENTITLEMENT_SIGNING_KEY
         sync: false
+      # Stripe billing (phase 3c). Any of these unset or placeholder: checkout answers 503 and no
+      # tenant plan ever changes. Price ids are validated against the plan catalog on every checkout.
+      - key: SHIELD_STRIPE_SECRET_KEY
+        sync: false
+      - key: SHIELD_STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: SHIELD_STRIPE_METER_ID
+        sync: false
+      - key: SHIELD_STRIPE_PRICE_PRO_DEVICE
+        sync: false
+      - key: SHIELD_STRIPE_PRICE_PRO_OVERAGE
+        sync: false
+      - key: SHIELD_STRIPE_PRICE_TEAM_DEVICE
+        sync: false
+      - key: SHIELD_STRIPE_PRICE_TEAM_OVERAGE
+        sync: false
