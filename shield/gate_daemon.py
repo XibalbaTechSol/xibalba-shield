@@ -279,9 +279,14 @@ def _apply_zone_mask(
     assessment = zone_mask.assess(request.agent_id, request.tool_name)
     pack_permitted = response["action"] in PERMITTING_ACTIONS
     would_restrict = assessment.restricted and pack_permitted
-    applied = would_restrict and zone_mask.mode == MODE_ENFORCE
+    # A requested `enforce` blocks only under a valid entitlement; otherwise it runs as shadow and
+    # the receipt says why (design §6). The entitlement is a local file check, never a network call.
+    mode, entitlement = zone_mask.effective_mode()
+    applied = would_restrict and mode == MODE_ENFORCE
     response["zone_mask"] = {
-        "mode": zone_mask.mode,
+        "mode": mode,
+        "requested_mode": zone_mask.mode,
+        "entitlement": entitlement,
         "zone": assessment.zone,
         "action_class": assessment.action_class,
         "restricted": assessment.restricted,
@@ -294,6 +299,8 @@ def _apply_zone_mask(
         f"ais_action_class:{assessment.action_class}",
         f"ais_zone_source:{assessment.source}",
     )
+    if entitlement is not None:
+        controls += (f"ais_zone_entitlement:{entitlement}",)
     if applied:
         enforced = enforcement_mode != "observe"
         response.update(

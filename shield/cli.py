@@ -219,6 +219,7 @@ def _gate_zone_mask(args: argparse.Namespace, device_config: DeviceConfig) -> Zo
         "provider": opt("zone_provider"), "sensor_max_age_seconds": opt("zone_sensor_max_age"),
         "sensor_demote_to": opt("zone_sensor_demote_to"), "sensor_expect": opt("zone_sensor_expect"),
         "sensor_status_file": str(status_file) if status_file is not None else None,
+        "entitlement_file": str(opt("zone_entitlement_file")) if opt("zone_entitlement_file") is not None else None,
     }
     given = {name: value for name, value in overrides.items() if value is not None}
     agent_zones = _parse_pairs(opt("zone_agents"), "--zone-agent")
@@ -230,6 +231,9 @@ def _gate_zone_mask(args: argparse.Namespace, device_config: DeviceConfig) -> Zo
     ais_agent_tiers = {agent: _parse_tier(tier, "--zone-ais-agent-tier")
                        for agent, tier in _parse_pairs(opt("zone_ais_agent_tiers"), "--zone-ais-agent-tier").items()}
     document.update(given)
+    entitlement_keys = opt("zone_entitlement_keys")
+    if entitlement_keys:
+        document["entitlement_keys"] = [*document.get("entitlement_keys", []), *entitlement_keys]
     if agent_zones:
         document["agent_zones"] = {**document.get("agent_zones", {}), **agent_zones}
     if tool_classes:
@@ -248,11 +252,11 @@ def _gate_zone_mask(args: argparse.Namespace, device_config: DeviceConfig) -> Zo
 
     settings = GateZoneSettings.from_mapping(document)
     if settings.mode == MODE_OFF and (set(given) - {"mode"} or agent_zones or tool_classes
-                                      or ais_given or ais_agent_tiers):
+                                      or ais_given or ais_agent_tiers or entitlement_keys):
         raise ValueError(
             "zone options were given but the zone mask is off; pass --zone-mode shadow or "
             "--zone-mode enforce (or set gate_zone.mode in the device config)")
-    return build_zone_mask(settings)
+    return build_zone_mask(settings, tenant_id=device_config.tenant_id, device_id=device_config.device_id)
 
 
 def _gate_daemon(args: argparse.Namespace) -> int:
@@ -1341,6 +1345,12 @@ def main(argv: list[str] | None = None) -> int:
     p_gate.add_argument("--zone-ais-max-age", type=float, default=None,
                         help="ais provider: decisions older than this many seconds stop counting "
                              "(default: no age bound)")
+    p_gate.add_argument("--zone-entitlement-file", type=Path, default=None,
+                        help="signed entitlement (xibalba.shield.entitlement.v1) that --zone-mode enforce "
+                             "requires; without a valid one enforce runs as shadow and the receipt records "
+                             "ais_zone_entitlement:<status>. Re-read when it changes")
+    p_gate.add_argument("--zone-entitlement-key", action="append", default=None, dest="zone_entitlement_keys",
+                        metavar="BASE64_PUBKEY", help="a trusted entitlement signer key; repeatable")
     p_gate.add_argument("--zone-sensor-status-file", type=Path, default=None,
                         help="sensor status file written by `shield run --sensor-status-file`. Giving "
                              "it says a sensor is expected: a stale, missing, unreadable or unhealthy "

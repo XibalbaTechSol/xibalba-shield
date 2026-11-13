@@ -206,6 +206,18 @@ hosted oracle in the request path.
   it would have restricted (`zone_mask.restricted` in the response, an INFO log line, and the control
   `ais_zone_mask:shadow_restricted` on the receipt). `enforce` denies with reason code
   `AIS_ZONE_RESTRICTED`. `--enforcement-mode observe` still never blocks.
+- **`enforce` is a paid feature and needs a signed entitlement.** Without one it runs as `shadow`
+  and never blocks. The entitlement is a file the backend signs (`xibalba.shield.entitlement.v1`,
+  `shield/entitlement.py`): tenant, device, plan, `zone_enforce`, and a validity window. The gate checks
+  it locally on every decision and never calls home: `--zone-entitlement-file PATH` points at the file,
+  and `--zone-entitlement-key BASE64` is a trusted signer and may be repeated. The device config
+  equivalents are `gate_zone.entitlement_file` and `gate_zone.entitlement_keys`. A refreshed file is
+  picked up without a restart, and expiry is checked against the clock, so a lapse takes effect when it
+  happens. Under `enforce`, every receipt records `ais_zone_entitlement:<status>`, where status is one
+  of `ok`, `missing`, `malformed`, `bad_signature`, `wrong_device`, `not_yet_valid`, `expired` or
+  `plan`. The response's `zone_mask` carries both `mode` (the mode applied) and `requested_mode`.
+  This is a licence check, not a security boundary: whoever owns the device can change the code.
+  Design: `docs/superpowers/specs/2026-11-12-shield-plans-metering-design.md` §6.
 - **Where the zone comes from.** A zone provider is a callable `agent_id -> zone`. Two ship:
   `static` (the default: `--zone`, `--zone-agent AGENT=ZONE`) and `ais` (below). Another scorer
   attaches with `register_zone_provider(name, factory)` or `--zone-provider package.module:factory`.

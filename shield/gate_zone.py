@@ -88,7 +88,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from .sensor_status import SensorStatusError, read_sensor_status
 
@@ -310,7 +310,11 @@ class ZoneMask:
         provider: ZoneProvider,
         tool_classes: Optional[Mapping[str, str]] = None,
         unknown_zone: str = YELLOW,
+        entitlement: Optional[Callable[[], str]] = None,
     ) -> None:
+        """`entitlement` returns a `shield.entitlement` status; anything but `ok` runs `enforce` as
+        `shadow`. None leaves `enforce` ungated -- for embedding and unit tests only:
+        `build_zone_mask`, the path every daemon takes, always attaches one."""
         if mode not in ZONE_MODES:
             raise ValueError(f"zone mode must be one of {ZONE_MODES}, got {mode!r}")
         if unknown_zone not in ZONES:
@@ -325,6 +329,22 @@ class ZoneMask:
         self._provider = provider
         self._tool_classes = merged
         self._unknown_zone = unknown_zone
+        self._entitlement = entitlement
+
+    def effective_mode(self) -> tuple[str, Optional[str]]:
+        """(the mode actually applied, the entitlement status or None when none was consulted).
+
+        Only a requested `enforce` consults the entitlement. Without a valid one it runs as `shadow`
+        -- observing, never blocking (design §1/§6: billing is never in the decision path). Never raises.
+        """
+        if self.mode != MODE_ENFORCE or self._entitlement is None:
+            return self.mode, None
+        try:
+            status = self._entitlement()
+        except Exception:  # noqa: BLE001
+            logger.exception("entitlement check raised; zone enforce runs as shadow")
+            status = "malformed"
+        return (MODE_ENFORCE if status == "ok" else MODE_SHADOW), status
 
     @property
     def active(self) -> bool:
@@ -439,6 +459,10 @@ class GateZoneSettings:
     ais: Mapping[str, Any] = field(default_factory=dict)
     #: The receipts file the `ais` provider scores. The CLI fills it from `--receipt-dir`.
     receipts_file: Optional[str] = None
+    #: The signed entitlement (`shield.entitlement`) that `enforce` requires; without a valid one,
+    #: `enforce` runs as `shadow`. `entitlement_keys` are the trusted signer public keys (base64).
+    entitlement_file: Optional[str] = None
+    entitlement_keys: Sequence[str] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         _require(self.mode in ZONE_MODES, f"mode must be one of {ZONE_MODES}, got {self.mode!r}")
@@ -470,6 +494,12 @@ class GateZoneSettings:
                  f"ais options are only read by the {PROVIDER_AIS!r} zone provider, but the provider is {self.provider!r}")
         _require(self.receipts_file is None or (isinstance(self.receipts_file, str) and bool(self.receipts_file)),
                  "receipts_file must be a path string")
+        _require(self.entitlement_file is None or (
+            isinstance(self.entitlement_file, str) and bool(self.entitlement_file)),
+            "entitlement_file must be a path string")
+        _require(not isinstance(self.entitlement_keys, (str, bytes)) and all(
+            isinstance(key, str) and key for key in self.entitlement_keys),
+            "entitlement_keys must be a list of base64 public keys")
 
     @classmethod
     def from_mapping(cls, document: Mapping[str, Any]) -> "GateZoneSettings":
@@ -525,12 +555,17 @@ def _resolve_provider_factory(name: str) -> ZoneProviderFactory:
     )
 
 
-def build_zone_mask(settings: GateZoneSettings) -> Optional[ZoneMask]:
+def build_zone_mask(
+    settings: GateZoneSettings, *, tenant_id: str = "", device_id: str = "",
+) -> Optional[ZoneMask]:
     """The mask `settings` describes, or None when the mode is `off`.
 
     None -- rather than a mask that declines to act -- so that an off gate constructs no provider and
     cannot call one. The provider is always wrapped in `SensorSilenceZoneProvider`; with no status
     file configured that wrapper reports `not_configured` and changes nothing.
+
+    The mask always carries an `EntitlementGate` for this tenant and device: `enforce` blocks only
+    while a valid signed entitlement says the plan includes it (design §6).
     """
     if settings.mode == MODE_OFF:
         return None
@@ -544,7 +579,13 @@ def build_zone_mask(settings: GateZoneSettings) -> Optional[ZoneMask]:
         demote_to=settings.sensor_demote_to,
         expect=settings.sensor_expect,
     )
+    from .entitlement import EntitlementGate  # local: keeps `gate_zone` importable without crypto deps
+
+    gate = EntitlementGate(
+        settings.entitlement_file, trusted_keys=tuple(settings.entitlement_keys),
+        tenant_id=tenant_id, device_id=device_id,
+    )
     return ZoneMask(
         mode=settings.mode, provider=wrapped, tool_classes=settings.tool_classes,
-        unknown_zone=settings.unknown_as,
+        unknown_zone=settings.unknown_as, entitlement=gate.status,
     )

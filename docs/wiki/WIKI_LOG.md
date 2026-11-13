@@ -443,3 +443,13 @@
   health locally each tick, and the gate caps every zone while that status is stale, missing,
   unreadable or unhealthy.
 - `DeviceConfig` gained `gate_zone`. Updated `concepts/guardrail-hooks.md`.
+
+## [2026-11-13] code | Paid zone enforcement: signed entitlement, otherwise shadow
+
+- New `shield/entitlement.py`, which signs and verifies `xibalba.shield.entitlement.v1`, plus an
+  `EntitlementGate` that reloads the file when it changes and is checked on every decision.
+- `ZoneMask.effective_mode()`: a requested `enforce` blocks only under a valid entitlement, and
+  otherwise runs as `shadow`. `build_zone_mask` always attaches the gate. Receipts carry
+  `ais_zone_entitlement:<status>`.
+- New gate flags `--zone-entitlement-file` and `--zone-entitlement-key`, with config fields
+  `gate_zone.entitlement_file` and `gate_zone.entitlement_keys`. Updated `concepts/guardrail-hooks.md`.
