@@ -548,3 +548,28 @@ def test_cli_entitlement_fetch_writes_the_file(backend, tmp_path, monkeypatch):
     assert cli_main(["entitlement-fetch", "--device-config", str(config_path), "--entitlement-file", str(path),
                      "--once"]) == 3
     assert path.read_bytes() == before
+
+
+# --------------------------------------------------------------------------- pairing pins the key too
+
+
+def test_a_paired_device_config_pins_the_entitlement_keys(tmp_path, monkeypatch):
+    """`shield pair` builds its own device.json from the poll answer, so the pin must travel there."""
+    from shield.device_pairing import DevicePairingFlow
+
+    _configure(monkeypatch)
+    store = ShieldStore(tmp_path / "s.sqlite3")
+    flow = DevicePairingFlow(backend_url="http://backend.invalid", shield_home=tmp_path / "home")
+    request = store.create_device_pairing_request(
+        device_id=flow.device_id, device_name="ws", device_type="physical", agent_did=flow.agent_did,
+        callback_url="")
+    store.approve_device_pairing_request(code=request["code"], tenant_id=TENANT, account_id="op@example.com")
+    status = store.poll_device_pairing_status(request["device_code"])
+    assert status["gate_zone"] == {"entitlement_keys": [BACKEND_KEY]}
+    flow._finalize_pairing(tenant_id=TENANT, device_token=status["device_token"], gate_zone=status["gate_zone"])
+    config = load_device_config(tmp_path / "home" / "device.json")
+    assert config.gate_zone == {"entitlement_keys": [BACKEND_KEY]}
+    # Junk from the backend is dropped, never written into a config the gate would refuse.
+    flow._finalize_pairing(tenant_id=TENANT, device_token="t", gate_zone={"entitlement_keys": [1], "mode": "x"})
+    assert load_device_config(tmp_path / "home" / "device.json").gate_zone == {}
+    store.close()

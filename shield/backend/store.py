@@ -1426,6 +1426,8 @@ class ShieldStore:
                 "device_type": data["device_type"],
                 "agent_did": data["agent_did"],
                 "device_token": data["issued_device_token"],
+                # The paired device builds its own config; this is how it pins the entitlement keys.
+                **({"gate_zone": gate_zone} if (gate_zone := enrollment_gate_zone()) else {}),
             }
         return {"status": data["status"]}
 

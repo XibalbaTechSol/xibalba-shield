@@ -284,9 +284,15 @@ class DevicePairingFlow:
             while time.time() - start_time < timeout_seconds:
                 if done_event.is_set() and _LoopbackHandler.result_holder.get("token"):
                     res = _LoopbackHandler.result_holder
+                    # The loopback redirect carries no entitlement keys; one best-effort poll does.
+                    try:
+                        pinned = self.poll_status(device_code).get("gate_zone")
+                    except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError):
+                        pinned = None
                     return self._finalize_pairing(
                         tenant_id=res.get("tenant_id") or "tenant-a",
                         device_token=res["token"],
+                        gate_zone=pinned,
                     )
 
                 try:
@@ -295,6 +301,7 @@ class DevicePairingFlow:
                         return self._finalize_pairing(
                             tenant_id=status.get("tenant_id") or "tenant-a",
                             device_token=status["device_token"],
+                            gate_zone=status.get("gate_zone"),
                         )
                     if status.get("status") == "expired":
                         raise TimeoutError("Pairing request expired.")
@@ -310,8 +317,12 @@ class DevicePairingFlow:
                 server.shutdown()
                 server.server_close()
 
-    def _finalize_pairing(self, *, tenant_id: str, device_token: str) -> dict[str, Any]:
-        """Save device configuration and prepare local policies."""
+    def _finalize_pairing(self, *, tenant_id: str, device_token: str, gate_zone: Any = None) -> dict[str, Any]:
+        """Save device configuration and prepare local policies.
+
+        `gate_zone` is the backend's `{"entitlement_keys": [...]}` pin (plans design §6). Only that
+        field is kept, and only when it is a list of strings: anything else is dropped rather than
+        written into a config the gate would then refuse to load."""
         device_config_path = self.shield_home / "device.json"
         policy_url = f"{self.backend_url}/api/shield/policies/{tenant_id}/{self.device_id}"
         config_data = {
@@ -326,6 +337,9 @@ class DevicePairingFlow:
             "sensitive_paths": [],
             "trusted_policy_hashes": [],
         }
+        keys = gate_zone.get("entitlement_keys") if isinstance(gate_zone, dict) else None
+        if isinstance(keys, list) and keys and all(isinstance(key, str) and key for key in keys):
+            config_data["gate_zone"] = {"entitlement_keys": list(keys)}
         device_config_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
         device_config_path.chmod(0o600)
 
