@@ -1096,6 +1096,46 @@ def _install(args: argparse.Namespace) -> int:
         return 1
 
 
+def _usage_report(args: argparse.Namespace) -> int:
+    """Report gated-decision usage from the gate's receipts (plans & metering design §3).
+
+    A separate process from `gate-daemon` on purpose: reporting is never in the decision path.
+    """
+    from integrity_sdk.did import public_key_multibase
+
+    from .gate_receipts import ReceiptSetupError, load_signer
+    from .gate_usage import UsageReportError, UsageUploader, build_reports, load_cursor, run
+
+    key_path = args.receipt_key or os.environ.get("SHIELD_DEVICE_KEY_PATH")
+    if not key_path:
+        print("shield usage-report: needs the receipt signing key (--receipt-key or SHIELD_DEVICE_KEY_PATH) "
+              "to verify the log before reporting it", file=sys.stderr)
+        return 2
+    try:
+        signer = public_key_multibase(load_signer(key_path).public_bytes())
+    except ReceiptSetupError as exc:
+        print(f"shield usage-report: {exc}", file=sys.stderr)
+        return 1
+    try:
+        if args.dry_run:
+            reports = build_reports(args.receipt_dir, load_cursor(args.receipt_dir), trusted_signers=[signer])
+            print(json.dumps([{"log_id": r.log_id, "seq_from": r.seq_from, "seq_to": r.seq_to,
+                               "counts": r.counts} for r in reports], indent=2, sort_keys=True))
+            return 0
+        if args.device_config is None:
+            print("shield usage-report: --device-config is required unless --dry-run", file=sys.stderr)
+            return 2
+        device_config = load_device_config(args.device_config)
+        if not device_config.backend_url:
+            print("shield usage-report: the device config has no backend_url", file=sys.stderr)
+            return 2
+        uploader = UsageUploader.from_device_config(device_config)
+        return run(args.receipt_dir, uploader, trusted_signers=[signer], once=args.once, interval=args.interval)
+    except (UsageReportError, ConfigError) as exc:
+        print(f"shield usage-report: {exc}", file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shield")
     parser.add_argument(
@@ -1353,6 +1393,25 @@ def main(argv: list[str] | None = None) -> int:
                         help="always (default): a missing status file is silence; when-seen: excuse a "
                              "file that has never existed since this daemon started")
     p_gate.set_defaults(func=_gate_daemon)
+
+    p_usage = sub.add_parser(
+        "usage-report",
+        help="report gated-decision usage from the gate's signed receipts to the backend",
+    )
+    p_usage.add_argument("--receipt-dir", type=Path, required=True,
+                         help="the gate-daemon's --receipt-dir (receipts.jsonl + checkpoints.jsonl)")
+    p_usage.add_argument("--receipt-key", type=Path, default=None,
+                         help="the gate's Ed25519 receipt-signing PEM, used only to verify the log; "
+                              "default SHIELD_DEVICE_KEY_PATH")
+    p_usage.add_argument("--device-config", type=Path, default=None,
+                         help="device config with backend_url and credentials (not needed with --dry-run)")
+    p_usage.add_argument("--dry-run", action="store_true",
+                         help="print the pending reports and exit; no network, cursor unchanged")
+    p_usage.add_argument("--once", action="store_true",
+                         help="one pass, then exit (0 sent, 3 retry pending, 1 refused or bad log)")
+    p_usage.add_argument("--interval", type=float, default=300.0,
+                         help="seconds between passes when not --once (default 300)")
+    p_usage.set_defaults(func=_usage_report)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")
     p_local.add_argument("--profile", choices=("smb", "professional-services", "regulated"), required=True)

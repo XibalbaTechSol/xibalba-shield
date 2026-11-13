@@ -17,7 +17,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XibalbaTechSol/integrity-core
-          # integrity-core main after #208 merged (2026-11-12). Bumped for integrity-core#208, which adds
+          # integrity-core main after #212 merged (2026-11-13). Bumped for integrity-core#212, which adds
+          # integrity_sdk.billing (classify_for_billing, used by shield/gate_usage.py's usage reports).
+          # Earlier: #208 (2026-11-12), which adds
           # integrity_sdk.core.ais_local (the local receipt scorer shield/gate_zone.py's `ais` provider wraps).
           # Earlier: #171 (2026-10-11), which adds
           # integrity-sdk/tests/conformance/decision_vectors.json (the shared decision vectors that
@@ -29,7 +31,7 @@ jobs:
           # Landing the two out of order is what broke main's CI on 2026-10-05 in both
           # this repo and its sibling; see the A0 precondition in integrity-core's
           # docs/EXECUTION_PLAN.md.
-          ref: c2b46ac712bea2f255a079547c9bc15e5add5d1d
+          ref: bb8cc5a1e576007f7161dbbb594297dc9e6b9d43
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -72,7 +74,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XibalbaTechSol/integrity-core
-          ref: c2b46ac712bea2f255a079547c9bc15e5add5d1d
+          ref: bb8cc5a1e576007f7161dbbb594297dc9e6b9d43
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -110,7 +112,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XibalbaTechSol/integrity-core
-          ref: c2b46ac712bea2f255a079547c9bc15e5add5d1d
+          ref: bb8cc5a1e576007f7161dbbb594297dc9e6b9d43
           path: integrity-core
           persist-credentials: false
       - uses: actions/setup-python@v5
