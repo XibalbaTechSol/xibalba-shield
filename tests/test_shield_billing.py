@@ -45,8 +45,16 @@ def _device_price(**overrides):
 
 def _overage_price(**overrides):
     return {"id": PRICE_OVERAGE, "active": True, "currency": "usd", "billing_scheme": "per_unit", "unit_amount": 40,
+            "transform_quantity": {"divide_by": 1000, "round": "down"},
             "recurring": {"usage_type": "metered", "meter": METER, "interval": "month", "interval_count": 1},
             **overrides}
+
+
+def _meter(**overrides):
+    return {"id": METER, "status": "active", "event_name": "shield_decisions",
+            "default_aggregation": {"formula": "sum"}, "customer_mapping": {"event_payload_key": "stripe_customer_id",
+                                                                            "type": "by_id"},
+            "value_settings": {"event_payload_key": "value"}, **overrides}
 
 
 class FakeStripe:
@@ -55,8 +63,11 @@ class FakeStripe:
     def __init__(self):
         self.calls: list[tuple[str, str, dict, dict]] = []
         self.prices = {PRICE_DEVICE: _device_price(), PRICE_OVERAGE: _overage_price()}
+        self.meter = _meter()
         self.sessions: dict[str, dict] = {}
         self.subscriptions: dict[str, dict] = {}
+        self.invoices: dict[str, dict] = {}
+        self.meter_events: dict[str, dict] = {}  # by identifier: Stripe keeps the first
         self.fail = False
 
     def send(self, method, url, **kwargs):
@@ -80,8 +91,28 @@ class FakeStripe:
         if path.startswith("/subscriptions/"):
             return self.subscriptions[path.split("/")[-1]]
         if path.startswith("/subscription_items/"):
-            return {"id": path.split("/")[-1], "quantity": int(data["quantity"])}
+            item_id = path.split("/")[-1]
+            for sub in self.subscriptions.values():
+                for item in sub["items"]["data"]:
+                    if item["id"] == item_id:
+                        item["quantity"] = int(data["quantity"])
+            return {"id": item_id, "quantity": int(data["quantity"])}
+        if path == f"/billing/meters/{METER}":
+            return self.meter
+        if path.startswith("/invoices/"):
+            return self.invoices[path.split("/")[-1]]
+        if path == "/billing/meter_events":
+            self.meter_events.setdefault(data["identifier"], data)
+            return {"object": "billing.meter_event", **data}
         raise AssertionError(f"unexpected Stripe call {method} {path}")
+
+    def invoice(self, invoice_id="in_1", *, start, end, status="draft", reason="subscription_cycle", sub_id="sub_1",
+                customer="cus_shield1"):
+        self.invoices[invoice_id] = {
+            "id": invoice_id, "customer": customer, "status": status, "billing_reason": reason,
+            "period_start": start, "period_end": end,
+            "parent": {"type": "subscription_details", "subscription_details": {"subscription": sub_id}},
+        }
 
     def subscription(self, sub_id="sub_1", *, status="trialing", customer="cus_shield1", quantity=1,
                      device=None, overage=None, trial_end=PERIOD_END - 86400):
@@ -161,6 +192,12 @@ def _event(event_id, kind="customer.subscription.updated", sub_id="sub_1", custo
     obj = {"id": "cs_test_1", "subscription": sub_id, "customer": customer} if kind == "checkout.session.completed" \
         else {"id": sub_id, "customer": customer}
     return {"id": event_id, "type": kind, "livemode": False, "data": {"object": obj}}
+
+
+def _invoice_event(event_id, invoice_id="in_1", customer="cus_shield1"):
+    # The body is deliberately thin: the handler must re-read the invoice rather than trust it.
+    return {"id": event_id, "type": "invoice.created", "livemode": False,
+            "data": {"object": {"id": invoice_id, "customer": customer}}}
 
 
 def _webhook(b, event, **sign):
@@ -496,6 +533,20 @@ def test_an_oversized_or_empty_webhook_body_is_refused_before_verification(backe
 
 # -- portal and seats --------------------------------------------------------------------------
 
+def test_the_portal_opens_the_configured_portal_configuration(backend, monkeypatch):
+    _enroll(backend, "dev-1")
+    _subscribe(backend, status="active")
+    _call(f"{backend.url}/api/shield/billing/portal", body={"tenant_id": TENANT})
+    assert "configuration" not in backend.stripe.of("/billing_portal/sessions")[-1][2]
+    monkeypatch.setenv("SHIELD_STRIPE_PORTAL_CONFIGURATION", "bpc_shield_at_period_end")
+    status, _ = _call(f"{backend.url}/api/shield/billing/portal", body={"tenant_id": TENANT})
+    assert status == 200
+    assert backend.stripe.of("/billing_portal/sessions")[-1][2]["configuration"] == "bpc_shield_at_period_end"
+    monkeypatch.setenv("SHIELD_STRIPE_PORTAL_CONFIGURATION", "not-a-config")
+    _call(f"{backend.url}/api/shield/billing/portal", body={"tenant_id": TENANT})
+    assert "configuration" not in backend.stripe.of("/billing_portal/sessions")[-1][2]
+
+
 def test_the_portal_needs_a_billing_account(backend):
     assert _call(f"{backend.url}/api/shield/billing/portal", body={"tenant_id": TENANT})[0] == 409
     _enroll(backend, "dev-1")
@@ -535,7 +586,7 @@ def test_a_failed_seat_sync_retries_with_the_same_key(backend):
     backend.stripe.fail = False
     status, body = _call(f"{backend.url}/api/shield/billing/sync", body={"tenant_id": TENANT})
     assert status == 200 and body["quantity"] == 2
-    rows = backend.store.billing._conn.execute("SELECT id, acknowledged_at FROM seat_syncs").fetchall()
+    rows = backend.store.billing._conn.execute("SELECT id, acknowledged_at FROM seat_syncs WHERE quantity=2").fetchall()
     assert len(rows) == 1 and rows[0]["acknowledged_at"]
     assert backend.stripe.of("/subscription_items/si_device")[-1][3]["Idempotency-Key"] == \
         f"shield-seats:{TENANT}:{rows[0]['id']}"
@@ -548,3 +599,243 @@ def test_without_a_subscription_seat_sync_is_a_no_op(tmp_path, stripe):
         assert stripe.calls == []
     finally:
         store.close()
+
+
+# -- period close: overage meter submission (phase 3d) -------------------------------------------
+
+START = int(time.time()) - 30 * 86400
+END = int(time.time()) - 3600
+INCLUDED = 25_000  # SHIELD_PLAN_PRO_INCLUDED_DECISIONS_PER_DEVICE
+
+
+def _iso(epoch):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
+
+
+def _usage(b, device_id, billable, at):
+    """A stored usage report (the 3a ledger's own validation is covered by its tests)."""
+    with b.store.billing._conn:
+        b.store.billing._conn.execute(
+            "INSERT INTO usage_reports (tenant_id, log_id, seq_from, seq_to, device_id, billable, excluded_mask, "
+            "excluded_fault, checkpoint_root, received_at) VALUES (?,?,?,?,?,?,0,0,'root',?)",
+            (TENANT, f"log-{device_id}-{at}", 0, billable - 1, device_id, billable, _iso(at)))
+
+
+def _seat_history(b, *rows):
+    with b.store.billing._conn:
+        for quantity, at in rows:
+            b.store.billing._conn.execute(
+                "INSERT INTO seat_syncs (tenant_id, subscription_id, quantity, requested_at, acknowledged_at) "
+                "VALUES (?, 'sub_1', ?, ?, ?)", (TENANT, quantity, _iso(at), _iso(at)))
+
+
+def _paid(b, devices=1):
+    for n in range(devices):
+        _enroll(b, f"dev-{n + 1}")
+    _subscribe(b, status="active")
+    b.stripe.subscription(status="active", quantity=devices, trial_end=START - 86400)
+    b.stripe.invoice(start=START, end=END)
+
+
+def _submission(b):
+    row = b.store.billing._conn.execute("SELECT * FROM meter_submissions").fetchone()
+    return dict(row) if row else None
+
+
+def test_overage_beyond_the_allowance_is_sent_once_when_the_period_closes(backend):
+    _paid(backend)
+    _usage(backend, "dev-1", INCLUDED + 7_500, START + 86400)
+    status, body = _webhook(backend, _invoice_event("evt_inv1"))
+    assert status == 200 and body == {"received": True, "closed": True, "value": 7_500}
+    [(method, _path, data, headers)] = backend.stripe.of("/billing/meter_events")
+    assert data == {"event_name": "shield_decisions", "payload[stripe_customer_id]": "cus_shield1",
+                    "payload[value]": "7500", "identifier": f"shield-ovg:{TENANT}:{START}",
+                    "timestamp": str(START + (END - START) // 2)}
+    assert headers["Idempotency-Key"] == f"shield-ovg:{TENANT}:{START}"
+    row = _submission(backend)
+    assert (row["seats"], row["billable"], row["included"], row["value"]) == (1, INCLUDED + 7_500, INCLUDED, 7_500)
+    assert row["period_start"] == _iso(START) and row["period_end"] == _iso(END) and row["acknowledged_at"]
+
+
+def test_usage_within_the_allowance_closes_the_period_without_a_meter_event(backend):
+    _paid(backend, devices=2)
+    _usage(backend, "dev-1", INCLUDED + 10_000, START + 86400)  # over one device's share, under two
+    status, body = _webhook(backend, _invoice_event("evt_inv1"))
+    assert status == 200 and body["value"] == 0
+    assert backend.stripe.of("/billing/meter_events") == [] and _submission(backend)["acknowledged_at"]
+
+
+def test_only_non_synthetic_usage_received_inside_the_period_counts(backend):
+    _paid(backend, devices=2)
+    backend.store.mark_device_synthetic(tenant_id=TENANT, device_id="dev-2")
+    _usage(backend, "dev-1", 2 * INCLUDED + 100, START)          # first second of the period: counts
+    _usage(backend, "dev-1", 9_000, START - 1)                    # previous period
+    _usage(backend, "dev-1", 9_000, END)                          # next period (end is exclusive)
+    _usage(backend, "dev-2", 9_000, START + 60)                   # synthetic device
+    backend.stripe.subscription(status="active", quantity=2, trial_end=START - 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 100
+
+
+def test_the_allowance_uses_the_most_seats_billed_during_the_period(backend):
+    _paid(backend)
+    _seat_history(backend, (1, START - 86400), (3, START + 86400), (2, START + 2 * 86400), (9, END + 60))
+    _usage(backend, "dev-1", 3 * INCLUDED + 1, START + 3 * 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 1
+    assert _submission(backend)["seats"] == 3
+
+
+def test_the_seat_count_in_force_when_the_period_began_counts(backend):
+    _paid(backend)
+    _seat_history(backend, (2, START - 86400), (4, START - 3600))
+    _usage(backend, "dev-1", 4 * INCLUDED + 5, START + 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 5
+
+
+def test_removing_a_device_mid_period_does_not_shrink_the_allowance(backend):
+    _paid(backend)
+    _seat_history(backend, (4, START - 86400), (2, START + 86400))
+    _usage(backend, "dev-1", 4 * INCLUDED + 9, START + 2 * 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 9
+    assert _submission(backend)["seats"] == 4
+
+
+def test_a_cycle_invoice_whose_subscription_belongs_to_another_customer_is_refused(backend):
+    _paid(backend)
+    backend.stripe.subscription(status="active", customer="cus_other", trial_end=START - 86400)
+    _usage(backend, "dev-1", INCLUDED * 2, START + 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[0] == 400
+    assert _submission(backend) is None and backend.stripe.of("/billing/meter_events") == []
+
+
+def test_seat_changes_stripe_reports_become_seat_history_once(backend):
+    _enroll(backend, "dev-1")
+    _subscribe(backend, status="active")                        # checkout's quantity: 1
+    _enroll(backend, "dev-2")                                   # seat sync: 2
+    _webhook(backend, _event("evt_2"))                          # Stripe now shows 2: nothing new
+    backend.stripe.subscription(status="active", quantity=3)   # changed outside Shield (portal)
+    _webhook(backend, _event("evt_3"))                          # recorded, then synced back to 2 devices
+    _webhook(backend, _event("evt_4"))
+    rows = backend.store.billing._conn.execute(
+        "SELECT quantity FROM seat_syncs WHERE acknowledged_at IS NOT NULL ORDER BY id").fetchall()
+    assert [r["quantity"] for r in rows] == [1, 2, 3, 2]
+
+
+def test_a_trial_period_bills_no_overage(backend):
+    _paid(backend)
+    backend.stripe.subscription(status="active", trial_end=END)
+    _usage(backend, "dev-1", INCLUDED * 10, START + 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 0
+    assert backend.stripe.of("/billing/meter_events") == []
+
+
+def test_the_final_invoice_of_a_canceled_subscription_still_bills_its_overage(backend):
+    """Cancellation at period end deletes the subscription as its last cycle invoice is created."""
+    _paid(backend)
+    backend.stripe.subscription(status="canceled", trial_end=None)
+    assert _webhook(backend, _event("evt_del", "customer.subscription.deleted"))[1]["plan_id"] == "free"
+    _usage(backend, "dev-1", INCLUDED + 42, START + 86400)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 42
+
+
+@pytest.mark.parametrize("reason", ["subscription_create", "subscription_update", "subscription_threshold", "manual"])
+def test_only_a_subscription_cycle_invoice_closes_a_period(backend, reason):
+    _paid(backend)
+    backend.stripe.invoice(start=START, end=END, reason=reason)
+    _usage(backend, "dev-1", INCLUDED * 2, START + 86400)
+    status, body = _webhook(backend, _invoice_event("evt_inv1"))
+    assert status == 200 and body["ignored"] is True
+    assert backend.stripe.of("/billing/meter_events") == [] and _submission(backend) is None
+
+
+def test_an_invoice_already_finalized_is_not_sent_usage_it_cannot_take(backend):
+    _paid(backend)
+    backend.stripe.invoice(start=START, end=END, status="open")
+    _usage(backend, "dev-1", INCLUDED * 2, START + 86400)
+    status, body = _webhook(backend, _invoice_event("evt_inv1"))
+    assert status == 200 and body["ignored"] is True
+    assert backend.stripe.of("/billing/meter_events") == []
+
+
+def test_an_invoice_for_another_customer_is_refused(backend):
+    _paid(backend)
+    backend.stripe.invoice(start=START, end=END, customer="cus_other")
+    status, _ = _webhook(backend, _invoice_event("evt_inv1"))
+    assert status == 400 and _submission(backend) is None
+    assert backend.store.billing._conn.execute("SELECT 1 FROM stripe_events WHERE id='evt_inv1'").fetchone() is None
+
+
+def test_a_second_event_for_a_closed_period_sends_nothing_more(backend):
+    _paid(backend)
+    _usage(backend, "dev-1", INCLUDED + 7_500, START + 86400)
+    _webhook(backend, _invoice_event("evt_inv1"))
+    before = len(backend.stripe.calls)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["duplicate"] is True
+    assert len(backend.stripe.calls) == before
+    status, body = _webhook(backend, _invoice_event("evt_inv2"))
+    assert status == 200 and body["replay"] is True and len(backend.stripe.of("/billing/meter_events")) == 1
+
+
+def test_a_failed_send_is_retried_with_the_same_identifier_and_the_same_value(backend):
+    _paid(backend)
+    _usage(backend, "dev-1", INCLUDED + 7_500, START + 86400)
+    real_send = backend.stripe.send
+
+    def meter_down(method, url, **kwargs):
+        if url.endswith("/billing/meter_events"):
+            raise stripe_gateway.BillingUnavailable("Stripe is temporarily unavailable; retry shortly")
+        return real_send(method, url, **kwargs)
+    stripe_gateway._send = meter_down
+    try:
+        assert _webhook(backend, _invoice_event("evt_inv1"))[0] == 503
+    finally:
+        stripe_gateway._send = real_send
+    row = _submission(backend)
+    assert row["sent_at"] and not row["acknowledged_at"]
+    assert backend.store.billing._conn.execute("SELECT 1 FROM stripe_events WHERE id='evt_inv1'").fetchone() is None
+    _usage(backend, "dev-1", 5_000, START + 2 * 86400)  # arrives late: must not change what was sent
+    assert _webhook(backend, _invoice_event("evt_inv1"))[1]["value"] == 7_500
+    [(_m, _p, data, _h)] = backend.stripe.of("/billing/meter_events")
+    assert data["payload[value]"] == "7500" and _submission(backend)["acknowledged_at"]
+
+
+def test_a_send_stripe_no_longer_dedupes_waits_for_reconciliation(backend):
+    _paid(backend)
+    _usage(backend, "dev-1", INCLUDED + 7_500, START + 86400)
+    stripe_gateway._send, real_send = (lambda *a, **k: (_ for _ in ()).throw(
+        stripe_gateway.BillingUnavailable("down"))), backend.stripe.send
+    try:
+        _webhook(backend, _invoice_event("evt_inv1"))
+    finally:
+        stripe_gateway._send = real_send
+    assert _submission(backend) is None  # Stripe was down before the subscription re-read
+    _webhook(backend, _invoice_event("evt_inv1"))
+    with backend.store.billing._conn:
+        backend.store.billing._conn.execute("UPDATE meter_submissions SET sent_at=?, acknowledged_at=NULL",
+                                            (_iso(int(time.time()) - 24 * 3600),))
+        backend.store.billing._conn.execute("DELETE FROM stripe_events WHERE id='evt_inv1'")
+    status, body = _webhook(backend, _invoice_event("evt_inv1"))
+    assert status == 503 and "reconciliation" in body["error"]
+    assert len(backend.stripe.of("/billing/meter_events")) == 1
+
+
+def test_a_close_that_cannot_be_made_durable_asks_stripe_to_redeliver(backend):
+    _paid(backend)
+    _usage(backend, "dev-1", INCLUDED + 7_500, START + 86400)
+    backend.store.billing._durable = lambda: False
+    assert _webhook(backend, _invoice_event("evt_inv1"))[0] == 503
+    backend.store.billing._durable = lambda: True
+    assert _webhook(backend, _invoice_event("evt_inv1"))[0] == 200
+    assert len(backend.stripe.meter_events) == 1
+
+
+def test_a_meter_that_does_not_sum_the_shield_payload_refuses_checkout(backend):
+    backend.stripe.meter = _meter(default_aggregation={"formula": "count"})
+    _enroll(backend, "dev-1")
+    status, body = _checkout(backend)
+    assert status == 503 and "meter does not match" in body["error"]
+
+
+def test_an_overage_price_without_the_per_1k_transform_refuses_checkout(backend):
+    backend.stripe.prices[PRICE_OVERAGE] = _overage_price(transform_quantity=None)
+    _enroll(backend, "dev-1")
+    assert _checkout(backend)[0] == 503

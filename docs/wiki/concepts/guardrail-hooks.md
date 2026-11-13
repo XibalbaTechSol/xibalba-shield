@@ -29,6 +29,7 @@ source_files:
 - [The out-of-process gate: shield gate-daemon](#the-out-of-process-gate-shield-gate-daemon)
   - [Signed, chained receipts (--receipt-dir)](#signed-chained-receipts-receipt-dir)
   - [The zone mask (--zone-mode)](#the-zone-mask-zone-mode)
+  - [Usage reports and the backend ledger (shield usage-report)](#usage-reports-and-the-backend-ledger-shield-usage-report)
 - [Related pages](#related-pages)
 
 ## Overview
