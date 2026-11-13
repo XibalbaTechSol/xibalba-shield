@@ -1106,16 +1106,19 @@ def _usage_report(args: argparse.Namespace) -> int:
     from .gate_receipts import ReceiptSetupError, load_signer
     from .gate_usage import UsageReportError, UsageUploader, build_reports, load_cursor, run
 
-    key_path = args.receipt_key or os.environ.get("SHIELD_DEVICE_KEY_PATH")
-    if not key_path:
-        print("shield usage-report: needs the receipt signing key (--receipt-key or SHIELD_DEVICE_KEY_PATH) "
-              "to verify the log before reporting it", file=sys.stderr)
-        return 2
-    try:
-        signer = public_key_multibase(load_signer(key_path).public_bytes())
-    except ReceiptSetupError as exc:
-        print(f"shield usage-report: {exc}", file=sys.stderr)
-        return 1
+    # Verifying needs only the public key. Prefer it: the reporter then never reads the private key.
+    signer = args.receipt_signer
+    if not signer:
+        key_path = args.receipt_key or os.environ.get("SHIELD_DEVICE_KEY_PATH")
+        if not key_path:
+            print("shield usage-report: needs the gate's receipt signer to verify the log before reporting it "
+                  "(--receipt-signer, or --receipt-key / SHIELD_DEVICE_KEY_PATH)", file=sys.stderr)
+            return 2
+        try:
+            signer = public_key_multibase(load_signer(key_path).public_bytes())
+        except ReceiptSetupError as exc:
+            print(f"shield usage-report: {exc}", file=sys.stderr)
+            return 1
     try:
         if args.dry_run:
             reports = build_reports(args.receipt_dir, load_cursor(args.receipt_dir), trusted_signers=[signer])
@@ -1400,6 +1403,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_usage.add_argument("--receipt-dir", type=Path, required=True,
                          help="the gate-daemon's --receipt-dir (receipts.jsonl + checkpoints.jsonl)")
+    p_usage.add_argument("--receipt-signer", default=None,
+                         help="the gate's receipt signer public key (multibase, as in each receipt's "
+                              "signer_key); preferred over --receipt-key, which reads the private PEM")
     p_usage.add_argument("--receipt-key", type=Path, default=None,
                          help="the gate's Ed25519 receipt-signing PEM, used only to verify the log; "
                               "default SHIELD_DEVICE_KEY_PATH")
