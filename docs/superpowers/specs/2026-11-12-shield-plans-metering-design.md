@@ -1,7 +1,7 @@
 # Shield plans and metering — design
 
 - **Date:** 2026-11-12
-- **Status:** proposed (design only; no code, no Stripe objects created)
+- **Status:** accepted by the operator 2026-11-13 (prices and allowances in §9 still to be set). Phase 1 = integrity-core #212
 - **Scope:** xibalba-shield (backend + gate), integrity-sdk (shared billing core). Cortex `managed/` is **not** changed by this design.
 - **Review provenance:** advisor review plus self-review. The Devil's Advocate engine is not entitled on this account (`ENGINE_NOT_IN_PLAN`), so no DA run was possible.
 
