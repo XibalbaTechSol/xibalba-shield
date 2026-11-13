@@ -19,6 +19,7 @@ from typing import Any
 
 from ..config.loader import ConfigError, PolicyBundle, load_policy_bundle
 from .response_store import ResponseLedgerStore
+from .usage_ledger import UsageLedgerStore
 
 
 def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
@@ -123,6 +124,8 @@ class ShieldStore:
         self.init_schema()
         self.response = ResponseLedgerStore(self._conn)
         self.response.init_schema()
+        self.usage = UsageLedgerStore(self._conn, enrolled_agent_id=self.enrolled_agent_id)
+        self.usage.init_schema()
 
     def close(self) -> None:
         self._conn.close()
