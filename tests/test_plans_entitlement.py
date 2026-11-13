@@ -303,7 +303,7 @@ def test_an_invalid_key_configuration_issues_nothing(env):
 
 def test_the_key_loads_from_a_file_from_one_line_pem_and_keeps_previous_keys(tmp_path):
     path = tmp_path / "entitlement.pem"
-    path.write_text(BACKEND_PEM)
+    path.write_bytes(BACKEND_PEM.encode("ascii"))
     assert load_issuer_config({"SHIELD_ENTITLEMENT_SIGNING_KEY_FILE": str(path)})[0].public_key == BACKEND_KEY
     one_line = BACKEND_PEM.replace("\n", "\\n")
     old = base64.b64encode(Keypair.generate().public_bytes()).decode()
