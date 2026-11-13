@@ -6,6 +6,8 @@ Every loop test here runs the real path: `evaluate_pre_tool_use` -> SDK `GateRec
 
 from __future__ import annotations
 
+import base64
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -19,6 +21,7 @@ from shield.cli import _gate_zone_mask
 from shield.config import DeviceConfig
 from shield.gate_daemon import GateRequest, evaluate_pre_tool_use
 from shield.gate_receipts import RECEIPTS_FILENAME, GateReceiptWriter
+from shield.entitlement import sign_entitlement
 from shield.gate_zone import (
     REASON_ZONE_RESTRICTED,
     SOURCE_AIS_COLD_START,
@@ -58,10 +61,18 @@ class Gate:
         self.dir = tmp_path / "receipts"
         self.writer = GateReceiptWriter(self.dir, signer=signer, hmac_key=hmac_key, log_id="shield-gate:dev-1")
         ais = {"default_tier": 3, "window_size": 50, "min_observations": 10, **ais}
+        # enforce needs a valid signed entitlement (design §6); this gate's plan includes it.
+        backend = Keypair.generate()
+        entitlement = tmp_path / "entitlement.json"
+        now = datetime.now(timezone.utc)
+        entitlement.write_text(json.dumps(sign_entitlement(
+            tenant_id="t", device_id="dev-1", plan="pro", zone_enforce=True,
+            issued_at=now - timedelta(minutes=1), not_after=now + timedelta(days=30), keypair=backend)))
         self.mask = build_zone_mask(GateZoneSettings(
             mode=mode, provider="ais", receipts_file=str(self.dir / RECEIPTS_FILENAME), ais=ais,
-            tool_classes={"AskHuman": "escalate"},
-        ))
+            tool_classes={"AskHuman": "escalate"}, entitlement_file=str(entitlement),
+            entitlement_keys=[base64.b64encode(backend.public_bytes()).decode("ascii")],
+        ), tenant_id="t", device_id="dev-1")
 
     def ask(self, tool: str, pack: str = "allow") -> dict:
         return evaluate_pre_tool_use(

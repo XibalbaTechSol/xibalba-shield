@@ -326,8 +326,8 @@ def test_shadow_records_the_would_be_restriction_but_allows(caplog):
     assert response["decision"] == "allow" and response["action"] == "allow"
     assert (response["reason"], response["rule_id"]) == ("because", "rule-1")
     assert response["zone_mask"] == {
-        "mode": "shadow", "zone": "red", "action_class": "execute", "restricted": True, "applied": False,
-        "source": "provider", "sensor": None,
+        "mode": "shadow", "requested_mode": "shadow", "entitlement": None, "zone": "red",
+        "action_class": "execute", "restricted": True, "applied": False, "source": "provider", "sensor": None,
     }
     assert any("would restrict" in record.getMessage() for record in caplog.records)
 
