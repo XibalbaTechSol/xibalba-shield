@@ -58,6 +58,7 @@ from ..edr import (
 )
 from ..edr.simulated import SimulatedProvider
 from ..edr.connectors.crowdstrike import CrowdStrikeConnector
+from .entitlement_issuer import handle_entitlement_request
 
 try:
     from integrity_sdk.did import fingerprint_for_pubkey, verify_signature
@@ -1216,6 +1217,9 @@ def make_handler(
                     return
                 record = store.get_tenant_settings_record(tenant_id=tenant_id)
                 self._send_json({**record, "device_id": device_id})
+                return
+            if parsed.path == "/api/shield/entitlement":
+                handle_entitlement_request(self, store, query)
                 return
             if parsed.path == "/api/shield/detection-quality":
                 tenant_id = self._tenant_from_query_or_error(query)
