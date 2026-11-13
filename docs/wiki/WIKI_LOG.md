@@ -463,3 +463,15 @@
   body or an overlapping range is a 409. Gaps are worked out when read.
 - `GET /api/shield/usage` (admin) returns the month's totals per device, plus every log's gaps.
 - Updated `concepts/guardrail-hooks.md`.
+
+## [2026-11-13] code | Plans catalog, tenant plans, entitlement issuing and fetch
+
+- New `shield/backend/plans.py` (`ShieldPlan` and an env-loaded catalog that fails closed) and
+  `shield/backend/plans_store.py` (the `tenant_plans` table, where no row means free).
+- New `shield/backend/entitlement_issuer.py`, which serves `GET /api/shield/entitlement` and signs with
+  `SHIELD_ENTITLEMENT_SIGNING_KEY` through the existing `sign_entitlement`. With no key, nothing is
+  issued. Enrollment pins the key as `gate_zone.entitlement_keys`.
+- New `shield/entitlement_sync.py` and `shield entitlement-fetch`. The fetcher writes atomically, only
+  verified documents replace the file, and the gate never imports the fetcher.
+- Updated `concepts/guardrail-hooks.md`. Setting the new env vars on Render is an operator action.
+

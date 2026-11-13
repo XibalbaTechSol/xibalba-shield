@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from ..config.loader import ConfigError, PolicyBundle, load_policy_bundle
+from .entitlement_issuer import enrollment_gate_zone
+from .plans_store import PlanStore
 from .response_store import ResponseLedgerStore
 from .usage_ledger import UsageLedgerStore
 
@@ -122,6 +124,8 @@ class ShieldStore:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
         self.init_schema()
+        self.plans = PlanStore(self._conn)
+        self.plans.init_schema()
         self.response = ResponseLedgerStore(self._conn)
         self.response.init_schema()
         self.usage = UsageLedgerStore(self._conn, enrolled_agent_id=self.enrolled_agent_id)
@@ -666,6 +670,8 @@ class ShieldStore:
                 "feature_flags": {},
                 "sensitive_paths": [],
                 "trusted_policy_hashes": [],
+                # Pins the entitlement signer keys when issuing is configured (plans design §6).
+                **({"gate_zone": gate_zone} if (gate_zone := enrollment_gate_zone()) else {}),
             },
         )
 
@@ -1423,6 +1429,8 @@ class ShieldStore:
                 "device_type": data["device_type"],
                 "agent_did": data["agent_did"],
                 "device_token": data["issued_device_token"],
+                # The paired device builds its own config; this is how it pins the entitlement keys.
+                **({"gate_zone": gate_zone} if (gate_zone := enrollment_gate_zone()) else {}),
             }
         return {"status": data["status"]}
 

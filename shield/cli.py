@@ -1143,6 +1143,37 @@ def _usage_report(args: argparse.Namespace) -> int:
         return 1
 
 
+def _entitlement_fetch(args: argparse.Namespace) -> int:
+    """Fetch this device's signed entitlement and write it where the gate reads it (design §6).
+
+    A separate process from `gate-daemon`: billing is never in the decision path. A failed fetch
+    leaves the existing file untouched.
+    """
+    from .entitlement_sync import fetch_for_device_config, run
+
+    try:
+        device_config = load_device_config(args.device_config)
+    except ConfigError as exc:
+        print(f"shield entitlement-fetch: {exc}", file=sys.stderr)
+        return 1
+    if not device_config.backend_url:
+        print("shield entitlement-fetch: the device config has no backend_url", file=sys.stderr)
+        return 2
+    path = args.entitlement_file or device_config.gate_zone.get("entitlement_file")
+    if not path:
+        print("shield entitlement-fetch: --entitlement-file is required unless the device config sets "
+              "gate_zone.entitlement_file", file=sys.stderr)
+        return 2
+    extra_keys = args.entitlement_keys or []
+
+    def fetch():
+        outcome = fetch_for_device_config(device_config, path=path, extra_keys=extra_keys)
+        print(f"shield entitlement-fetch: {outcome.outcome}: {outcome.detail}", file=sys.stderr)
+        return outcome
+
+    return run(fetch, once=args.once, interval=args.interval)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shield")
     parser.add_argument(
@@ -1428,6 +1459,23 @@ def main(argv: list[str] | None = None) -> int:
     p_usage.add_argument("--interval", type=float, default=300.0,
                          help="seconds between passes when not --once (default 300)")
     p_usage.set_defaults(func=_usage_report)
+
+    p_ent = sub.add_parser(
+        "entitlement-fetch",
+        help="fetch this device's signed plan entitlement from the backend and write it for the gate",
+    )
+    p_ent.add_argument("--device-config", type=Path, required=True,
+                       help="device config with backend_url, credentials and gate_zone.entitlement_keys")
+    p_ent.add_argument("--entitlement-file", type=Path, default=None,
+                       help="where to write it (the gate's --zone-entitlement-file); default "
+                            "gate_zone.entitlement_file from the device config")
+    p_ent.add_argument("--entitlement-key", action="append", default=None, dest="entitlement_keys",
+                       metavar="BASE64_PUBKEY", help="an extra trusted entitlement signer key; repeatable")
+    p_ent.add_argument("--once", action="store_true",
+                       help="one fetch, then exit (0 written, 3 retry later, 1 refused)")
+    p_ent.add_argument("--interval", type=float, default=3600.0,
+                       help="seconds between fetches when not --once (default 3600)")
+    p_ent.set_defaults(func=_entitlement_fetch)
 
     p_local = sub.add_parser("local-run", help="local smoke loop with a supervised, selected OPA profile")
     p_local.add_argument("--profile", choices=("smb", "professional-services", "regulated"), required=True)

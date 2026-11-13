@@ -32,3 +32,7 @@ services:
         sync: false
       - key: XIBALBA_CORTEX_URL
         sync: false
+      # Device entitlement signer (Ed25519 PKCS#8 PEM). Unset: no entitlement is issued and every
+      # gate stays in shadow. Operator-set in the dashboard; never generateValue (it must be a key).
+      - key: SHIELD_ENTITLEMENT_SIGNING_KEY
+        sync: false
