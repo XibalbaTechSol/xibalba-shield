@@ -206,11 +206,24 @@ hosted oracle in the request path.
   it would have restricted (`zone_mask.restricted` in the response, an INFO log line, and the control
   `ais_zone_mask:shadow_restricted` on the receipt). `enforce` denies with reason code
   `AIS_ZONE_RESTRICTED`. `--enforcement-mode observe` still never blocks.
-- **Where the zone comes from.** A zone provider is a callable `agent_id -> zone`. The shipped one
-  is static (`--zone`, `--zone-agent AGENT=ZONE`). A scorer attaches with
-  `register_zone_provider(name, factory)` or `--zone-provider package.module:factory`. A provider
-  that raises or answers with something that is not a zone is `unknown` (yellow by default,
-  `--zone-unknown-as`), never green.
+- **Where the zone comes from.** A zone provider is a callable `agent_id -> zone`. Two ship:
+  `static` (the default: `--zone`, `--zone-agent AGENT=ZONE`) and `ais` (below). Another scorer
+  attaches with `register_zone_provider(name, factory)` or `--zone-provider package.module:factory`.
+  A provider that raises or answers with something that is not a zone is `unknown` (yellow by
+  default, `--zone-unknown-as`), never green.
+- **The `ais` provider: the loop closed on the device.** `--zone-provider ais` scores each agent from
+  this gate's own receipts with `integrity_sdk.core.ais_local` (profile
+  `ais-local/receipts-compliance-1`): the share of pack denials in the agent's last
+  `--zone-ais-window` (50) counted decisions, through the SDK's AIS formula and zone policy. No
+  Oracle, chain or token is consulted. It needs `--receipt-dir` (the file it reads) and an explicit
+  `--zone-ais-tier` (0-3; per agent with `--zone-ais-agent-tier AGENT=TIER`): the tier is never
+  assumed. The mask's own denials are not counted, so red cannot keep itself red: an agent recovers
+  by doing what its zone permits. Fewer than `--zone-ais-min-observations` (10) decisions is
+  `unknown`, never a computed red. Receipts show the zone came from the score
+  (`ais_zone_source:ais_local`, or `ais_local_cold_start`). Device config: `gate_zone.provider: "ais"`
+  with a `gate_zone.ais` object (`default_tier`, `agent_tiers`, `window_size`, `min_observations`,
+  `max_age_seconds`, `zone_policy`). Known limit: the agent id is the caller's, so a new id starts
+  at cold start.
 - **Sensor silence is a fault.** `shield run --sensor-status-file PATH` makes the watchdog write the
   sensor's health to a local 0600 file every tick. `shield gate-daemon --zone-sensor-status-file PATH`
   reads it on every decision; a stale (default 60 s), missing, unreadable or unhealthy status caps
@@ -222,8 +235,8 @@ hosted oracle in the request path.
   existing verifiers accept them.
 
 The same settings can live in the device config as a `gate_zone` object; a flag overrides the
-matching field. Not built: a provider that computes the zone from an Agent Integrity Score. Until
-one is registered the zone is whatever the operator configures.
+matching field. Not built: reading the Oracle's AIS (L1) as a provider; the `ais` provider uses only
+local evidence.
 
 ## Related pages
 

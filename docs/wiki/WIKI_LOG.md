@@ -1,5 +1,16 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-12] feat | The gate scores its agents from its own receipts (`--zone-provider ais`)
+
+- New `ais` zone provider (`shield/gate_zone.py`, `AisReceiptZoneProvider`) over
+  `integrity_sdk.core.ais_local`: decision -> receipt -> local AIS -> zone -> mask, on the device,
+  with no Oracle, chain or token. Closes the AIS loop at L0.
+- Flags: `--zone-ais-tier` (required), `--zone-ais-agent-tier`, `--zone-ais-window`,
+  `--zone-ais-min-observations`, `--zone-ais-max-age`; device config `gate_zone.ais`. The receipts
+  file is taken from `--receipt-dir`.
+- CI's integrity-core pin bumped to the #208 merge (adds `ais_local`).
+- Updated `concepts/guardrail-hooks.md`.
+
 ## [2026-11-05] update | Native Android Mobile Companion, Sideloadable APK, and Mobile Architecture
 
 - Configured native Android build target (`aarch64-linux-android`) in Tauri v2 (`com.xibalba.shield.device`).
