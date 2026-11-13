@@ -1,0 +1,569 @@
+"""Stripe billing for Shield: checkout, portal, webhook and seat sync (plans & metering design §4–§5, phase 3c).
+
+Billing is never in a gate's decision path (§1). Nothing here is consulted to allow or deny an action. The
+only thing billing changes on a device is the signed entitlement, which the issuer derives from
+`tenant_plans`, and the webhook below is the only writer of that table.
+
+Each paid plan is one subscription with two prices (§5):
+
+* devices: a licensed, per-unit, monthly USD price whose `unit_amount` equals the plan's
+  `per_device_monthly_cents`; quantity = the tenant's enrolled non-synthetic devices;
+* overage: a metered price backed by the configured Billing Meter, whose `unit_amount` equals the plan's
+  `overage_cents_per_1k` (one meter unit = 1,000 gated decisions beyond the allowance). Phase 3d
+  sends the meter events.
+
+Fail closed, as Cortex does: without a real Stripe key and webhook secret, configured price ids, a meter
+id, or with a Stripe price that does not match the catalog, checkout answers "billing unavailable" and no
+plan changes. Configuration (environment, read per request):
+
+``SHIELD_STRIPE_SECRET_KEY`` / ``SHIELD_STRIPE_WEBHOOK_SECRET`` / ``SHIELD_STRIPE_LIVE`` (``1`` for live)
+``SHIELD_STRIPE_METER_ID`` (``mtr_…``)
+``SHIELD_STRIPE_PRICE_<PLAN>_DEVICE`` / ``SHIELD_STRIPE_PRICE_<PLAN>_OVERAGE`` for ``PRO`` and ``TEAM``
+``SHIELD_STRIPE_TRIAL_DAYS`` (default 14, ``0`` disables, at most 30)
+
+Trial (operator decision 2026-11-13): a tenant's first paid checkout includes a 14-day trial with the
+card collected up front; Stripe charges it when the trial ends. `trialing` enforces like `active`. One
+trial per tenant: the first subscription seen with a trial stamps `billing_customers.trial_used_at`.
+
+Shield tenants get their own Stripe customers (metadata ``product=shield``) until identity is unified
+with Cortex (§4.2).
+"""
+from __future__ import annotations
+
+import logging
+import os
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from http import HTTPStatus
+from typing import Any, Callable, Mapping, Optional
+
+from integrity_sdk.billing import BillingUnavailable, StripeConfig, StripeGateway, ensure_stripe_events_table, record_once
+
+from .plans import FREE, PAID_PLAN_IDS, ShieldPlan, load_plan_catalog
+from .plans_store import (
+    STATUS_ACTIVE, STATUS_CANCELED, STATUS_INCOMPLETE, STATUS_PAST_DUE, STATUS_TRIALING, STATUS_UNPAID,
+)
+
+logger = logging.getLogger(__name__)
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS billing_customers (
+    tenant_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL UNIQUE,
+    subscription_id TEXT,
+    plan_id TEXT,
+    device_item_id TEXT,
+    overage_item_id TEXT,
+    seat_quantity INTEGER,
+    trial_used_at TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS checkout_requests (
+    tenant_id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    attempt TEXT NOT NULL,
+    checkout_id TEXT,
+    url TEXT
+);
+CREATE TABLE IF NOT EXISTS seat_syncs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL,
+    subscription_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    requested_at TEXT NOT NULL,
+    acknowledged_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_seat_syncs_tenant ON seat_syncs(tenant_id, requested_at);
+"""
+
+HANDLED_EVENTS = frozenset({
+    "checkout.session.completed", "customer.subscription.created", "customer.subscription.updated",
+    "customer.subscription.deleted",
+})
+# Stripe subscription status -> `tenant_plans.status`. Anything that ends the subscription returns the
+# tenant to free; `paused` keeps the plan but never enforces.
+_STATUS_MAP = {
+    "active": STATUS_ACTIVE, "trialing": STATUS_TRIALING, "past_due": STATUS_PAST_DUE,
+    "unpaid": STATUS_UNPAID, "incomplete": STATUS_INCOMPLETE, "paused": STATUS_UNPAID,
+}
+_ENDED = frozenset({"canceled", "incomplete_expired"})
+MAX_WEBHOOK_BYTES = 1 << 20
+DEFAULT_TRIAL_DAYS = 14
+MAX_TRIAL_DAYS = 30
+
+
+def _trial_days(raw: Optional[str]) -> int:
+    """Malformed or out-of-range values fall back to the default rather than silently granting more."""
+    if raw is None or not raw.strip():
+        return DEFAULT_TRIAL_DAYS
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return DEFAULT_TRIAL_DAYS
+    return value if 0 <= value <= MAX_TRIAL_DAYS else DEFAULT_TRIAL_DAYS
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+class BillingRefused(ValueError):
+    """A request billing will not carry out; `status` is the HTTP status. The message is safe to show."""
+
+    def __init__(self, status: HTTPStatus, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+@dataclass(frozen=True)
+class PlanPrices:
+    device: str
+    overage: str
+
+
+@dataclass(frozen=True)
+class BillingConfig:
+    stripe: StripeConfig = field(default_factory=StripeConfig)
+    meter_id: str = ""
+    prices: Mapping[str, PlanPrices] = field(default_factory=dict)
+    trial_days: int = DEFAULT_TRIAL_DAYS
+
+    @classmethod
+    def from_env(cls, environ: Optional[Mapping[str, str]] = None) -> "BillingConfig":
+        env = os.environ if environ is None else environ
+        prices = {}
+        for plan_id in PAID_PLAN_IDS:
+            device = env.get(f"SHIELD_STRIPE_PRICE_{plan_id.upper()}_DEVICE", "").strip()
+            overage = env.get(f"SHIELD_STRIPE_PRICE_{plan_id.upper()}_OVERAGE", "").strip()
+            if device.startswith("price_") and overage.startswith("price_"):
+                prices[plan_id] = PlanPrices(device=device, overage=overage)
+        return cls(
+            stripe=StripeConfig(
+                secret_key=env.get("SHIELD_STRIPE_SECRET_KEY", "").strip(),
+                webhook_secret=env.get("SHIELD_STRIPE_WEBHOOK_SECRET", "").strip(),
+                live=env.get("SHIELD_STRIPE_LIVE", "").strip() == "1",
+            ),
+            meter_id=env.get("SHIELD_STRIPE_METER_ID", "").strip(),
+            prices=prices,
+            trial_days=_trial_days(env.get("SHIELD_STRIPE_TRIAL_DAYS")),
+        )
+
+    @property
+    def ready(self) -> bool:
+        return self.stripe.billing_ready and self.meter_id.startswith("mtr_") and bool(self.prices)
+
+
+def _recurring(price: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = price.get("recurring")
+    return value if isinstance(value, Mapping) else {}
+
+
+def validate_device_price(price: Mapping[str, Any], *, price_id: str, plan: ShieldPlan) -> None:
+    recurring = _recurring(price)
+    if (price.get("id") != price_id or price.get("active") is False or price.get("currency") != "usd"
+            or price.get("billing_scheme", "per_unit") != "per_unit"
+            or price.get("unit_amount") != plan.per_device_monthly_cents
+            or recurring.get("usage_type") != "licensed" or recurring.get("interval") != "month"
+            or recurring.get("interval_count") != 1):
+        raise BillingUnavailable("Stripe device price does not match the approved Shield catalog")
+
+
+def validate_overage_price(price: Mapping[str, Any], *, price_id: str, plan: ShieldPlan, meter_id: str) -> None:
+    recurring = _recurring(price)
+    if (price.get("id") != price_id or price.get("active") is False or price.get("currency") != "usd"
+            or price.get("billing_scheme", "per_unit") != "per_unit"
+            or price.get("unit_amount") != plan.overage_cents_per_1k
+            or recurring.get("usage_type") != "metered" or recurring.get("meter") != meter_id
+            or recurring.get("interval") != "month" or recurring.get("interval_count") != 1):
+        raise BillingUnavailable("Stripe overage price does not match the approved Shield catalog")
+
+
+def _iso(epoch: Any) -> str:
+    if isinstance(epoch, bool) or not isinstance(epoch, int):
+        raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription period is missing")
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class ShieldBilling:
+    """Checkout, portal, webhook and seat sync over the ShieldStore connection."""
+
+    def __init__(
+        self,
+        conn: Any,
+        plans: Any,
+        *,
+        config: Optional[Callable[[], BillingConfig]] = None,
+        gateway: Optional[Callable[[BillingConfig], Any]] = None,
+        catalog: Optional[Callable[[], Mapping[str, ShieldPlan]]] = None,
+        durable: Optional[Callable[[], bool]] = None,
+    ) -> None:
+        self._conn = conn
+        self._plans = plans
+        self._config = config or BillingConfig.from_env
+        self._gateway = gateway or (lambda cfg: StripeGateway(cfg.stripe))
+        self._catalog = catalog or load_plan_catalog
+        # On Render the database is a periodic Supabase snapshot: a plan written by a webhook could be
+        # lost on restart after Stripe already got its 2xx. `durable()` forces a checkpoint; when it
+        # fails the webhook answers 503 so Stripe redelivers (the local replay is then a duplicate).
+        self._durable = durable or (lambda: True)
+
+    def init_schema(self) -> None:
+        self._conn.executescript(SCHEMA)
+        ensure_stripe_events_table(self._conn)
+        self._conn.commit()
+
+    # -- helpers ------------------------------------------------------------------------------
+
+    def _ready(self) -> tuple[BillingConfig, Any]:
+        cfg = self._config()
+        if not cfg.ready:
+            raise BillingUnavailable("Stripe billing is not configured")
+        return cfg, self._gateway(cfg)
+
+    def customer(self, tenant_id: str) -> Optional[dict[str, Any]]:
+        row = self._conn.execute("SELECT * FROM billing_customers WHERE tenant_id=?", (tenant_id,)).fetchone()
+        return dict(row) if row else None
+
+    def seat_count(self, tenant_id: str) -> int:
+        """Enrolled, non-synthetic devices: synthetic/demo devices are never seats (§4.3)."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM devices WHERE tenant_id=? AND synthetic=0", (tenant_id,)).fetchone()
+        return int(row[0])
+
+    def _validated_plan(self, plan_id: str, cfg: BillingConfig, gw: Any) -> tuple[ShieldPlan, PlanPrices]:
+        plan = self._catalog().get(plan_id)
+        prices = cfg.prices.get(plan_id)
+        if plan is None or not plan.paid or prices is None:
+            raise BillingUnavailable("This plan is not available for purchase yet")
+        validate_device_price(gw.request("GET", "/prices/" + prices.device), price_id=prices.device, plan=plan)
+        validate_overage_price(gw.request("GET", "/prices/" + prices.overage), price_id=prices.overage, plan=plan,
+                               meter_id=cfg.meter_id)
+        return plan, prices
+
+    # -- checkout and portal ------------------------------------------------------------------
+
+    def checkout(self, *, tenant_id: str, plan_id: str, base_url: str) -> dict[str, Any]:
+        if plan_id not in PAID_PLAN_IDS:
+            raise BillingRefused(HTTPStatus.BAD_REQUEST, "Choose a paid plan: " + " or ".join(PAID_PLAN_IDS))
+        cfg, gw = self._ready()
+        plan, prices = self._validated_plan(plan_id, cfg, gw)
+        current = self._plans.get_tenant_plan(tenant_id)
+        if current["plan_id"] != FREE and current["status"] != STATUS_CANCELED:
+            raise BillingRefused(HTTPStatus.CONFLICT, "Manage the existing subscription through the billing portal")
+        seats = self.seat_count(tenant_id)
+        if seats == 0:
+            # Billing a floor of one seat would be prorated straight back to zero by the first sync.
+            raise BillingRefused(HTTPStatus.CONFLICT, "Enroll a device before choosing a paid plan")
+        if plan.max_devices is not None and seats > plan.max_devices:
+            raise BillingRefused(HTTPStatus.CONFLICT, f"The {plan.name} plan covers at most {plan.max_devices} devices")
+
+        record = self.customer(tenant_id)
+        if record is None:
+            created = gw.request("POST", "/customers", data={
+                "metadata[tenant_id]": tenant_id, "metadata[product]": "shield",
+            }, idempotency_key="shield-customer:" + tenant_id)
+            customer_id = created.get("id")
+            if not isinstance(customer_id, str) or not customer_id.startswith("cus_"):
+                raise BillingUnavailable("Stripe returned an invalid customer")
+            with self._conn:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO billing_customers (tenant_id, customer_id, updated_at) VALUES (?,?,?)",
+                    (tenant_id, customer_id, _now()))
+            record = self.customer(tenant_id)
+
+        # Persist the attempt before talking to Stripe: a crash after Stripe creates the session reuses
+        # the same idempotency key on retry instead of creating a second subscription.
+        pending = self._conn.execute("SELECT * FROM checkout_requests WHERE tenant_id=?", (tenant_id,)).fetchone()
+        if pending and pending["checkout_id"]:
+            session = gw.request("GET", "/checkout/sessions/" + pending["checkout_id"])
+            if session.get("status") == "open":
+                if pending["plan_id"] != plan_id:
+                    raise BillingRefused(HTTPStatus.CONFLICT, "Finish or let the open checkout expire before choosing another plan")
+                return {"url": session.get("url")}
+            if session.get("status") == "complete":
+                raise BillingRefused(HTTPStatus.CONFLICT, "Payment is processing; wait for the subscription to confirm")
+            with self._conn:
+                self._conn.execute("DELETE FROM checkout_requests WHERE tenant_id=?", (tenant_id,))
+            pending = None
+        if pending is None or pending["plan_id"] != plan_id:
+            with self._conn:
+                self._conn.execute(
+                    "INSERT INTO checkout_requests (tenant_id, plan_id, attempt) VALUES (?,?,?) "
+                    "ON CONFLICT(tenant_id) DO UPDATE SET plan_id=excluded.plan_id, attempt=excluded.attempt, "
+                    "checkout_id=NULL, url=NULL",
+                    (tenant_id, plan_id, uuid.uuid4().hex))
+            pending = self._conn.execute("SELECT * FROM checkout_requests WHERE tenant_id=?", (tenant_id,)).fetchone()
+
+        base = base_url.rstrip("/")
+        params: dict[str, Any] = {
+            "mode": "subscription",
+            "customer": record["customer_id"],
+            "client_reference_id": tenant_id,
+            "line_items[0][price]": prices.device,
+            "line_items[0][quantity]": seats,
+            # A metered price takes no quantity: Stripe bills what the meter reports.
+            "line_items[1][price]": prices.overage,
+            # Card on file even during a trial, so the subscription continues without a second step.
+            "payment_method_collection": "always",
+            "subscription_data[metadata][tenant_id]": tenant_id,
+            "subscription_data[metadata][product]": "shield",
+            "success_url": base + "/billing?checkout=success",
+            "cancel_url": base + "/billing?checkout=canceled",
+        }
+        if cfg.trial_days > 0 and not record["trial_used_at"]:
+            params["subscription_data[trial_period_days]"] = cfg.trial_days
+        session = gw.request("POST", "/checkout/sessions", data=params,
+                             idempotency_key="shield-checkout:" + pending["attempt"])
+        if not isinstance(session.get("id"), str) or not isinstance(session.get("url"), str):
+            raise BillingUnavailable("Stripe returned an invalid checkout session")
+        with self._conn:
+            self._conn.execute("UPDATE checkout_requests SET checkout_id=?, url=? WHERE tenant_id=?",
+                               (session["id"], session["url"], tenant_id))
+        return {"url": session["url"]}
+
+    def portal(self, *, tenant_id: str, base_url: str) -> dict[str, Any]:
+        _cfg, gw = self._ready()
+        record = self.customer(tenant_id)
+        if record is None:
+            raise BillingRefused(HTTPStatus.CONFLICT, "This tenant has no Stripe billing account yet")
+        result = gw.request("POST", "/billing_portal/sessions", data={
+            "customer": record["customer_id"], "return_url": base_url.rstrip("/") + "/billing"})
+        if not isinstance(result.get("url"), str):
+            raise BillingUnavailable("Stripe returned an invalid portal session")
+        return {"url": result["url"]}
+
+    def status(self, tenant_id: str) -> dict[str, Any]:
+        record = self.customer(tenant_id) or {}
+        return {
+            "tenant_id": tenant_id,
+            "billing_configured": self._config().ready,
+            "plan": self._plans.get_tenant_plan(tenant_id),
+            "has_billing_account": bool(record),
+            "trial_available": self._config().trial_days > 0 and not record.get("trial_used_at"),
+            "seats": self.seat_count(tenant_id),
+            "billed_seats": record.get("seat_quantity"),
+        }
+
+    # -- webhook ------------------------------------------------------------------------------
+
+    def handle_webhook(self, body: bytes, signature: str) -> dict[str, Any]:
+        cfg, gw = self._ready()
+        event = gw.verify_event(body, signature)
+        result = self.apply_event(event, cfg=cfg, gw=gw)
+        # A duplicate may be the redelivery of a change whose checkpoint failed: acknowledging it before
+        # the state is durable would let Stripe stop retrying while a restart could still lose the plan.
+        if (result.get("plan_id") or result.get("duplicate")) and not self._durable():
+            raise BillingUnavailable("Plan change is not yet durable; Stripe will redeliver")
+        return result
+
+    def apply_event(self, event: Mapping[str, Any], *, cfg: BillingConfig, gw: Any) -> dict[str, Any]:
+        if event.get("type") not in HANDLED_EVENTS:
+            return {"received": True, "ignored": True}
+        event_id = event.get("id")
+        if self._conn.execute("SELECT 1 FROM stripe_events WHERE id=?", (event_id,)).fetchone():
+            return {"received": True, "duplicate": True}
+        obj = (event.get("data") or {}).get("object") or {}
+        customer_id = obj.get("customer")
+        record = self._conn.execute("SELECT * FROM billing_customers WHERE customer_id=?", (customer_id,)).fetchone()
+        if record is None:
+            # Events for Cortex or any other product on the same Stripe account grant nothing here.
+            return {"received": True, "ignored": True}
+        tenant_id = record["tenant_id"]
+        sub_id = obj.get("subscription") if event["type"] == "checkout.session.completed" else obj.get("id")
+        if not isinstance(sub_id, str) or not sub_id.startswith("sub_"):
+            raise BillingRefused(HTTPStatus.BAD_REQUEST, "Missing subscription reference")
+
+        # Re-read Stripe's current state: delivery order and event bodies never decide the plan. The
+        # network call happens before the database transaction so the store is not held during it.
+        sub = gw.request("GET", "/subscriptions/" + sub_id)
+        if sub.get("customer") != customer_id:
+            raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription customer does not match the tenant")
+        stripe_status = str(sub.get("status") or "")
+        ended = stripe_status in _ENDED
+        known = record["subscription_id"]
+        if known and known != sub_id:
+            current = self._plans.get_tenant_plan(tenant_id)
+            live_elsewhere = current["plan_id"] != FREE and current["status"] != STATUS_CANCELED
+            if ended or live_elsewhere:
+                # An old or second subscription must not overwrite the one the tenant is on.
+                with self._conn:
+                    record_once(self._conn, event_id, processed_at=int(time.time()))
+                return {"received": True, "ignored": True}
+
+        if ended:
+            plan_id, status, period_end, device_item, overage_item = FREE, STATUS_ACTIVE, None, None, None
+        else:
+            if stripe_status not in _STATUS_MAP:
+                raise BillingRefused(HTTPStatus.BAD_REQUEST, "Unsupported subscription status")
+            plan_id, device_item, overage_item, period_end = self._identify(sub, cfg=cfg)
+            status = _STATUS_MAP[stripe_status]
+
+        had_trial = sub.get("trial_end") is not None or stripe_status == "trialing"
+        # One transaction: the event is marked processed only together with the plan it produced, so a
+        # crash in between leaves both undone and Stripe's retry applies them.
+        with self._conn:
+            if not record_once(self._conn, event_id, processed_at=int(time.time())):
+                return {"received": True, "duplicate": True}
+            self._conn.execute(
+                "UPDATE billing_customers SET subscription_id=?, plan_id=?, device_item_id=?, overage_item_id=?, "
+                "seat_quantity=COALESCE(?, seat_quantity), updated_at=?, "
+                "trial_used_at=CASE WHEN ? THEN COALESCE(trial_used_at, ?) ELSE trial_used_at END WHERE tenant_id=?",
+                (None if ended else sub_id, None if ended else plan_id,
+                 device_item["id"] if device_item else None, overage_item["id"] if overage_item else None,
+                 device_item.get("quantity") if device_item else None, _now(), had_trial, _now(), tenant_id))
+            self._conn.execute("DELETE FROM checkout_requests WHERE tenant_id=?", (tenant_id,))
+            # Last statement: its own `with` commits this whole transaction, or rolls all of it back.
+            self._plans.set_tenant_plan(tenant_id=tenant_id, plan_id=plan_id, status=status, period_end=period_end)
+        return {"received": True, "plan_id": plan_id, "status": status, "tenant_id": tenant_id}
+
+    def _identify(self, sub: Mapping[str, Any], *, cfg: BillingConfig) -> tuple[str, dict, dict, str]:
+        """(plan_id, device item, overage item, period_end ISO) after checking the items against the catalog."""
+        items = (sub.get("items") or {}).get("data") or []
+        if len(items) != 2:
+            raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription must contain the device and overage prices")
+        catalog = self._catalog()
+        by_price = {item.get("price", {}).get("id"): item for item in items if isinstance(item, Mapping)}
+        for plan_id, prices in cfg.prices.items():
+            if set(by_price) == {prices.device, prices.overage}:
+                plan = catalog.get(plan_id)
+                if plan is None or not plan.paid:
+                    break
+                device_item, overage_item = by_price[prices.device], by_price[prices.overage]
+                try:
+                    validate_device_price(device_item["price"], price_id=prices.device, plan=plan)
+                    validate_overage_price(overage_item["price"], price_id=prices.overage, plan=plan, meter_id=cfg.meter_id)
+                except BillingUnavailable as exc:
+                    raise BillingRefused(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+                # Basil moved the billing period onto the subscription items.
+                period_end = device_item.get("current_period_end", sub.get("current_period_end"))
+                return plan_id, dict(device_item), dict(overage_item), _iso(period_end)
+        raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription prices do not match the configured Shield catalog")
+
+    # -- seats --------------------------------------------------------------------------------
+
+    def sync_seats(self, tenant_id: str) -> dict[str, Any]:
+        """Set the device item's quantity to the tenant's seat count, prorated (§5). Idempotent.
+
+        A `seat_syncs` row is written before the Stripe call and its id is the idempotency key, so a
+        retry after a crash replays the same change and a later change (even back to an earlier count)
+        is never mistaken for a replay. 3d reads these rows for the period's maximum device count.
+        """
+        record = self.customer(tenant_id)
+        if not record or not record["subscription_id"] or not record["device_item_id"]:
+            return {"synced": False, "reason": "no subscription"}
+        quantity = self.seat_count(tenant_id)
+        if record["seat_quantity"] == quantity:
+            return {"synced": True, "quantity": quantity, "changed": False}
+        _cfg, gw = self._ready()
+        pending = self._conn.execute(
+            "SELECT id FROM seat_syncs WHERE tenant_id=? AND subscription_id=? AND quantity=? AND acknowledged_at IS NULL "
+            "ORDER BY id DESC LIMIT 1", (tenant_id, record["subscription_id"], quantity)).fetchone()
+        if pending is None:
+            with self._conn:
+                cursor = self._conn.execute(
+                    "INSERT INTO seat_syncs (tenant_id, subscription_id, quantity, requested_at) VALUES (?,?,?,?)",
+                    (tenant_id, record["subscription_id"], quantity, _now()))
+            sync_id = cursor.lastrowid
+        else:
+            sync_id = pending["id"]
+        gw.request("POST", "/subscription_items/" + record["device_item_id"], data={
+            "quantity": quantity, "proration_behavior": "create_prorations",
+        }, idempotency_key=f"shield-seats:{tenant_id}:{sync_id}")
+        with self._conn:
+            self._conn.execute("UPDATE seat_syncs SET acknowledged_at=? WHERE id=?", (_now(), sync_id))
+            self._conn.execute("UPDATE billing_customers SET seat_quantity=?, updated_at=? WHERE tenant_id=?",
+                               (quantity, _now(), tenant_id))
+        return {"synced": True, "quantity": quantity, "changed": True}
+
+    def sync_seats_soon(self, tenant_id: str) -> None:
+        """Best-effort seat sync off the request thread: enrollment never waits on, or fails with, Stripe."""
+        def run() -> None:
+            try:
+                self.sync_seats(tenant_id)
+            except Exception as exc:  # noqa: BLE001 -- reconciled later by the webhook, checkout or admin sync
+                logger.warning("seat sync for %s deferred: %s", tenant_id, type(exc).__name__)
+        threading.Thread(target=run, name="shield-seat-sync", daemon=True).start()
+
+
+def supabase_durability(db_path: Any) -> Callable[[], bool]:
+    """A `durable` hook that checkpoints to Supabase when it is configured (Render); a no-op locally."""
+    def durable() -> bool:
+        from .supabase_persistence import checkpoint_database, get_configured_dsn  # noqa: PLC0415
+        dsn = get_configured_dsn()
+        return True if not dsn else checkpoint_database(dsn, db_path, meta={"trigger": "stripe-webhook"})
+    return durable
+
+
+# -- HTTP routes (called from api.py's handler; `h` is the request handler) ---------------------
+
+BILLING_POST_ROUTES = frozenset({"/api/shield/billing/checkout", "/api/shield/billing/portal",
+                                 "/api/shield/billing/sync"})
+WEBHOOK_ROUTE = "/api/shield/stripe/webhook"
+
+
+def _send_billing_error(h: Any, exc: Exception) -> None:
+    if isinstance(exc, BillingRefused):
+        h._send_error(exc.status, str(exc))
+    elif isinstance(exc, BillingUnavailable):
+        h._send_error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc))
+    else:
+        h._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+
+
+def handle_billing_get(h: Any, billing: ShieldBilling, query: Mapping[str, list[str]]) -> None:
+    tenant_id = h._tenant_from_query_or_error(query)
+    if tenant_id is None or not h._require_admin(tenant_id=tenant_id):
+        return
+    h._send_json(billing.status(tenant_id))
+
+
+def handle_billing_post(h: Any, billing: ShieldBilling, path: str, body: Mapping[str, Any], base_url: str) -> None:
+    tenant_id = str(body.get("tenant_id") or "")
+    if not tenant_id:
+        h._send_error(HTTPStatus.BAD_REQUEST, "tenant_id is required")
+        return
+    if not h._require_admin(tenant_id=tenant_id):
+        return
+    try:
+        if path.endswith("/checkout"):
+            result = billing.checkout(tenant_id=tenant_id, plan_id=str(body.get("plan_id") or ""), base_url=base_url)
+        elif path.endswith("/portal"):
+            result = billing.portal(tenant_id=tenant_id, base_url=base_url)
+        else:
+            result = billing.sync_seats(tenant_id)
+    except (BillingRefused, BillingUnavailable, ValueError) as exc:
+        _send_billing_error(h, exc)
+        return
+    h._send_json(result)
+
+
+def handle_stripe_webhook(h: Any, billing: ShieldBilling) -> None:
+    """Raw body (the signature covers the exact bytes), so this runs before any JSON parsing."""
+    try:
+        length = int(h.headers.get("Content-Length", "0"))
+    except ValueError:
+        length = -1
+    if length <= 0 or length > MAX_WEBHOOK_BYTES:
+        # The body is deliberately left unread, so this connection must not be reused: its bytes would be
+        # parsed as the next request.
+        h.close_connection = True
+        h._send_error(HTTPStatus.BAD_REQUEST, "invalid webhook body")
+        return
+    body = h.rfile.read(length)
+    try:
+        result = billing.handle_webhook(body, h.headers.get("Stripe-Signature", ""))
+    except (BillingRefused, BillingUnavailable, ValueError) as exc:
+        _send_billing_error(h, exc)
+        return
+    tenant_id = result.pop("tenant_id", None)
+    if tenant_id and result.get("plan_id") != FREE:
+        billing.sync_seats_soon(tenant_id)
+    h._send_json(result)
+
+
+__all__ = ["BILLING_POST_ROUTES", "BillingConfig", "BillingRefused", "PlanPrices", "ShieldBilling", "WEBHOOK_ROUTE",
+           "handle_billing_get", "handle_billing_post", "handle_stripe_webhook", "supabase_durability",
+           "validate_device_price", "validate_overage_price"]

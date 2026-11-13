@@ -204,11 +204,21 @@ Creating Stripe products, prices and the meter is an **operator action** after P
 | `free.max_devices` | Devices allowed on free | 2 |
 | `free.included_decisions_per_device` | Monthly allowance on free | 5,000 |
 | `free_over_periods` | Periods over allowance before new enrollments are refused | 2 |
-| `pro.per_device_monthly_cents` | Pro seat price | — |
-| `pro.included_decisions_per_device` | Pro allowance | — |
-| `pro.overage_cents_per_1k` | Pro overage | — |
-| `team.*` | As for pro, plus `max_devices` | — |
+| `pro.per_device_monthly_cents` | Pro seat price | 1200 ($12; $10 if annual) |
+| `pro.included_decisions_per_device` | Pro allowance | 25,000 |
+| `pro.overage_cents_per_1k` | Pro overage | 40 |
+| `team.per_device_monthly_cents` | Team seat price | 2000 |
+| `team.included_decisions_per_device` | Team allowance | 100,000 |
+| `team.overage_cents_per_1k` | Team overage | 25 |
+| `team.max_devices` | Team cap | operator's call |
 | `entitlement_grace_days` | Offline validity after period end | 7 |
+| `SHIELD_STRIPE_TRIAL_DAYS` | Trial on a tenant's first paid checkout, card collected up front, once per tenant | 14 (**decided**, operator 2026-11-13) |
+
+Price suggestions (research 2026-11-13): below a full EDR seat (CrowdStrike Falcon Pro ≈ $8–15,
+SentinelOne Complete ≈ $15 per endpoint per month) and inside the AI-guardrail/agent-security band
+(≈ $15–25 per seat). A heavy coding agent was estimated at 4.4k–22k gated decisions a month, so the Pro
+allowance covers one without overage. Advertising was considered and rejected: an ad SDK would sit
+inside the gate's trust boundary and conflicts with the provenance/privacy positioning.
 
 Real numbers should come from shadow data: switch one real gate to `--zone-mode shadow --zone-provider ais` and measure gated decisions per device per month before setting allowances.
 
