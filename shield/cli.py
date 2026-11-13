@@ -27,7 +27,7 @@ from .config import ConfigError, DeviceConfig, fetch_tenant_policy, load_device_
 from .config.hot_reload import PolicyHotReloader
 from .pack_loading import PackLoadError, resolve_pack
 from .gate_daemon import default_socket_path, serve_forever
-from .gate_zone import MODE_OFF, ZONE_MODES, GateZoneSettings, ZoneMask, build_zone_mask
+from .gate_zone import MODE_OFF, PROVIDER_AIS, ZONE_MODES, GateZoneSettings, ZoneMask, build_zone_mask
 from .policy_engine import PolicyEngine
 from .policy_engine.engine import EvaluationContext
 from .policy_engine.jev_shadow import JevShadowAnalyzer, JsonlDecisionTraceSink
@@ -192,6 +192,13 @@ def _parse_pairs(values: list[str] | None, flag: str) -> dict[str, str]:
     return pairs
 
 
+def _parse_tier(value: str, flag: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(f"{flag} takes AGENT=TIER with TIER an integer 0-3, got {value!r}") from None
+
+
 def _gate_zone_mask(args: argparse.Namespace, device_config: DeviceConfig) -> ZoneMask | None:
     """The zone mask the device config and the `--zone-*` flags describe; None when it is off.
 
@@ -216,14 +223,32 @@ def _gate_zone_mask(args: argparse.Namespace, device_config: DeviceConfig) -> Zo
     given = {name: value for name, value in overrides.items() if value is not None}
     agent_zones = _parse_pairs(opt("zone_agents"), "--zone-agent")
     tool_classes = _parse_pairs(opt("zone_tool_classes"), "--zone-tool-class")
+    ais_given = {name: value for name, value in {
+        "default_tier": opt("zone_ais_tier"), "window_size": opt("zone_ais_window"),
+        "min_observations": opt("zone_ais_min_observations"), "max_age_seconds": opt("zone_ais_max_age"),
+    }.items() if value is not None}
+    ais_agent_tiers = {agent: _parse_tier(tier, "--zone-ais-agent-tier")
+                       for agent, tier in _parse_pairs(opt("zone_ais_agent_tiers"), "--zone-ais-agent-tier").items()}
     document.update(given)
     if agent_zones:
         document["agent_zones"] = {**document.get("agent_zones", {}), **agent_zones}
     if tool_classes:
         document["tool_classes"] = {**document.get("tool_classes", {}), **tool_classes}
+    if ais_given or ais_agent_tiers:
+        ais = {**document.get("ais", {}), **ais_given}
+        if ais_agent_tiers:
+            ais["agent_tiers"] = {**ais.get("agent_tiers", {}), **ais_agent_tiers}
+        document["ais"] = ais
+    # The ais provider scores this gate's own receipts: the file is wherever this daemon writes them.
+    receipt_dir = opt("receipt_dir")
+    if document.get("provider") == PROVIDER_AIS and "receipts_file" not in document and receipt_dir is not None:
+        from .gate_receipts import RECEIPTS_FILENAME
+
+        document["receipts_file"] = str(Path(receipt_dir) / RECEIPTS_FILENAME)
 
     settings = GateZoneSettings.from_mapping(document)
-    if settings.mode == MODE_OFF and (set(given) - {"mode"} or agent_zones or tool_classes):
+    if settings.mode == MODE_OFF and (set(given) - {"mode"} or agent_zones or tool_classes
+                                      or ais_given or ais_agent_tiers):
         raise ValueError(
             "zone options were given but the zone mask is off; pass --zone-mode shadow or "
             "--zone-mode enforce (or set gate_zone.mode in the device config)")
@@ -1301,8 +1326,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="classify a tool as read|draft|execute|escalate; repeatable. A tool in no "
                              "map is execute")
     p_gate.add_argument("--zone-provider", default=None,
-                        help="zone provider: 'static' (default), a registered name, or an import path "
-                             "'package.module:factory'")
+                        help="zone provider: 'static' (default), 'ais' (score agents from this gate's "
+                             "own receipts; needs --receipt-dir and --zone-ais-tier), a registered name, "
+                             "or an import path 'package.module:factory'")
+    p_gate.add_argument("--zone-ais-tier", type=int, default=None,
+                        help="ais provider: verification tier 0-3 for agents without their own; required")
+    p_gate.add_argument("--zone-ais-agent-tier", action="append", default=None, dest="zone_ais_agent_tiers",
+                        metavar="AGENT=TIER", help="ais provider: one agent's verification tier; repeatable")
+    p_gate.add_argument("--zone-ais-window", type=int, default=None,
+                        help="ais provider: counted decisions per agent the score is read over (default 50)")
+    p_gate.add_argument("--zone-ais-min-observations", type=int, default=None,
+                        help="ais provider: fewer counted decisions than this is no score, zone unknown "
+                             "(default 10)")
+    p_gate.add_argument("--zone-ais-max-age", type=float, default=None,
+                        help="ais provider: decisions older than this many seconds stop counting "
+                             "(default: no age bound)")
     p_gate.add_argument("--zone-sensor-status-file", type=Path, default=None,
                         help="sensor status file written by `shield run --sensor-status-file`. Giving "
                              "it says a sensor is expected: a stale, missing, unreadable or unhealthy "

@@ -29,9 +29,12 @@ enough. Two ship here:
   test) sets the zone today.
 * `SensorSilenceZoneProvider` -- wraps another provider and caps its answer when Shield's own sensor
   has gone quiet (below).
+* `AisReceiptZoneProvider` (`--zone-provider ais`) -- the zone this gate's own receipts imply, scored
+  by `integrity_sdk.core.ais_local`. This closes the loop locally: decision -> receipt -> score -> zone
+  -> mask, with no chain, token or Oracle. Needs `--receipt-dir` and an explicit `ais.default_tier`.
 
-This module does **not** compute a score. A later scorer plugs in by registering a factory
-(`register_zone_provider("ais", factory)`) or by being named by import path
+This module does not compute a score itself. Another scorer plugs in by registering a factory
+(`register_zone_provider(name, factory)`) or by being named by import path
 (`--zone-provider package.module:factory`); `build_zone_mask` wraps whatever it returns in the silence
 wrapper. Neither `gate_daemon.py` nor this module's mask changes.
 
@@ -354,6 +357,61 @@ class ZoneMask:
         )
 
 
+# --------------------------------------------------------------------------- ais provider ---
+
+PROVIDER_AIS = "ais"
+#: `ZoneReading.source` for a zone the local scorer computed, and for its cold start (no score yet).
+SOURCE_AIS_LOCAL = "ais_local"
+SOURCE_AIS_COLD_START = "ais_local_cold_start"
+#: `gate_zone.ais` fields, passed to `integrity_sdk.core.ais_local.LocalScorerSettings`
+#: (`zone_policy` through `ZonePolicy.from_mapping`).
+AIS_SETTING_FIELDS = frozenset({
+    "default_tier", "agent_tiers", "window_size", "min_observations", "max_age_seconds", "zone_policy",
+})
+
+
+class AisReceiptZoneProvider:
+    """The zone the gate's own receipts imply for an agent: the AIS loop closed on this device.
+
+    Wraps `integrity_sdk.core.ais_local.ReceiptLogZoneSource`, which tails the receipts file this gate
+    writes and scores each agent's recent pack decisions (profile `ais-local/receipts-compliance-1`).
+    No Oracle, chain or token is consulted. The mask's own denials are not counted by the scorer, so a
+    red zone cannot keep itself red; an agent with too little history is `unknown` (`unknown_as`), never
+    a computed red. A scorer failure is an exception here, which the mask already turns into `unknown`.
+    """
+
+    def __init__(self, source: Callable[[str], Any]) -> None:
+        self._source = source
+
+    def __call__(self, agent_id: str) -> ZoneReading:
+        score = self._source(agent_id)
+        if score.ais is None:
+            return ZoneReading(zone=UNKNOWN, source=SOURCE_AIS_COLD_START)
+        return ZoneReading(zone=score.zone, source=SOURCE_AIS_LOCAL)
+
+
+def _ais_scorer_settings(options: Mapping[str, Any]):
+    from integrity_sdk.core.ais_local import LocalScorerSettings
+    from integrity_sdk.core.ais_reward import ZonePolicy
+
+    _require("default_tier" in options,
+             "the ais zone provider needs ais.default_tier (0-3): the verification tier is never assumed")
+    kwargs = {key: value for key, value in options.items() if key != "zone_policy"}
+    if "zone_policy" in options:
+        policy = options["zone_policy"]
+        _require(isinstance(policy, Mapping), "ais.zone_policy must be an object")
+        kwargs["zone_policy"] = ZonePolicy.from_mapping(policy)
+    return LocalScorerSettings(**kwargs)
+
+
+def _ais_factory(settings: "GateZoneSettings") -> ZoneProvider:
+    from integrity_sdk.core.ais_local import ReceiptLogZoneSource
+
+    _require(settings.receipts_file is not None,
+             "the ais zone provider scores this gate's own receipts; it needs receipts (--receipt-dir)")
+    return AisReceiptZoneProvider(ReceiptLogZoneSource(settings.receipts_file, _ais_scorer_settings(settings.ais)))
+
+
 # --------------------------------------------------------------------------- settings ---
 
 
@@ -377,6 +435,10 @@ class GateZoneSettings:
     sensor_max_age_seconds: float = DEFAULT_SENSOR_MAX_AGE_SECONDS
     sensor_demote_to: str = RED
     sensor_expect: str = EXPECT_ALWAYS
+    #: The `ais` provider's options (`AIS_SETTING_FIELDS`). Refused for any other provider.
+    ais: Mapping[str, Any] = field(default_factory=dict)
+    #: The receipts file the `ais` provider scores. The CLI fills it from `--receipt-dir`.
+    receipts_file: Optional[str] = None
 
     def __post_init__(self) -> None:
         _require(self.mode in ZONE_MODES, f"mode must be one of {ZONE_MODES}, got {self.mode!r}")
@@ -401,6 +463,13 @@ class GateZoneSettings:
                  f"sensor_demote_to must be one of {DEMOTION_ZONES}, got {self.sensor_demote_to!r}")
         _require(self.sensor_expect in SENSOR_EXPECTATIONS,
                  f"sensor_expect must be one of {SENSOR_EXPECTATIONS}, got {self.sensor_expect!r}")
+        _require(isinstance(self.ais, Mapping), "ais must be an object")
+        unknown_ais = set(self.ais) - AIS_SETTING_FIELDS
+        _require(not unknown_ais, f"ais has unknown field(s): {sorted(unknown_ais)}")
+        _require(not self.ais or self.provider == PROVIDER_AIS,
+                 f"ais options are only read by the {PROVIDER_AIS!r} zone provider, but the provider is {self.provider!r}")
+        _require(self.receipts_file is None or (isinstance(self.receipts_file, str) and bool(self.receipts_file)),
+                 "receipts_file must be a path string")
 
     @classmethod
     def from_mapping(cls, document: Mapping[str, Any]) -> "GateZoneSettings":
@@ -424,7 +493,7 @@ def _static_factory(settings: GateZoneSettings) -> ZoneProvider:
     return StaticZoneProvider(settings.zone or UNKNOWN, per_agent=settings.agent_zones)
 
 
-_PROVIDER_FACTORIES: dict[str, ZoneProviderFactory] = {"static": _static_factory}
+_PROVIDER_FACTORIES: dict[str, ZoneProviderFactory] = {"static": _static_factory, PROVIDER_AIS: _ais_factory}
 
 
 def register_zone_provider(name: str, factory: ZoneProviderFactory) -> None:
