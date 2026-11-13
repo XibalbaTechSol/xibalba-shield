@@ -144,9 +144,20 @@ def save_cursor(receipt_dir: Path | str, cursor: Mapping[str, int]) -> None:
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
-    dir_fd = os.open(directory, os.O_RDONLY)
+    _fsync_directory(directory)
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Make the rename durable where the platform allows it (POSIX). Windows refuses to open a directory, and
+    the rename itself is already the atomic step, so this is best effort -- the same posture as the SDK writer."""
+    try:
+        dir_fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
     try:
         os.fsync(dir_fd)
+    except OSError:
+        pass
     finally:
         os.close(dir_fd)
 

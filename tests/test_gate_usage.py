@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,22 @@ def test_cursor_round_trips_atomically(tmp_path):
     assert [p.name for p in tmp_path.iterdir()] == [CURSOR_FILENAME]
 
 
+def test_cursor_saves_where_directories_cannot_be_opened(tmp_path, monkeypatch):
+    # Windows refuses os.open() on a directory (PermissionError); the cursor must still save.
+    from shield import gate_usage
+
+    real_open = os.open
+
+    def refuse_directories(path, flags, *args, **kwargs):
+        if Path(path).is_dir():
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(gate_usage.os, "open", refuse_directories)
+    save_cursor(tmp_path, {"a": 1})
+    assert load_cursor(tmp_path) == {"a": 1}
+
+
 def test_a_corrupt_cursor_is_an_error(tmp_path):
     (tmp_path / CURSOR_FILENAME).write_text("{not json")
     with pytest.raises(UsageReportError):
@@ -291,10 +308,29 @@ def test_the_cli_dry_run_prints_pending_reports_without_network(tmp_path, capsys
 
     gate = Gate(tmp_path / "r", every=2)
     gate.decide(3)
+    assert main(["usage-report", "--receipt-dir", str(gate.dir), "--receipt-signer", gate.key, "--dry-run"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert [(r["seq_from"], r["seq_to"]) for r in printed] == [(0, 1)]
+    assert not (gate.dir / CURSOR_FILENAME).exists()
+
+
+def test_the_cli_refuses_a_log_from_a_different_signer(tmp_path, capsys):
+    from shield.cli import main
+
+    gate = Gate(tmp_path / "r", every=2)
+    gate.decide(2)
+    other = public_key_multibase(Keypair.generate().public_bytes())
+    assert main(["usage-report", "--receipt-dir", str(gate.dir), "--receipt-signer", other, "--dry-run"]) == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the SDK refuses private keys without POSIX 0600 permissions")
+def test_the_cli_can_derive_the_signer_from_the_private_key(tmp_path, capsys):
+    from shield.cli import main
+
+    gate = Gate(tmp_path / "r", every=2)
+    gate.decide(2)
     key = tmp_path / "key.pem"
     key.write_bytes(gate.signer.private_pem())
     key.chmod(0o600)
     assert main(["usage-report", "--receipt-dir", str(gate.dir), "--receipt-key", str(key), "--dry-run"]) == 0
-    printed = json.loads(capsys.readouterr().out)
-    assert [(r["seq_from"], r["seq_to"]) for r in printed] == [(0, 1)]
-    assert not (gate.dir / CURSOR_FILENAME).exists()
+    assert len(json.loads(capsys.readouterr().out)) == 1
