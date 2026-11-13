@@ -181,6 +181,22 @@ def test_cursor_round_trips_atomically(tmp_path):
     assert [p.name for p in tmp_path.iterdir()] == [CURSOR_FILENAME]
 
 
+def test_cursor_saves_where_directories_cannot_be_opened(tmp_path, monkeypatch):
+    # Windows refuses os.open() on a directory (PermissionError); the cursor must still save.
+    import shield.gate_usage as gate_usage
+
+    real_open = os.open
+
+    def refuse_directories(path, flags, *args, **kwargs):
+        if Path(path).is_dir():
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(gate_usage.os, "open", refuse_directories)
+    save_cursor(tmp_path, {"a": 1})
+    assert load_cursor(tmp_path) == {"a": 1}
+
+
 def test_a_corrupt_cursor_is_an_error(tmp_path):
     (tmp_path / CURSOR_FILENAME).write_text("{not json")
     with pytest.raises(UsageReportError):
