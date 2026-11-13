@@ -547,6 +547,9 @@ def handle_stripe_webhook(h: Any, billing: ShieldBilling) -> None:
     except ValueError:
         length = -1
     if length <= 0 or length > MAX_WEBHOOK_BYTES:
+        # The body is deliberately left unread, so this connection must not be reused: its bytes would be
+        # parsed as the next request.
+        h.close_connection = True
         h._send_error(HTTPStatus.BAD_REQUEST, "invalid webhook body")
         return
     body = h.rfile.read(length)

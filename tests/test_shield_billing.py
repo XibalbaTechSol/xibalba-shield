@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import json
 import threading
 import time
@@ -473,11 +474,23 @@ def test_checkout_needs_at_least_one_billable_device(backend):
 
 
 def test_an_oversized_or_empty_webhook_body_is_refused_before_verification(backend):
-    # Correctly signed, so only the size check can refuse it.
-    oversized = _signed({**_event("evt_big"), "padding": "x" * (1 << 20)})
-    for body, headers in ((b"", {"Stripe-Signature": "t=1,v1=0"}), oversized):
-        status, reply = _call(f"{backend.url}/api/shield/stripe/webhook", raw=body, token=None, headers=headers)
-        assert status == 400 and reply["error"] == "invalid webhook body"
+    status, reply = _call(f"{backend.url}/api/shield/stripe/webhook", raw=b"", token=None,
+                          headers={"Stripe-Signature": "t=1,v1=0"})
+    assert status == 400 and reply["error"] == "invalid webhook body"
+    # Declared over the cap but with a tiny, correctly signed body: only the size check can refuse it.
+    # (Streaming a real 1 MiB body races the server's early close and fails with a broken pipe.)
+    body, headers = _signed(_event("evt_big"))
+    host, port = backend.url.removeprefix("http://").split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=5)
+    try:
+        conn.putrequest("POST", "/api/shield/stripe/webhook")
+        conn.putheader("Content-Length", str((1 << 20) + 1))
+        conn.putheader("Stripe-Signature", headers["Stripe-Signature"])
+        conn.endheaders(body)
+        response = conn.getresponse()
+        assert response.status == 400 and json.loads(response.read())["error"] == "invalid webhook body"
+    finally:
+        conn.close()
     assert backend.stripe.calls == []
 
 
