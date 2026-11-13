@@ -457,11 +457,19 @@ def test_a_plan_change_that_cannot_be_made_durable_asks_stripe_to_redeliver(back
     _checkout(backend)
     backend.stripe.subscription(status="active")
     backend.store.billing._durable = lambda: False
-    status, _ = _webhook(backend, _event("evt_1"))
-    assert status == 503
+    assert _webhook(backend, _event("evt_1"))[0] == 503
+    # The redelivery is a local duplicate, but it is still not durable: Stripe must keep retrying.
+    assert _webhook(backend, _event("evt_1"))[0] == 503
     backend.store.billing._durable = lambda: True
-    assert _webhook(backend, _event("evt_1"))[1]["duplicate"] is True  # already applied locally
+    assert _webhook(backend, _event("evt_1"))[1]["duplicate"] is True
     assert _plan(backend)["plan_id"] == "pro"
+
+
+def test_checkout_needs_at_least_one_billable_device(backend):
+    _enroll(backend, "demo", synthetic=True)
+    status, body = _checkout(backend)
+    assert status == 409 and "Enroll a device" in body["error"]
+    assert backend.stripe.of("/checkout/sessions") == []
 
 
 def test_an_oversized_or_empty_webhook_body_is_refused_before_verification(backend):

@@ -254,6 +254,9 @@ class ShieldBilling:
         if current["plan_id"] != FREE and current["status"] != STATUS_CANCELED:
             raise BillingRefused(HTTPStatus.CONFLICT, "Manage the existing subscription through the billing portal")
         seats = self.seat_count(tenant_id)
+        if seats == 0:
+            # Billing a floor of one seat would be prorated straight back to zero by the first sync.
+            raise BillingRefused(HTTPStatus.CONFLICT, "Enroll a device before choosing a paid plan")
         if plan.max_devices is not None and seats > plan.max_devices:
             raise BillingRefused(HTTPStatus.CONFLICT, f"The {plan.name} plan covers at most {plan.max_devices} devices")
 
@@ -300,7 +303,7 @@ class ShieldBilling:
             "customer": record["customer_id"],
             "client_reference_id": tenant_id,
             "line_items[0][price]": prices.device,
-            "line_items[0][quantity]": max(1, seats),
+            "line_items[0][quantity]": seats,
             # A metered price takes no quantity: Stripe bills what the meter reports.
             "line_items[1][price]": prices.overage,
             # Card on file even during a trial, so the subscription continues without a second step.
@@ -350,7 +353,9 @@ class ShieldBilling:
         cfg, gw = self._ready()
         event = gw.verify_event(body, signature)
         result = self.apply_event(event, cfg=cfg, gw=gw)
-        if "plan_id" in result and not self._durable():
+        # A duplicate may be the redelivery of a change whose checkpoint failed: acknowledging it before
+        # the state is durable would let Stripe stop retrying while a restart could still lose the plan.
+        if (result.get("plan_id") or result.get("duplicate")) and not self._durable():
             raise BillingUnavailable("Plan change is not yet durable; Stripe will redeliver")
         return result
 
