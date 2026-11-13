@@ -39,6 +39,7 @@ from integrity_sdk.agent_identity import resolve_agent_identities
 
 from ..config import ConfigError
 from .store import ShieldStore
+from .usage_ledger import UsageRejected
 from . import remediation
 from .supabase_persistence import (
     checkpoint_database,
@@ -1210,6 +1211,16 @@ def make_handler(
                     return
                 self._send_json({"requests": store.list_settings_change_requests(tenant_id=tenant_id)})
                 return
+            if parsed.path == "/api/shield/usage":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                period = query.get("period", [time.strftime("%Y-%m", time.gmtime())])[0]
+                try:
+                    self._send_json(store.usage.summary(tenant_id=tenant_id, period=period))
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
             if parsed.path == "/api/shield/device-settings":
                 tenant_id = query.get("tenant_id", [""])[0]
                 device_id = query.get("device_id", [""])[0]
@@ -1349,6 +1360,20 @@ def make_handler(
                 body = self._read_json()
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+
+            if parsed.path == "/api/shield/usage":
+                # Design §3: the device's checkpoint-bound usage report. Authenticated with the ids
+                # in the body, and the ledger then requires the body to speak for that device only.
+                tenant_id, device_id = str(body.get("tenant_id") or ""), str(body.get("device_id") or "")
+                if not self._require_device_token(tenant_id=tenant_id, device_id=device_id):
+                    return
+                try:
+                    status, payload = store.usage.record(body, tenant_id=tenant_id, device_id=device_id)
+                except UsageRejected as exc:
+                    self._send_error(exc.status, str(exc))
+                    return
+                self._send_json(payload, status=status)
                 return
 
             if parsed.path == "/api/shield/nurse-rachel/evaluate":

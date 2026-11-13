@@ -277,6 +277,30 @@ The same settings can live in the device config as a `gate_zone` object; a flag 
 matching field. Not built: reading the Oracle's AIS (L1) as a provider; the `ais` provider uses only
 local evidence.
 
+### Usage reports and the backend ledger (`shield usage-report`)
+
+Billing counts receipts, not requests, and never sits in the decision path. `shield usage-report`
+reads the receipt log, verifies it, and sends one report per signed checkpoint to
+`POST /api/shield/usage`: the range `[seq_from, seq_to]`, the counts `billable` /
+`excluded_mask` / `excluded_fault` (the same exclusions as the AIS score), and the checkpoint
+itself. The cursor (`usage_cursor.json`) advances only when the backend answers 2xx.
+
+The backend (`shield/backend/usage_ledger.py`) accepts a report only if:
+
+- the checkpoint verifies, and its signer is the key the device is **currently** registered with
+  (`did:integrity:sha256(pubkey)` equals `devices.integrity_agent_id`). A device with no registered
+  key gets 403, and so does a log signed by a key the device no longer holds;
+- `checkpoint.log_id` matches, `checkpoint.tree_size == seq_to + 1`, and the counts sum to the range;
+- the body names the device that authenticated.
+
+The ledger, `usage_reports`, is keyed by `(tenant_id, log_id, seq_from)`. An identical replay is a
+200 no-op. A different body for a stored range, or a range overlapping a stored one, is a 409. Gaps
+are computed when read and never filled in. A reinstall is a new `log_id`, so it adds to the total.
+Usage counts toward the month in which the backend **received** it. `GET /api/shield/usage?tenant_id=…&period=YYYY-MM`
+(admin) returns per-device totals with synthetic devices left out, and every log's gaps. The split
+between classes is self-reported. The checkpoint fixes the total and the content but not the
+split; a later audit spot-checks it (design §3.4).
+
 ## Related pages
 
 - [Event Router](event-router.md) — where `guardrail_hooks` is consumed, and the CLI wiring gap

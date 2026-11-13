@@ -454,6 +454,16 @@
 - New gate flags `--zone-entitlement-file` and `--zone-entitlement-key`, with config fields
   `gate_zone.entitlement_file` and `gate_zone.entitlement_keys`. Updated `concepts/guardrail-hooks.md`.
 
+## [2026-11-13] code | Backend usage ledger for `shield usage-report`
+
+- New `shield/backend/usage_ledger.py` and `POST /api/shield/usage`. A report is accepted only
+  when its checkpoint verifies under the device's registered key, the counts sum to the range, and
+  `tree_size == seq_to + 1`.
+- Ledger `usage_reports`, keyed by `(tenant_id, log_id, seq_from)`. A replay is a no-op. A changed
+  body or an overlapping range is a 409. Gaps are worked out when read.
+- `GET /api/shield/usage` (admin) returns the month's totals per device, plus every log's gaps.
+- Updated `concepts/guardrail-hooks.md`.
+
 ## [2026-11-13] code | Plans catalog, tenant plans, entitlement issuing and fetch
 
 - New `shield/backend/plans.py` (`ShieldPlan` and an env-loaded catalog that fails closed) and
