@@ -712,10 +712,10 @@ provided, checks `/v1/audit-log` for the BCC intercept audit row. A live smoke o
 verified one Shield ADR sample against `http://127.0.0.1:8000` and Oracle audit readback at
 `http://127.0.0.1:8080`.
 
-Run one-time registration and readback when the Integrity chain/oracle environment is available:
+Registration with the Oracle is off-chain and gas-free. `shield run` registers the exporter's DID on first start when `ORACLE_URL` is set (stamp: `<did_home>/<agent>/oracle_registered.json`; failures are logged and retried next start, never blocking the sensor). To register and read back manually:
 
 ```bash
-FUNDER_PRIVATE_KEY=... INTEGRITY_WALLET_PASSWORD=... RPC_URL=... python3 scripts/register_with_oracle.py
+ORACLE_URL=... python3 scripts/register_with_oracle.py
 RPC_URL=... DEPLOYMENTS_FILE=... python3 scripts/verify_oracle_registration.py
 ```
 
