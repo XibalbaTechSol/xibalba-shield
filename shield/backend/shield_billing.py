@@ -235,6 +235,23 @@ def _epoch(iso: str) -> float:
     return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
 
 
+def _is_epoch(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def overage_for_period(*, seats: int, billable: int, included_per_device: int, in_trial: bool) -> tuple[int, int]:
+    """(included decisions, overage decisions) for a period. The period close bills the second number and
+    the usage page shows it accruing, so both call this one function."""
+    included = seats * included_per_device
+    return included, 0 if in_trial else max(0, billable - included)
+
+
+def _month_bounds(now: datetime) -> tuple[str, str]:
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1)
+    return start.strftime("%Y-%m-%dT%H:%M:%SZ"), end.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class ShieldBilling:
     """Checkout, portal, webhook and seat sync over the ShieldStore connection."""
 
@@ -411,6 +428,50 @@ class ShieldBilling:
             "billed_seats": record.get("seat_quantity"),
         }
 
+    def usage(self, tenant_id: str, *, now: Optional[datetime] = None) -> dict[str, Any]:
+        """Usage in the tenant's current billing period, counted exactly as the period close will count it.
+
+        A paid tenant's period is the subscription's own (anniversary-aligned, from the webhook), never a
+        calendar month: a calendar month would not match the invoice. A paid tenant whose period is not yet
+        known gets ``period: None`` rather than a guess. Free tenants have no invoice and use the UTC
+        calendar month. ``overage_decisions`` is what the close would send if the period ended now; seats
+        only grow during a period (see :meth:`period_seats`), so it can only fall as devices are added.
+        """
+        plan_row = self._plans.get_tenant_plan(tenant_id)
+        plan = self._catalog().get(plan_row["plan_id"])
+        as_of = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        result: dict[str, Any] = {"tenant_id": tenant_id, "plan_id": plan_row["plan_id"],
+                                  "status": plan_row["status"], "as_of": as_of.strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if plan is None:
+            return {**result, "period": None, "reason": "plan is not in the catalog"}
+        record = self.customer(tenant_id) or {}
+        if plan.paid:
+            start, end = plan_row.get("period_start"), plan_row.get("period_end")
+            if not start or not end:
+                return {**result, "period": None, "reason": "billing period not yet known"}
+            basis = "subscription"
+            fallback = record.get("seat_quantity")
+            seats = (self.period_seats(record["subscription_id"], start, end,
+                                       fallback=fallback if fallback is not None else self.seat_count(tenant_id))
+                     if record.get("subscription_id") else self.seat_count(tenant_id))
+            trial_end = plan_row.get("trial_end")
+            in_trial = bool(trial_end) and end <= trial_end
+        else:
+            start, end = _month_bounds(as_of)
+            basis, seats, in_trial = "calendar_month", self.seat_count(tenant_id), False
+        devices = self.period_counts(tenant_id, start, end)
+        totals = {name: sum(d[name] for d in devices) for name in ("billable", "excluded_mask", "excluded_fault")}
+        included, overage = overage_for_period(seats=seats, billable=totals["billable"],
+                                               included_per_device=plan.included_decisions_per_device,
+                                               in_trial=in_trial)
+        # Stripe's overage price divides by 1,000 and rounds down (transform_quantity), so whole units only.
+        cents = (overage // 1000) * plan.overage_cents_per_1k if plan.paid and plan.overage_cents_per_1k else 0
+        return {**result, "period": {"start": start, "end": end, "basis": basis}, "in_trial": in_trial,
+                "seats": seats, "included_per_device": plan.included_decisions_per_device, "included": included,
+                "totals": totals, "remaining": max(0, included - totals["billable"]),
+                "overage_decisions": overage, "overage_accrued_cents": cents,
+                "overage_cents_per_1k": plan.overage_cents_per_1k, "devices": devices}
+
     # -- webhook ------------------------------------------------------------------------------
 
     def handle_webhook(self, body: bytes, signature: str) -> dict[str, Any]:
@@ -460,14 +521,17 @@ class ShieldBilling:
                 return {"received": True, "ignored": True}
 
         if ended:
-            plan_id, status, period_end, device_item, overage_item = FREE, STATUS_ACTIVE, None, None, None
+            plan_id, status, device_item, overage_item = FREE, STATUS_ACTIVE, None, None
+            period_start = period_end = None
         else:
             if stripe_status not in _STATUS_MAP:
                 raise BillingRefused(HTTPStatus.BAD_REQUEST, "Unsupported subscription status")
-            plan_id, device_item, overage_item, period_end = self._identify(sub, cfg=cfg)
+            plan_id, device_item, overage_item, period_start, period_end = self._identify(sub, cfg=cfg)
             status = _STATUS_MAP[stripe_status]
 
         had_trial = sub.get("trial_end") is not None or stripe_status == "trialing"
+        trial_end = sub.get("trial_end")
+        trial_end_iso = _iso(trial_end) if not ended and _is_epoch(trial_end) else None
         # One transaction: the event is marked processed only together with the plan it produced, so a
         # crash in between leaves both undone and Stripe's retry applies them.
         with self._conn:
@@ -484,11 +548,13 @@ class ShieldBilling:
             if device_item:
                 self._observe_seats(tenant_id, sub_id, device_item.get("quantity"))
             # Last statement: its own `with` commits this whole transaction, or rolls all of it back.
-            self._plans.set_tenant_plan(tenant_id=tenant_id, plan_id=plan_id, status=status, period_end=period_end)
+            self._plans.set_tenant_plan(tenant_id=tenant_id, plan_id=plan_id, status=status, period_end=period_end,
+                                        period_start=period_start, trial_end=trial_end_iso)
         return {"received": True, "plan_id": plan_id, "status": status, "tenant_id": tenant_id}
 
-    def _identify(self, sub: Mapping[str, Any], *, cfg: BillingConfig) -> tuple[str, dict, dict, str]:
-        """(plan_id, device item, overage item, period_end ISO) after checking the items against the catalog."""
+    def _identify(self, sub: Mapping[str, Any], *, cfg: BillingConfig) -> tuple[str, dict, dict, Optional[str], str]:
+        """(plan_id, device item, overage item, period_start ISO or None, period_end ISO) after checking the
+        items against the catalog."""
         items = (sub.get("items") or {}).get("data") or []
         if len(items) != 2:
             raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription must contain the device and overage prices")
@@ -507,7 +573,9 @@ class ShieldBilling:
                     raise BillingRefused(HTTPStatus.BAD_REQUEST, str(exc)) from exc
                 # Basil moved the billing period onto the subscription items.
                 period_end = device_item.get("current_period_end", sub.get("current_period_end"))
-                return plan_id, dict(device_item), dict(overage_item), _iso(period_end)
+                period_start = device_item.get("current_period_start", sub.get("current_period_start"))
+                return (plan_id, dict(device_item), dict(overage_item),
+                        None if period_start is None else _iso(period_start), _iso(period_end))
         raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription prices do not match the configured Shield catalog")
 
     # -- period close: overage (phase 3d) -----------------------------------------------------
@@ -557,15 +625,21 @@ class ShieldBilling:
         known = [q for q in (in_force["quantity"] if in_force else None, during) if q is not None]
         return max(known) if known else fallback
 
-    def period_billable(self, tenant_id: str, start: str, end: str) -> int:
-        """Billable decisions received in [start, end) from non-synthetic devices (design §4.3). A report
-        received after the period closes counts toward the period in which it arrived."""
-        row = self._conn.execute(
-            "SELECT COALESCE(SUM(u.billable), 0) FROM usage_reports u "
+    def period_counts(self, tenant_id: str, start: str, end: str) -> list[dict[str, Any]]:
+        """Per-device counts received in [start, end) from non-synthetic devices (design §4.3). A report
+        received after the period closes counts toward the period in which it arrived. The close and the
+        usage page both read this query, so the page cannot show a number the invoice will not bill."""
+        rows = self._conn.execute(
+            "SELECT u.device_id AS device_id, SUM(u.billable) AS billable, SUM(u.excluded_mask) AS excluded_mask, "
+            "SUM(u.excluded_fault) AS excluded_fault, COUNT(*) AS reports FROM usage_reports u "
             "JOIN devices d ON d.tenant_id=u.tenant_id AND d.device_id=u.device_id "
-            "WHERE u.tenant_id=? AND d.synthetic=0 AND u.received_at>=? AND u.received_at<?",
-            (tenant_id, start, end)).fetchone()
-        return int(row[0])
+            "WHERE u.tenant_id=? AND d.synthetic=0 AND u.received_at>=? AND u.received_at<? "
+            "GROUP BY u.device_id ORDER BY u.device_id",
+            (tenant_id, start, end)).fetchall()
+        return [{key: (row[key] if key == "device_id" else int(row[key])) for key in row.keys()} for row in rows]
+
+    def period_billable(self, tenant_id: str, start: str, end: str) -> int:
+        return sum(device["billable"] for device in self.period_counts(tenant_id, start, end))
 
     def _close_period(self, event_id: str, obj: Mapping[str, Any], record: Any, *, cfg: BillingConfig,
                       gw: Any) -> dict[str, Any]:
@@ -601,15 +675,24 @@ class ShieldBilling:
             sub = gw.request("GET", "/subscriptions/" + sub_id)
             if sub.get("customer") != customer_id:
                 raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription customer does not match the tenant")
-            plan_id, device_item, _overage_item, _period_end = self._identify(sub, cfg=cfg)
+            plan_id, device_item, _overage_item, next_start, next_end = self._identify(sub, cfg=cfg)
             plan = self._catalog()[plan_id]
             seats = self.period_seats(sub_id, period_start, period_end, fallback=int(device_item.get("quantity") or 0))
             billable = self.period_billable(tenant_id, period_start, period_end)
-            included = seats * plan.included_decisions_per_device
             trial_end = sub.get("trial_end")
-            in_trial = isinstance(trial_end, int) and not isinstance(trial_end, bool) and end <= trial_end
-            value = 0 if in_trial else max(0, billable - included)
+            included, value = overage_for_period(
+                seats=seats, billable=billable, included_per_device=plan.included_decisions_per_device,
+                in_trial=_is_epoch(trial_end) and end <= trial_end)
             with self._conn:
+                if next_start is not None:
+                    # Stripe moves the subscription onto its next period before it creates the cycle invoice.
+                    # `customer.subscription.updated` normally carries that too; this keeps the usage page
+                    # on the right period if that event is late or lost. The SQL guard never moves a stored
+                    # period backwards, so a late invoice for an older period changes nothing.
+                    self._conn.execute(
+                        "UPDATE tenant_plans SET period_start=?, period_end=?, updated_at=? WHERE tenant_id=? "
+                        "AND plan_id=? AND (period_start IS NULL OR period_start<?)",
+                        (next_start, next_end, _now(), tenant_id, plan_id, next_start))
                 self._conn.execute(
                     "INSERT OR IGNORE INTO meter_submissions (tenant_id, period_start, period_end, plan_id, seats, "
                     "billable, included, value, identifier, invoice_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -720,6 +803,14 @@ def handle_billing_get(h: Any, billing: ShieldBilling, query: Mapping[str, list[
     h._send_json(billing.status(tenant_id))
 
 
+def handle_billing_usage_get(h: Any, billing: ShieldBilling, ledger: Any, query: Mapping[str, list[str]]) -> None:
+    tenant_id = h._tenant_from_query_or_error(query)
+    if tenant_id is None or not h._require_admin(tenant_id=tenant_id):
+        return
+    # Gaps are holes in a log's whole history (a fact about the chain, not about one period).
+    h._send_json({**billing.usage(tenant_id), "gaps": ledger.gaps(tenant_id=tenant_id)})
+
+
 def handle_billing_post(h: Any, billing: ShieldBilling, path: str, body: Mapping[str, Any], base_url: str) -> None:
     tenant_id = str(body.get("tenant_id") or "")
     if not tenant_id:
@@ -765,5 +856,5 @@ def handle_stripe_webhook(h: Any, billing: ShieldBilling) -> None:
 
 
 __all__ = ["BILLING_POST_ROUTES", "BillingConfig", "BillingRefused", "PlanPrices", "ShieldBilling", "WEBHOOK_ROUTE",
-           "handle_billing_get", "handle_billing_post", "handle_stripe_webhook", "supabase_durability",
+           "handle_billing_get", "handle_billing_post", "handle_billing_usage_get", "overage_for_period", "handle_stripe_webhook", "supabase_durability",
            "validate_device_price", "validate_overage_price"]
