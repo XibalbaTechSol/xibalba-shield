@@ -232,12 +232,10 @@ DEPLOYMENTS_FILE=/home/xibalba/Projects/integrity-core/deployments.local.json \
 .venv/bin/python scripts/verify_oracle_registration.py
 ```
 
-For a local Anvil-only registration/readback closure when `oracle-backend` is not running:
+Registration is off-chain and gas-free. `shield run` registers the exporter's DID with the Oracle on first start when `ORACLE_URL` is set, and records `<did_home>/<agent>/oracle_registered.json`; a failure is logged at WARNING and retried on the next start. To register manually without starting the sensor (no funder key or wallet password needed):
 
 ```bash
-FUNDER_PRIVATE_KEY=<funded-local-anvil-private-key> \
-INTEGRITY_WALLET_PASSWORD="$(cat /home/xibalba/.integrity/wallet/xibalba-shield/WALLET_PASSWORD.txt)" \
-.venv/bin/python scripts/register_with_oracle.py --skip-oracle-registration
+.venv/bin/python scripts/register_with_oracle.py --oracle-url "$ORACLE_URL"
 .venv/bin/python scripts/verify_oracle_registration.py
 ```
 

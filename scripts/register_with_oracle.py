@@ -1,40 +1,20 @@
 #!/usr/bin/env python3
 """
-One-time registration of the Shield exporter's DID with the oracle (spec §14.1,
-docs/ENTERPRISE_ADOPTION.md Lever 7's documented remaining step).
+Register the Shield exporter's DID with the Integrity Oracle, off-chain (gas-free).
 
-Not a compose init container on purpose: `integrity_sdk.registration.register_agent` funds a
-fresh EVM wallet from `FUNDER_PRIVATE_KEY`, deploys/anchors on-chain state, and independently
-re-verifies the result against the oracle -- a secret-bearing, non-idempotent-cost operation
-that should run once, deliberately, not be retried silently on every `docker compose up`.
+`shield run` does this automatically on first start when ORACLE_URL is set
+(`IntegrityExporter.register_offchain_once`); this script is the manual equivalent for an
+operator who wants to register (or confirm registration) without starting the sensor.
 
-`agent_id="xibalba-shield"` must match the `--agent-label` the `shield` compose service's
-`shield run` invocation uses (shield/cli.py's `p_run` default) -- both resolve
-through `integrity_sdk.did.load_or_create_did()` to the same on-disk DID slot under
+It signs a challenge with the exporter's existing Ed25519 key and POSTs it to the Oracle's
+`/v1/agent/register/offchain`. No chain state is touched: no funder key, no wallet password,
+no contract deployment. Registration is idempotent, so re-running is safe.
+
+`--agent-id` must match the `--agent-label` `shield run` uses (default "xibalba-shield"); both
+resolve through `integrity_sdk.did.load_or_create_did()` to the same on-disk DID slot under
 `INTEGRITY_DID_HOME`, so this registers the exporter's *existing* identity, not a fresh one.
 
-Run from inside the running `shield` container so it shares that identity volume and can reach
-`bcc-middleware`/`oracle-backend` by compose DNS name with no extra plumbing. Needs both
-`FUNDER_PRIVATE_KEY` (funds the agent's new EVM wallet) and `INTEGRITY_WALLET_PASSWORD`
-(encrypts/unlocks that wallet's keystore -- the same two env vars `make demo` already requires,
-per this repo's own README/CLAUDE.md):
-
-    docker compose exec \\
-        -e FUNDER_PRIVATE_KEY=$FUNDER_PRIVATE_KEY \\
-        -e INTEGRITY_WALLET_PASSWORD=$INTEGRITY_WALLET_PASSWORD \\
-        shield python scripts/register_with_oracle.py
-
-Re-running this script is safe ONLY once a prior run has fully completed: register_agent's
-idempotency check is a live XibalbaAgentRegistry.resolveDID lookup, which only starts returning
-a hit after `registerPrimitives` (the final on-chain step) succeeds. Re-running after a run that
-failed partway (e.g. mid-way through deploy_sovereign_agent/deploy_state_anchor/
-grant_anchor_role/anchor_genesis_root) is NOT short-circuited -- resolve_did still finds
-nothing, so the script deploys a brand-new SovereignAgent/StateAnchor pair from scratch and
-orphans whatever the failed run already put on-chain (real testnet gas, real abandoned
-contracts, observed directly on 2026-08-14 while diagnosing a nonce race -- see
-PRODUCTION_GAPS.md). Check the failed run's own error message for any contract addresses it
-reports before retrying; there is currently no automated cleanup or resume-from-partial-state
-path for those orphans.
+    python scripts/register_with_oracle.py --oracle-url https://oracle.example
 """
 
 from __future__ import annotations
@@ -47,80 +27,52 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
-SDK_HINTS = [
-    Path(os.getenv("INTEGRITY_SDK_PATH", "")) if os.getenv("INTEGRITY_SDK_PATH") else None,
-    Path("/home/xibalba/Projects/integrity-core/integrity-sdk"),
-]
-for sdk_path in SDK_HINTS:
-    if sdk_path and (sdk_path / "integrity_sdk" / "registration.py").exists():
-        sys.path.insert(0, str(sdk_path))
-        break
 
 AGENT_ID = "xibalba-shield"
-# Oracle-local XNS handle claimed for this agent (integrity-oracle migration 0022).
-# integrity_sdk.register_agent() requires one; "xibalba.shield" is the handle already
-# claimed for this device's Shield agent, so the default re-uses it rather than minting a new one.
+# Oracle-local XNS handle already claimed for this device's Shield agent.
 XNS_HANDLE = "xibalba.shield"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts/register_with_oracle.py")
     parser.add_argument("--agent-id", default=AGENT_ID)
-    parser.add_argument("--rpc-url", default=os.getenv("RPC_URL", "http://localhost:8545"))
-    parser.add_argument(
-        "--deployments-file",
-        default=os.getenv("DEPLOYMENTS_FILE", "/home/xibalba/Projects/integrity-core/deployments.local.json"),
-    )
     parser.add_argument("--oracle-url", default=os.getenv("ORACLE_URL", "http://oracle-backend:8080"))
     parser.add_argument(
         "--handle",
         default=os.getenv("SHIELD_XNS_HANDLE", XNS_HANDLE),
-        help="unique Oracle-local XNS handle for this agent (required by integrity-sdk registration)",
-    )
-    parser.add_argument(
-        "--skip-oracle-registration",
-        action="store_true",
-        default=os.getenv("SHIELD_SKIP_ORACLE_REGISTRATION", "").lower() in {"1", "true", "yes"},
-        help="perform on-chain registration only; use for local Anvil when oracle-backend is not running",
+        help="unique Oracle-local XNS handle for this agent",
     )
     args = parser.parse_args(argv)
 
-    missing = [
-        var for var in ("FUNDER_PRIVATE_KEY", "INTEGRITY_WALLET_PASSWORD")
-        if not os.getenv(var)
-    ]
-    if missing:
-        print(f"{', '.join(missing)} not set — both are required to fund/unlock the agent's wallet", file=sys.stderr)
-        return 1
-
     try:
-        from integrity_sdk.registration import RegistrationError, register_agent
-    except ModuleNotFoundError as exc:
+        from integrity_sdk import did as sdk_did
+        from integrity_sdk.registration_offchain import OffchainRegistrationError, register_offchain
+    except ImportError as exc:
         print(
-            f"registration dependency missing: {exc.name}; install the full integrity-sdk runtime before live registration",
+            f"integrity-sdk lacks registration_offchain ({exc}); upgrade integrity-sdk",
             file=sys.stderr,
         )
         return 1
 
+    did, keypair, doc = sdk_did.load_or_create_did(args.agent_id)
     try:
-        registration = register_agent(
-            agent_id=args.agent_id,
-            handle=args.handle,
-            rpc_url=args.rpc_url,
-            deployments_file=args.deployments_file,
-            oracle_url=args.oracle_url,
-            skip_oracle_registration=args.skip_oracle_registration,
+        registration = register_offchain(
+            args.oracle_url, did, keypair, handle=args.handle, did_document=doc
         )
-    except RegistrationError as exc:
+    except OffchainRegistrationError as exc:
         print(f"registration failed: {exc}", file=sys.stderr)
         return 1
     except ValueError as exc:
-        # register_agent validates its arguments (handle format, compliance vertical) before
-        # touching the chain; surface that as a clean usage error, not a traceback.
         print(f"invalid registration arguments: {exc}", file=sys.stderr)
         return 2
 
-    print(json.dumps(registration.to_dict(), indent=2))
+    print(json.dumps({
+        "did": did,
+        "agent_id": registration.agent_id,
+        "verification_tier": registration.verification_tier,
+        "outcome": registration.outcome,
+        "handle": registration.handle,
+    }, indent=2))
     return 0
 
 
