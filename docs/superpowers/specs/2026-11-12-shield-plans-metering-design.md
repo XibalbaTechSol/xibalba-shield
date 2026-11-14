@@ -241,6 +241,24 @@ inside the gate's trust boundary and conflicts with the provenance/privacy posit
 
 Real numbers should come from shadow data: switch one real gate to `--zone-mode shadow --zone-provider ais` and measure gated decisions per device per month before setting allowances.
 
+**Measurement in progress (started 2026-11-14).** No gate-daemon was running anywhere before this. The installed `/opt` build also predates `--zone-provider`. So the measurement gate is a new user service on the operator's workstation, built from main as a frozen snapshot:
+- **Command:** `shield gate-daemon --enforcement-mode observe --zone-mode shadow --zone-provider ais --zone-ais-tier 1` with signed receipts.
+- **Behavior:** observe mode answers allow to everything and records the verdict it would have enforced.
+- **What feeds it:** Claude Code's PreToolUse hook, on the installer's matcher (`Bash|Write|Edit|MultiEdit|NotebookEdit`), under the agent's existing profile DID.
+- **Where counts live:** locally only. `shield usage-report --dry-run` reads them from the verified receipt log.
+- **Read-out:** about 2026-12-14. Gaps in the service's journal are reported with the numbers, because downtime biases the count low.
+- **Caveat:** one device and one agent. The read-out will say so when allowances are proposed.
+
+Until the read-out, the allowances above stay suggestions and free-tier pressure stays off (`SHIELD_FREE_TIER_PRESSURE` unset).
+
+**Sandbox checkout against the deployed service (2026-11-14).** A Pro checkout started from the Render console (tenant `tenant-a`, 2 seats, no gate reporting to it) went through Stripe-hosted Checkout in the operator's sandbox. Results:
+- The card was entered by the operator.
+- Three webhooks were answered 200.
+- The subscription is `trialing` with a licensed seat item (qty 2) and a metered overage item.
+- `GET /api/shield/billing/usage` reports `basis: subscription`, `in_trial: true`, and allowance 2 × 25,000. Its period equals the items' `current_period_start`/`current_period_end` to the second.
+
+Live Stripe stays deferred until prices are decided. The local harness that drove the test-clock period closes is `scripts/e2e_billing_sandbox.py`.
+
 ## 10. Risks and limits
 
 - **Self-reported split** (§3.4). Mitigated by checkpoint-bound totals and audit; not eliminated.

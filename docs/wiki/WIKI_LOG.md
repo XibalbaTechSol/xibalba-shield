@@ -1,5 +1,13 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-14] ops | Render sandbox checkout passed; allowance measurement started
+
+- A sandbox Pro checkout on the deployed service passed end to end. Webhooks were answered 200, and
+  `/api/shield/billing/usage` reports the subscription period exactly as Stripe's items do.
+- An observe-mode gate (`--zone-mode shadow --zone-provider ais`) now records real Claude Code tool
+  calls on one workstation. The allowances are read out around 2026-12-14. Design doc §9 has the details.
+- Added `scripts/e2e_billing_sandbox.py`, the test-clock harness behind the phase 3a–3d sandbox evidence.
+
 ## [2026-11-14] feat | Free-tier pressure on new enrollments (phase 3e)
 
 - `shield/backend/free_tier.py`: free tenants over their included decisions are emailed once per
