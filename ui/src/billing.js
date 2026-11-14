@@ -58,6 +58,26 @@ export function formatDate(iso) {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+export function formatDateTime(iso) {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
+}
+
+export function formatBasis(basis) {
+  if (basis === 'subscription') return 'Subscription Period'
+  if (basis === 'calendar_month') return 'Calendar Month (Free Tier)'
+  return basis ? String(basis) : 'Period'
+}
+
 /* The catalog may arrive as an array of plan objects or as an object keyed by plan id. A paid plan
  * the backend does not list is reported as not configured, so its checkout stays disabled. */
 export function planCatalog(status) {

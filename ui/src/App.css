@@ -10851,3 +10851,280 @@ h1, h2, h3, h4, b {
   }
 }
 
+/* ── Usage Metering and Ledger ─────────────────────────────────────── */
+.billing-usage-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.usage-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.usage-as-of {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--dim);
+}
+.usage-as-of svg {
+  width: 14px;
+  height: 14px;
+}
+.usage-period-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 24px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.period-card-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.period-dates {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.period-dates .period-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+.period-dates .period-range {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.period-formula {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.formula-part strong {
+  color: var(--text);
+}
+.formula-part.highlight strong {
+  color: var(--accent);
+}
+.formula-op {
+  color: var(--dim);
+  font-weight: bold;
+}
+.period-card-right .accrued-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.accrued-stat .stat-label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.accrued-stat .stat-val {
+  font-family: var(--font-heading);
+  font-size: 25px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+.accrued-stat .stat-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.usage-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.usage-metric-card {
+  padding: 16px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.usage-metric-card .metric-eyebrow {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.usage-metric-card .metric-value {
+  font-family: var(--font-heading);
+  font-size: 25px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.1;
+}
+.usage-metric-card .metric-value.highlight {
+  color: var(--accent);
+}
+.usage-metric-card .metric-value.overage-warn {
+  color: var(--amber);
+}
+.usage-metric-card .metric-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.usage-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.progress-fill.fill-overage {
+  background: var(--amber);
+}
+.usage-gaps-alert .gaps-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--red);
+}
+.usage-gaps-alert .gaps-list li {
+  margin-bottom: 4px;
+}
+.usage-gaps-alert .gaps-list code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+.usage-devices-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.table-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.table-header-row h4 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--text);
+}
+.devices-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+.usage-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.usage-table th {
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.usage-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--text);
+}
+.usage-table tr:last-child td {
+  border-bottom: none;
+}
+.device-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.device-id-cell .device-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--dim);
+}
+.device-id-cell code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.usage-table tr.row-has-gap td {
+  background: rgba(239, 68, 68, 0.05);
+}
+.device-id-cell .gap-flag {
+  display: inline-flex;
+  align-items: center;
+  color: var(--red);
+}
+.device-id-cell .gap-flag svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 1024px) {
+  .usage-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .usage-period-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .period-card-right .accrued-stat {
+    align-items: flex-start;
+  }
+}
+@media (max-width: 640px) {
+  .usage-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
