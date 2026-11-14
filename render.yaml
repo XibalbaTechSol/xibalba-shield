@@ -54,3 +54,8 @@ services:
         sync: false
       - key: SHIELD_STRIPE_PORTAL_CONFIGURATION
         sync: false
+      # Free-tier pressure (design §4.3) is off until "1": its §9 numbers await shadow-mode measurement.
+      - key: SHIELD_FREE_TIER_PRESSURE
+        sync: false
+      - key: SHIELD_PLAN_FREE_OVER_PERIODS
+        sync: false

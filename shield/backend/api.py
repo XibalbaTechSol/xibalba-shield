@@ -60,6 +60,7 @@ from ..edr import (
 from ..edr.simulated import SimulatedProvider
 from ..edr.connectors.crowdstrike import CrowdStrikeConnector
 from .entitlement_issuer import handle_entitlement_request
+from .free_tier import EnrollmentRefused
 from .shield_billing import (
     BILLING_POST_ROUTES, WEBHOOK_ROUTE, handle_billing_get, handle_billing_post, handle_billing_usage_get,
     handle_stripe_webhook,
@@ -1240,7 +1241,7 @@ def make_handler(
                 handle_billing_get(self, store.billing, query)
                 return
             if parsed.path == "/api/shield/billing/usage":
-                handle_billing_usage_get(self, store.billing, store.usage, query)
+                handle_billing_usage_get(self, store.billing, store.usage, query, free_tier=store.free_tier)
                 return
             if parsed.path == "/api/shield/detection-quality":
                 tenant_id = self._tenant_from_query_or_error(query)
@@ -1394,6 +1395,8 @@ def make_handler(
                     self._send_error(exc.status, str(exc))
                     return
                 self._send_json(payload, status=status)
+                # After the answer: the free-tier email (§4.3) never delays or fails a usage upload.
+                store.free_tier.notify_if_over(tenant_id)
                 return
 
             if parsed.path == "/api/shield/nurse-rachel/evaluate":
@@ -1822,8 +1825,8 @@ def make_handler(
                         tenant_id=tenant_id,
                         base_url=str(public_base_url or self._request_base_url()),
                     )
-                except ValueError as exc:
-                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                except ValueError as exc:  # EnrollmentRefused carries its own status (402)
+                    self._send_error(getattr(exc, "status", HTTPStatus.BAD_REQUEST), str(exc))
                     return
                 self._send_json(approval, status=HTTPStatus.OK)
                 return
@@ -1841,6 +1844,9 @@ def make_handler(
                     )
                 except KeyError as exc:
                     self._send_error(HTTPStatus.BAD_REQUEST, f"missing field {exc}")
+                    return
+                except EnrollmentRefused as exc:
+                    self._send_error(exc.status, str(exc))
                     return
                 except ConfigError as exc:
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
