@@ -1,5 +1,14 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-14] feat | Free-tier pressure on new enrollments (phase 3e)
+
+- `shield/backend/free_tier.py`: free tenants over their included decisions are emailed once per
+  month. After more than `free_over_periods` consecutive months over, new devices are refused (402).
+  The free device cap is now enforced at enrollment as well.
+- Decisions, uploads and enrolled devices are never affected. Re-enrollment always works.
+- Off unless `SHIELD_FREE_TIER_PRESSURE=1`. The status shows as `free_tier` on `/api/shield/billing/usage`.
+  Design doc §4.3 has the details.
+
 ## [2026-11-13] feat | Billing usage API aligned to the subscription period (phase 3e backend)
 
 - `GET /api/shield/billing/usage?tenant_id=` (tenant admin): usage in the tenant's current billing

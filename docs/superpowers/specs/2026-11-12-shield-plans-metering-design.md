@@ -127,6 +127,15 @@ class ShieldPlan:
 
 **Free tier when it goes over its included decisions.** Decisions keep flowing (§1). The tenant's usage page shows how far over it is, and the backend emails the owner once per period. If the tenant is over for more than `free_over_periods` (§9) consecutive periods, **new device enrollments** are refused, while existing devices keep working. This pressure is aimed only at enrollment, never at decisions.
 
+**As built (phase 3e, 2026-11-14, `shield/backend/free_tier.py`).**
+
+- **Off by default.** The refusals and the email run only with `SHIELD_FREE_TIER_PRESSURE=1`, because the §9 numbers they rest on are suggestions until shadow-mode measurement sets them. Either way, the status is computed and returned as `free_tier` on `GET /api/shield/billing/usage`.
+- **Periods.** A free period is a UTC calendar month. A month's allowance is `included_decisions_per_device × max(enrolled non-synthetic seats now, non-synthetic devices that reported that month)`. A reporter that has since been removed still counts. Free tenants have no seat history, so this errs toward the larger allowance, and removing a device never shrinks a past month. The page and the enforcement call the same `free_seats`.
+- **Streak.** The streak counts consecutive months over the allowance. It ends at the current month once that month is already over, otherwise at the previous month. New devices are refused when the streak exceeds `free_over_periods` (`SHIELD_PLAN_FREE_OVER_PERIODS`, default 2). Only months spent entirely on free count: the explicit free row the webhook writes on cancellation (and any later period close) marks the downgrade, so a former paid tenant starts clean.
+- **Device cap.** The free plan's `max_devices` is enforced for new devices too. Before this, it was checked only at checkout.
+- **Where it is enforced.** In `ShieldStore.enroll_device`, so the enroll API, device pairing and the demo seed all pass through it. Re-enrolling an existing device always works. A refusal answers **402**. Uploads, settings, entitlements and decisions are never touched.
+- **Email.** The admins are emailed once per month over, after a usage upload is answered. A `free_tier_notices(tenant_id, period)` row is claimed atomically before sending, so concurrent uploads send once. A failed send keeps its claim and is retried at most hourly. Nothing is claimed while SMTP is unconfigured.
+
 **Synthetic/demo devices** (`devices.synthetic = 1`) are never counted, either as seats or as usage.
 
 ## 5. Stripe mapping (API version `2025-06-30.basil`)

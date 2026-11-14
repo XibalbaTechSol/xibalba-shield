@@ -461,7 +461,7 @@ class ShieldBilling:
             basis, seats, in_trial = "calendar_month", None, False
         devices = self.period_counts(tenant_id, start, end)
         if seats is None:
-            seats = self.free_seats(tenant_id, devices)
+            seats = self.free_seats(tenant_id, start, end)
         totals = {name: sum(d[name] for d in devices) for name in ("billable", "excluded_mask", "excluded_fault")}
         included, overage = overage_for_period(seats=seats, billable=totals["billable"],
                                                included_per_device=plan.included_decisions_per_device,
@@ -640,12 +640,18 @@ class ShieldBilling:
             (tenant_id, start, end)).fetchall()
         return [{key: (row[key] if key == "device_id" else int(row[key])) for key in row.keys()} for row in rows]
 
-    def free_seats(self, tenant_id: str, devices: list[dict[str, Any]]) -> int:
+    def free_seats(self, tenant_id: str, start: str, end: str) -> int:
         """Seats for a free-tier allowance: enrolled non-synthetic devices now, or the devices that reported in
-        the period (``devices`` from :meth:`period_counts`), whichever is larger. Free tenants have no seat
-        history, so this errs toward the larger allowance. The usage page and free-tier enforcement both
-        call it, so the page never says "under" while enrollment is refused."""
-        return max(self.seat_count(tenant_id), len(devices))
+        [start, end), whichever is larger. Free tenants have no seat history, so this errs toward the larger
+        allowance: removing a device never shrinks a past month's allowance. A reporter that has since been
+        removed still counts; only devices marked synthetic are left out. The usage page and free-tier
+        enforcement both call it, so the page never says "under" while enrollment is refused."""
+        reporters = self._conn.execute(
+            "SELECT COUNT(DISTINCT u.device_id) FROM usage_reports u LEFT JOIN devices d "
+            "ON d.tenant_id=u.tenant_id AND d.device_id=u.device_id "
+            "WHERE u.tenant_id=? AND u.received_at>=? AND u.received_at<? AND COALESCE(d.synthetic, 0)=0",
+            (tenant_id, start, end)).fetchone()[0]
+        return max(self.seat_count(tenant_id), int(reporters))
 
     def period_billable(self, tenant_id: str, start: str, end: str) -> int:
         return sum(device["billable"] for device in self.period_counts(tenant_id, start, end))

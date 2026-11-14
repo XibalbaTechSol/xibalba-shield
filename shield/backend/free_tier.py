@@ -117,21 +117,22 @@ class FreeTierPressure:
     # -- status -------------------------------------------------------------------------------
 
     def _free_since(self, tenant_id: str, plan_row: Mapping[str, Any]) -> Optional[str]:
-        """When the tenant last left a paid plan (ISO), or None if it never had one."""
+        """When the tenant last left a paid plan (ISO), or None if it never had one.
+
+        A free tenant has a ``tenant_plans`` row only once a plan was written for it -- by the webhook when a
+        subscription ends (Stripe clears the subscription id, so ``billing_customers`` cannot tell), or by an
+        operator. Without a row it has been free from the start. A period closed later than the row (the final
+        cycle invoice) also counts as paid time."""
         if plan_row.get("updated_at") is None:
-            return None  # no plan row: free from the start
+            return None
         last_close = self._conn.execute(
             "SELECT MAX(period_end) FROM meter_submissions WHERE tenant_id=?", (tenant_id,)).fetchone()[0]
-        had_billing = self._conn.execute(
-            "SELECT 1 FROM billing_customers WHERE tenant_id=? AND (subscription_id IS NOT NULL OR trial_used_at "
-            "IS NOT NULL)", (tenant_id,)).fetchone()
-        marks = [m for m in (plan_row["updated_at"], last_close) if m]
-        return max(marks) if (had_billing or last_close) and marks else None
+        return max(m for m in (plan_row["updated_at"], last_close) if m)
 
     def month_usage(self, tenant_id: str, month: str, plan: Any) -> dict[str, Any]:
         start, end = month_bounds(month)
         devices = self._billing.period_counts(tenant_id, start, end)
-        seats = self._billing.free_seats(tenant_id, devices)
+        seats = self._billing.free_seats(tenant_id, start, end)
         billable = sum(d["billable"] for d in devices)
         included = seats * plan.included_decisions_per_device
         return {"month": month, "billable": billable, "seats": seats, "included": included, "over": billable > included}
