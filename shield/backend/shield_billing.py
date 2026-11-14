@@ -458,8 +458,10 @@ class ShieldBilling:
             in_trial = bool(trial_end) and end <= trial_end
         else:
             start, end = _month_bounds(as_of)
-            basis, seats, in_trial = "calendar_month", self.seat_count(tenant_id), False
+            basis, seats, in_trial = "calendar_month", None, False
         devices = self.period_counts(tenant_id, start, end)
+        if seats is None:
+            seats = self.free_seats(tenant_id, devices)
         totals = {name: sum(d[name] for d in devices) for name in ("billable", "excluded_mask", "excluded_fault")}
         included, overage = overage_for_period(seats=seats, billable=totals["billable"],
                                                included_per_device=plan.included_decisions_per_device,
@@ -638,6 +640,13 @@ class ShieldBilling:
             (tenant_id, start, end)).fetchall()
         return [{key: (row[key] if key == "device_id" else int(row[key])) for key in row.keys()} for row in rows]
 
+    def free_seats(self, tenant_id: str, devices: list[dict[str, Any]]) -> int:
+        """Seats for a free-tier allowance: enrolled non-synthetic devices now, or the devices that reported in
+        the period (``devices`` from :meth:`period_counts`), whichever is larger. Free tenants have no seat
+        history, so this errs toward the larger allowance. The usage page and free-tier enforcement both
+        call it, so the page never says "under" while enrollment is refused."""
+        return max(self.seat_count(tenant_id), len(devices))
+
     def period_billable(self, tenant_id: str, start: str, end: str) -> int:
         return sum(device["billable"] for device in self.period_counts(tenant_id, start, end))
 
@@ -803,12 +812,16 @@ def handle_billing_get(h: Any, billing: ShieldBilling, query: Mapping[str, list[
     h._send_json(billing.status(tenant_id))
 
 
-def handle_billing_usage_get(h: Any, billing: ShieldBilling, ledger: Any, query: Mapping[str, list[str]]) -> None:
+def handle_billing_usage_get(h: Any, billing: ShieldBilling, ledger: Any, query: Mapping[str, list[str]], *,
+                             free_tier: Any = None) -> None:
     tenant_id = h._tenant_from_query_or_error(query)
     if tenant_id is None or not h._require_admin(tenant_id=tenant_id):
         return
     # Gaps are holes in a log's whole history (a fact about the chain, not about one period).
-    h._send_json({**billing.usage(tenant_id), "gaps": ledger.gaps(tenant_id=tenant_id)})
+    result = {**billing.usage(tenant_id), "gaps": ledger.gaps(tenant_id=tenant_id)}
+    if free_tier is not None:
+        result["free_tier"] = free_tier.status(tenant_id)
+    h._send_json(result)
 
 
 def handle_billing_post(h: Any, billing: ShieldBilling, path: str, body: Mapping[str, Any], base_url: str) -> None:

@@ -19,6 +19,7 @@ from typing import Any
 
 from ..config.loader import ConfigError, PolicyBundle, load_policy_bundle
 from .entitlement_issuer import enrollment_gate_zone
+from .free_tier import FreeTierPressure
 from .plans_store import PlanStore
 from .response_store import ResponseLedgerStore
 from .usage_ledger import UsageLedgerStore
@@ -133,6 +134,8 @@ class ShieldStore:
         self.usage.init_schema()
         self.billing = ShieldBilling(self._conn, self.plans, durable=supabase_durability(self.db_path))
         self.billing.init_schema()
+        self.free_tier = FreeTierPressure(self._conn, self.plans, self.billing)
+        self.free_tier.init_schema()
 
     def close(self) -> None:
         self._conn.close()
@@ -637,6 +640,11 @@ class ShieldStore:
     ) -> Enrollment:
         self._validate_id("tenant_id", tenant_id)
         self._validate_id("device_id", device_id)
+        # Free-tier pressure (§4.3) refuses only *new* devices: re-enrolling an existing one always works.
+        # Checked here so every enrollment path (API, pairing, demo seed) goes through it.
+        if not self._conn.execute("SELECT 1 FROM devices WHERE tenant_id=? AND device_id=?",
+                                  (tenant_id, device_id)).fetchone():
+            self.free_tier.check_new_device(tenant_id)
         token = secrets.token_urlsafe(32)
         now = _now()
         with self._conn:
