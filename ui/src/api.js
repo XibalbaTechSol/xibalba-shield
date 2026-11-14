@@ -119,4 +119,28 @@ export class ShieldApi {
       tenant: false,
     })
   }
+  billingStatus() {
+    return this.request('/api/shield/billing')
+  }
+  billingCheckout(planId) {
+    return this.request('/api/shield/billing/checkout', {
+      method: 'POST',
+      body: { tenant_id: this.tenantId, plan_id: planId },
+      tenant: false,
+    })
+  }
+  billingPortal() {
+    return this.request('/api/shield/billing/portal', {
+      method: 'POST',
+      body: { tenant_id: this.tenantId },
+      tenant: false,
+    })
+  }
+  billingSync() {
+    return this.request('/api/shield/billing/sync', {
+      method: 'POST',
+      body: { tenant_id: this.tenantId },
+      tenant: false,
+    })
+  }
 }

@@ -14,12 +14,14 @@ import {
   Workflow,
   FileSearch,
   ShieldAlert,
+  CreditCard,
 } from 'lucide-react'
 import { ShieldApi } from '../api'
 import { Brand } from './Brand'
 import { Overview } from './Overview'
 import { ResourceView } from './ResourceView'
 import { readSession, writeSession } from '../storage'
+import { consumeBillingReturn } from '../billing'
 
 function sharedScopeFromUrl() {
   try {
@@ -55,6 +57,7 @@ const NAV = [
   ['commissioning', Layers, 'Commissioning', 'GOVERNANCE'],
   ['evidence', FileSearch, 'Evidence', 'ASSURANCE'],
   ['configuration', Sliders, 'Configuration', 'SYSTEM'],
+  ['billing', CreditCard, 'Billing', 'SYSTEM'],
 ]
 const VIEW_LABELS = Object.fromEntries(NAV.map(([id, , label]) => [id, label]))
 
@@ -63,7 +66,16 @@ export function Dashboard({ connection, logout }) {
   const [menu, setMenu] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
   const [profileMenu, setProfileMenu] = useState(false)
-  const [view, setView] = useState('overview')
+  const [billingReturn] = useState(() => consumeBillingReturn())
+  const [view, setView] = useState(() => {
+    try {
+      if (billingReturn?.checkout || billingReturn?.billingRoute) return 'billing'
+      if (window.location.pathname.replace(/\/+$/, '') === '/billing') return 'billing'
+      const search = window.location.search || ''
+      if (search.includes('checkout=')) return 'billing'
+    } catch {}
+    return 'overview'
+  })
   const [timeRange, setTimeRange] = useState('24h')
   const [selectedAgentId, setSelectedAgentId] = useState(() => {
     const shared = sharedScopeFromUrl()
@@ -84,6 +96,7 @@ export function Dashboard({ connection, logout }) {
     hermes: null,
     hermesDeliveries: [],
     resources: null,
+    billing: null,
   })
   const [status, setStatus] = useState({
     state: 'connecting',
@@ -113,9 +126,10 @@ export function Dashboard({ connection, logout }) {
       api.hermesStatus(),
       api.hermesDeliveries(),
       api.runtimeResources(),
+      api.billingStatus(),
       fetchCortexNamespaces().catch(() => []),
     ])
-    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox, hermes, hermesDeliveries, resources, cortexNamespaces] = results
+    const [summary, devices, agents, outcomes, exporter, integrations, quality, events, cortexOutbox, hermes, hermesDeliveries, resources, billing, cortexNamespaces] = results
     const live = summary.status === 'fulfilled'
     const summaryDevices = summary.status === 'fulfilled' ? (summary.value.devices || []) : []
     const visibleDevices = (devices.status === 'fulfilled' ? devices.value.devices : summaryDevices)
@@ -150,6 +164,7 @@ export function Dashboard({ connection, logout }) {
       hermes: hermes.status === 'fulfilled' ? hermes.value.hermes : current.hermes,
       hermesDeliveries: hermesDeliveries.status === 'fulfilled' ? hermesDeliveries.value.deliveries : current.hermesDeliveries,
       resources: resources.status === 'fulfilled' ? resources.value.resources : current.resources,
+      billing: billing.status === 'fulfilled' ? billing.value : current.billing,
     }))
 
     if (cortexNamespaces.status === 'fulfilled') setSharedNamespaces(cortexNamespaces.value)
@@ -260,6 +275,9 @@ export function Dashboard({ connection, logout }) {
         <div className="bottom-profile" style={{ marginTop: 'auto', padding: '1rem 0.75rem 0' }}>
           {profileMenu && <div className="profile-menu" role="menu">
             <button type="button" role="menuitem" onClick={() => { setProfileMenu(false); openView('settings') }}>Settings</button>
+            <button type="button" role="menuitem" onClick={() => { setProfileMenu(false); openView('billing') }}>
+              Billing & Plans{data.billing?.plan?.plan_id ? ` (${String(data.billing.plan.plan_id).toUpperCase()})` : ''}
+            </button>
             <button type="button" role="menuitem" onClick={() => logout()}>Log out</button>
           </div>}
           <nav aria-label="Account navigation" className="account-nav">
@@ -303,7 +321,9 @@ export function Dashboard({ connection, logout }) {
             <p>{connection.tenant} · {connection.baseUrl}</p>
           </div>
           <div className="header-identity" aria-label="Current Shield workspace">
-            <span className="header-identity-kicker">SHIELD CONTROL PLANE</span>
+            <span className="header-identity-kicker">
+              SHIELD CONTROL PLANE{data.billing?.plan?.plan_id ? ` · ${String(data.billing.plan.plan_id).toUpperCase()}` : ''}
+            </span>
             <strong>Operator console</strong>
             <small>{connection.tenant || 'Authenticated tenant'}</small>
           </div>
@@ -364,10 +384,12 @@ export function Dashboard({ connection, logout }) {
               ['overview', 'Posture'],
               ['agent', 'Agent'],
               ['network', 'Network'],
+              ['response', 'Response'],
               ['decisions', 'Decisions'],
               ['commissioning', 'Commissioning'],
               ['evidence', 'Evidence'],
               ['configuration', 'Configuration'],
+              ['billing', 'Billing'],
             ].map(([id, label]) => (
               <button key={id} type="button" className={view === id ? 'active' : ''} onClick={() => openView(id)}>
                 {label}
@@ -397,13 +419,14 @@ export function Dashboard({ connection, logout }) {
             />
           ) : (
               <ResourceView
-              view={view}
-              data={data}
-              api={api}
-              refresh={refresh}
-              connection={connection}
+                view={view}
+                data={data}
+                api={api}
+                refresh={refresh}
+                connection={connection}
                 logout={logout}
                 timeRange={timeRange}
+                billingReturn={billingReturn}
               />
           )}
         </div>

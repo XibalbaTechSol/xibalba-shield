@@ -388,10 +388,23 @@ class ShieldBilling:
 
     def status(self, tenant_id: str) -> dict[str, Any]:
         record = self.customer(tenant_id) or {}
+        catalog = {
+            plan_id: {
+                "id": plan.id,
+                "name": plan.name,
+                "per_device_monthly_cents": plan.per_device_monthly_cents,
+                "included_decisions_per_device": plan.included_decisions_per_device,
+                "overage_cents_per_1k": plan.overage_cents_per_1k,
+                "max_devices": plan.max_devices,
+                "zone_enforce": plan.zone_enforce,
+            }
+            for plan_id, plan in load_plan_catalog().items()
+        }
         return {
             "tenant_id": tenant_id,
             "billing_configured": self._config().ready,
             "plan": self._plans.get_tenant_plan(tenant_id),
+            "plans": catalog,
             "has_billing_account": bool(record),
             "trial_available": self._config().trial_days > 0 and not record.get("trial_used_at"),
             "seats": self.seat_count(tenant_id),

@@ -17,6 +17,7 @@ import { CommissioningView } from './CommissioningView'
 import { NetworkView } from './NetworkView'
 import { HermesAgentView } from './HermesAgentView'
 import { ResponseWorkspace } from './ResponseWorkspace'
+import { BillingView } from './BillingView'
 
 export function RollbackForm({ api }) {
   const [message, setMessage] = useState('')
@@ -381,7 +382,7 @@ function ConfigurationWorkspace({ connection, logout, data, api, refresh }) {
   </>
 }
 
-export function ResourceView({ view, data, api, refresh, connection, logout, timeRange }) {
+export function ResourceView({ view, data, api, refresh, connection, logout, timeRange, billingReturn }) {
   if (view === 'agent') return <AgentWorkspace data={data} api={api} refresh={refresh} />
   if (view === 'network') return <NetworkWorkspace api={api} />
   if (view === 'response') return <ResponseWorkspace api={api} refresh={refresh} timeRange={timeRange} connection={connection} />
@@ -389,6 +390,7 @@ export function ResourceView({ view, data, api, refresh, connection, logout, tim
   if (view === 'decisions') return <DecisionsWorkspace data={data} api={api} refresh={refresh} timeRange={timeRange} />
   if (view === 'evidence') return <EvidenceWorkspace data={data} api={api} />
   if (view === 'settings') return <SettingsView connection={connection} logout={logout} data={data} />
+  if (view === 'billing') return <BillingView api={api} refresh={refresh} connection={connection} billingReturn={billingReturn} data={data} />
   if (view === 'configuration') return <ConfigurationWorkspace connection={connection} logout={logout} data={data} api={api} refresh={refresh} />
   return <Resource title="Evidence" copy="Authenticated evidence records"><JsonRows rows={data.exporter} /></Resource>
 }
