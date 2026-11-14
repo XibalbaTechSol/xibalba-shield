@@ -115,13 +115,15 @@ class FakeStripe:
         }
 
     def subscription(self, sub_id="sub_1", *, status="trialing", customer="cus_shield1", quantity=1,
-                     device=None, overage=None, trial_end=PERIOD_END - 86400):
+                     device=None, overage=None, trial_end=PERIOD_END - 86400, period_start=None,
+                     period_end=PERIOD_END):
+        period = {"current_period_end": period_end,
+                  **({} if period_start is None else {"current_period_start": period_start})}
         self.subscriptions[sub_id] = {
             "id": sub_id, "customer": customer, "status": status, "trial_end": trial_end,
             "items": {"data": [
-                {"id": "si_device", "quantity": quantity, "current_period_end": PERIOD_END,
-                 "price": device or _device_price()},
-                {"id": "si_overage", "current_period_end": PERIOD_END, "price": overage or _overage_price()},
+                {"id": "si_device", "quantity": quantity, **period, "price": device or _device_price()},
+                {"id": "si_overage", **period, "price": overage or _overage_price()},
             ]},
         }
 
@@ -839,3 +841,122 @@ def test_an_overage_price_without_the_per_1k_transform_refuses_checkout(backend)
     backend.stripe.prices[PRICE_OVERAGE] = _overage_price(transform_quantity=None)
     _enroll(backend, "dev-1")
     assert _checkout(backend)[0] == 503
+
+
+# -- usage page: the current period, counted as the close counts it (phase 3e) -------------------
+
+
+def _paid_in_period(b, devices=1, *, start=START, end=END, trial_end=None):
+    for n in range(devices):
+        _enroll(b, f"dev-{n + 1}")
+    assert _checkout(b)[0] == 200
+    b.stripe.subscription(status="active", quantity=devices, trial_end=START - 86400 if trial_end is None else trial_end,
+                          period_start=start, period_end=end)
+    assert _webhook(b, _event("evt_sub", "checkout.session.completed"))[0] == 200
+
+
+def _usage_page(b, token="admin-token"):
+    return _call(f"{b.url}/api/shield/billing/usage?tenant_id={TENANT}", token=token)
+
+
+def test_the_webhook_stores_the_subscription_period_and_trial_end(backend):
+    _paid_in_period(backend, trial_end=START + 7 * 86400)
+    row = _plan(backend)
+    assert (row["period_start"], row["period_end"], row["trial_end"]) == (_iso(START), _iso(END), _iso(START + 7 * 86400))
+
+
+def test_the_usage_page_counts_the_subscription_period_not_the_calendar_month(backend):
+    _paid_in_period(backend, devices=2)
+    backend.store.mark_device_synthetic(tenant_id=TENANT, device_id="dev-2")
+    _usage(backend, "dev-1", 2 * INCLUDED + 7_999, START)   # first second of the period
+    _usage(backend, "dev-1", 9_000, START - 1)               # previous period
+    _usage(backend, "dev-1", 9_000, END)                     # end is exclusive
+    _usage(backend, "dev-2", 9_000, START + 60)              # synthetic device
+    status, body = _usage_page(backend)
+    assert status == 200
+    assert body["period"] == {"start": _iso(START), "end": _iso(END), "basis": "subscription"}
+    assert (body["seats"], body["included"], body["totals"]["billable"]) == (2, 2 * INCLUDED, 2 * INCLUDED + 7_999)
+    # 7,999 decisions over: Stripe bills whole thousands (transform_quantity rounds down) at 40c each.
+    assert (body["overage_decisions"], body["overage_accrued_cents"], body["remaining"]) == (7_999, 280, 0)
+    assert [d["device_id"] for d in body["devices"]] == ["dev-1"] and body["in_trial"] is False
+    assert body["gaps"] == [] and body["as_of"]
+
+
+def test_the_usage_page_at_period_end_shows_what_the_close_bills(backend):
+    """Parity: the page and the close must agree, including on seats billed earlier in the period."""
+    _paid_in_period(backend)
+    _seat_history(backend, (1, START - 86400), (3, START + 86400), (2, START + 2 * 86400))
+    _usage(backend, "dev-1", 3 * INCLUDED + 4_321, START + 3 * 86400)
+    page = _usage_page(backend)[1]
+    backend.stripe.invoice(start=START, end=END)
+    closed = _webhook(backend, _invoice_event("evt_inv1"))[1]
+    row = _submission(backend)
+    assert page["overage_decisions"] == closed["value"] == 4_321
+    assert (page["seats"], page["included"], page["totals"]["billable"]) == (row["seats"], row["included"], row["billable"])
+
+
+def test_a_trial_period_shows_no_overage_accruing(backend):
+    _paid_in_period(backend, trial_end=END)
+    _usage(backend, "dev-1", INCLUDED * 10, START + 86400)
+    body = _usage_page(backend)[1]
+    assert body["in_trial"] is True and body["overage_decisions"] == 0 and body["overage_accrued_cents"] == 0
+
+
+def test_a_paid_tenant_whose_period_is_unknown_gets_no_calendar_month_guess(backend):
+    _enroll(backend, "dev-1")
+    backend.store.plans.set_tenant_plan(tenant_id=TENANT, plan_id="pro", status="active", period_end=_iso(END))
+    _usage(backend, "dev-1", 10, int(time.time()) - 60)
+    status, body = _usage_page(backend)
+    assert status == 200 and body["period"] is None and body["reason"] == "billing period not yet known"
+    assert "overage_decisions" not in body
+
+
+def test_a_free_tenant_sees_the_calendar_month_with_no_overage_billing(backend):
+    _enroll(backend, "dev-1")
+    now = int(time.time())
+    _usage(backend, "dev-1", 6_000, now - 5)
+    body = _usage_page(backend)[1]
+    month = time.strftime("%Y-%m-01T00:00:00Z", time.gmtime(now))
+    assert body["plan_id"] == "free" and body["period"]["basis"] == "calendar_month"
+    assert body["period"]["start"] == month and body["totals"]["billable"] == 6_000
+    assert body["overage_decisions"] == 1_000 and body["overage_accrued_cents"] == 0
+
+
+def test_the_usage_page_requires_the_tenant_admin(backend):
+    assert _usage_page(backend, token=None)[0] in (401, 403)
+    assert _usage_page(backend, token="wrong")[0] in (401, 403)
+
+
+def test_the_stored_period_moves_forward_on_the_cycle_invoice_alone(backend):
+    """If `customer.subscription.updated` for the renewal is lost, the cycle invoice still advances it."""
+    _paid_in_period(backend)
+    nxt = END + 30 * 86400
+    backend.stripe.subscription(status="active", trial_end=START - 86400, period_start=END, period_end=nxt)
+    backend.stripe.invoice(start=START, end=END)
+    assert _webhook(backend, _invoice_event("evt_inv1"))[0] == 200
+    assert (_plan(backend)["period_start"], _plan(backend)["period_end"]) == (_iso(END), _iso(nxt))
+
+
+def test_a_late_cycle_invoice_never_moves_the_period_backwards(backend):
+    _paid_in_period(backend, start=END, end=END + 30 * 86400)
+    backend.stripe.subscription(status="active", trial_end=START - 86400, period_start=START, period_end=END)
+    backend.stripe.invoice(start=START - 30 * 86400, end=START)
+    assert _webhook(backend, _invoice_event("evt_inv0"))[0] == 200
+    assert _plan(backend)["period_start"] == _iso(END)
+
+
+def test_a_database_from_before_the_period_columns_is_migrated_in_place(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite3"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE tenant_plans (tenant_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, status TEXT NOT NULL, "
+                 "period_end TEXT, updated_at TEXT NOT NULL)")
+    conn.execute("INSERT INTO tenant_plans VALUES ('t-old', 'pro', 'active', '2027-01-01T00:00:00Z', 'x')")
+    conn.commit()
+    conn.close()
+    for _ in range(2):  # a second start must not try to add the columns again
+        store = ShieldStore(path)
+        row = store.plans.get_tenant_plan("t-old")
+        store.close()
+    assert (row["plan_id"], row["period_end"], row["period_start"], row["trial_end"]) == \
+        ("pro", "2027-01-01T00:00:00Z", None, None)

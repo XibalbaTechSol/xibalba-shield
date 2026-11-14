@@ -61,7 +61,8 @@ from ..edr.simulated import SimulatedProvider
 from ..edr.connectors.crowdstrike import CrowdStrikeConnector
 from .entitlement_issuer import handle_entitlement_request
 from .shield_billing import (
-    BILLING_POST_ROUTES, WEBHOOK_ROUTE, handle_billing_get, handle_billing_post, handle_stripe_webhook,
+    BILLING_POST_ROUTES, WEBHOOK_ROUTE, handle_billing_get, handle_billing_post, handle_billing_usage_get,
+    handle_stripe_webhook,
 )
 
 try:
@@ -1237,6 +1238,9 @@ def make_handler(
                 return
             if parsed.path == "/api/shield/billing":
                 handle_billing_get(self, store.billing, query)
+                return
+            if parsed.path == "/api/shield/billing/usage":
+                handle_billing_usage_get(self, store.billing, store.usage, query)
                 return
             if parsed.path == "/api/shield/detection-quality":
                 tenant_id = self._tenant_from_query_or_error(query)

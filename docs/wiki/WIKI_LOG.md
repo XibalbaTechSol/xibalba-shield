@@ -1,5 +1,15 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-13] feat | Billing usage API aligned to the subscription period (phase 3e backend)
+
+- `GET /api/shield/billing/usage?tenant_id=` (tenant admin): usage in the tenant's current billing
+  period, counted exactly as the period close bills it. It returns seats, included, totals, remaining,
+  overage decisions, accrued overage cents, per-device rows, gaps and `as_of`.
+- `tenant_plans` gains `period_start` and `trial_end`, migrated in place. The webhook writes them, and the
+  cycle-invoice close also moves the period forward.
+- `period_counts` and `overage_for_period` are shared by the close and the page. Design doc §5 has
+  the details.
+
 ## [2026-11-12] feat | The gate scores its agents from its own receipts (`--zone-provider ais`)
 
 - New `ais` zone provider (`shield/gate_zone.py`, `AisReceiptZoneProvider`) over
