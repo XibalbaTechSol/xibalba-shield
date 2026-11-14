@@ -11,6 +11,8 @@ import {
   HardDrive,
   Calendar,
   Lock,
+  Clock,
+  Activity,
 } from 'lucide-react'
 import {
   planCatalog,
@@ -19,13 +21,17 @@ import {
   formatCents,
   formatCount,
   formatDate,
+  formatDateTime,
+  formatBasis,
   isStripeUrl,
   consumeBillingReturn,
 } from '../billing'
 
 export function BillingView({ api, connection, refresh: refreshParent, billingReturn, data: parentData }) {
   const [status, setStatus] = useState(() => parentData?.billing || null)
+  const [usage, setUsage] = useState(() => parentData?.billingUsage || null)
   const [loading, setLoading] = useState(() => !parentData?.billing)
+  const [usageLoading, setUsageLoading] = useState(() => !parentData?.billingUsage)
   const [actionLoading, setActionLoading] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionNotice, setActionNotice] = useState('')
@@ -43,6 +49,17 @@ export function BillingView({ api, connection, refresh: refreshParent, billingRe
     }
   }, [api])
 
+  const loadUsage = useCallback(async () => {
+    try {
+      const res = await api.billingUsage()
+      setUsage(res)
+    } catch {
+      // Usage endpoint may be unavailable on older mock fixtures
+    } finally {
+      setUsageLoading(false)
+    }
+  }, [api])
+
   useEffect(() => {
     if (parentData?.billing) {
       setStatus(parentData.billing)
@@ -51,10 +68,20 @@ export function BillingView({ api, connection, refresh: refreshParent, billingRe
   }, [parentData?.billing])
 
   useEffect(() => {
+    if (parentData?.billingUsage) {
+      setUsage(parentData.billingUsage)
+      setUsageLoading(false)
+    }
+  }, [parentData?.billingUsage])
+
+  useEffect(() => {
     if (!parentData?.billing) {
       loadStatus()
     }
-  }, [loadStatus, parentData?.billing])
+    if (!parentData?.billingUsage) {
+      loadUsage()
+    }
+  }, [loadStatus, loadUsage, parentData?.billing, parentData?.billingUsage])
 
   const plans = planCatalog(status)
   const currentPlanId = status?.plan?.plan_id || 'free'
@@ -76,7 +103,7 @@ export function BillingView({ api, connection, refresh: refreshParent, billingRe
         setActionNotice(`Stripe Checkout Session created: ${result.url}`)
       } else {
         setActionNotice('Checkout session initialized successfully.')
-        await loadStatus()
+        await Promise.all([loadStatus(), loadUsage()])
         if (refreshParent) refreshParent()
       }
     } catch (err) {
@@ -115,7 +142,7 @@ export function BillingView({ api, connection, refresh: refreshParent, billingRe
     try {
       const result = await api.billingSync()
       setActionNotice(`Seats synchronized: ${result.quantity ?? 'ok'} device(s) registered.`)
-      await loadStatus()
+      await Promise.all([loadStatus(), loadUsage()])
       if (refreshParent) refreshParent()
     } catch (err) {
       setActionError(err.message || 'Seat synchronization failed.')
@@ -139,10 +166,10 @@ export function BillingView({ api, connection, refresh: refreshParent, billingRe
       {/* Checkout Return Banners */}
       {retInfo?.checkout === 'success' && (
         <div className="billing-alert success" role="status">
-          <ShieldCheck aria-hidden="true" />
+          <Check aria-hidden="true" />
           <div>
             <strong>Checkout completed successfully.</strong>
-            <p>Your subscription is active. Enrolled devices will receive cryptographically signed zone enforcement entitlements upon their next refresh.</p>
+            <p>Your workspace plan has been upgraded. Gate enforcement entitlements will activate automatically across enrolled devices.</p>
           </div>
         </div>
       )}
@@ -234,19 +261,241 @@ export function BillingView({ api, connection, refresh: refreshParent, billingRe
             <Calendar className="metric-icon" aria-hidden="true" />
           </div>
           <div className="metric-value date-val">
-            {formatDate(status?.plan?.period_end) || 'Continuous'}
+            {formatDate(status?.plan?.period_end) || 'Monthly UTC'}
           </div>
           <div className="metric-meta">
-            {status?.trial_available ? '14-day trial eligible' : 'Standard billing cycle'}
+            {status?.plan?.trial_end
+              ? `Trial ends ${formatDate(status.plan.trial_end)}`
+              : (status?.plan?.period_start
+                ? `${formatDate(status.plan.period_start)} → ${formatDate(status.plan.period_end)}`
+                : (status?.plan?.period_end
+                  ? `Renews ${formatDate(status.plan.period_end)}`
+                  : (currentPlanId === 'free' ? 'Calendar month' : 'No expiration')))}
           </div>
         </div>
       </section>
 
-      {/* Plan Catalog Cards */}
-      <section className="billing-plans-section" aria-label="Subscription plans">
+      {/* Current Period Usage & Decision Allowance */}
+      <section className="billing-usage-section" aria-label="Current period usage">
         <div className="section-title-wrap">
-          <p className="eyebrow">TIERS & PRICING</p>
-          <h3>Select a plan for your agent fleet</h3>
+          <div className="usage-title-row">
+            <div>
+              <span className="eyebrow">METERING & LEDGER</span>
+              <h3>Current Period Usage & Allowance</h3>
+            </div>
+            {usage?.as_of && (
+              <div className="usage-as-of" aria-label="Usage timestamp">
+                <Clock aria-hidden="true" />
+                <span>As of {formatDateTime(usage.as_of)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Case 1: Period is null -> show reason instead of numbers */}
+        {usage && usage.period === null && (
+          <div className="billing-alert info usage-null-period" role="status">
+            <Info aria-hidden="true" />
+            <div>
+              <strong>Billing Period Not Active</strong>
+              <p>{usage.reason || 'Billing period not yet known for this subscription.'}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Case 2: Period is active -> show full breakdown */}
+        {usage && usage.period && (
+          <div className="usage-panel-body">
+            {/* Period Details & Allowance Formula Card */}
+            <div className="usage-period-card">
+              <div className="period-card-left">
+                <div className="period-dates">
+                  <Calendar className="period-icon" aria-hidden="true" />
+                  <span className="period-range">
+                    {formatDate(usage.period.start)} &rarr; {formatDate(usage.period.end)}
+                  </span>
+                  <span className="status-pill tone-ok">{formatBasis(usage.period.basis)}</span>
+                  {usage.in_trial && (
+                    <span className="status-pill tone-warn">14-Day Free Trial</span>
+                  )}
+                </div>
+                <div className="period-formula">
+                  <span className="formula-part">
+                    <strong>{usage.seats}</strong> {usage.seats === 1 ? 'seat' : 'seats'}
+                  </span>
+                  <span className="formula-op">&times;</span>
+                  <span className="formula-part">
+                    <strong>{formatCount(usage.included_per_device)}</strong> / dev
+                  </span>
+                  <span className="formula-op">=</span>
+                  <span className="formula-part highlight">
+                    <strong>{formatCount(usage.included)}</strong> included
+                  </span>
+                </div>
+              </div>
+              <div className="period-card-right">
+                <div className="accrued-stat">
+                  <span className="stat-label">Accrued so far</span>
+                  <span className="stat-val">{formatCents(usage.overage_accrued_cents) || '$0.00'}</span>
+                  <span className="stat-sub">
+                    {usage.overage_cents_per_1k != null
+                      ? `${formatCents(usage.overage_cents_per_1k)} / 1,000 decisions`
+                      : 'Included in plan (Free)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Usage Metrics Quad */}
+            <div className="usage-metrics-grid">
+              <div className="usage-metric-card">
+                <div className="metric-eyebrow">BILLABLE DECISIONS</div>
+                <div className="metric-value">{formatCount(usage.totals?.billable || 0)}</div>
+                <div className="metric-meta">
+                  Excludes {formatCount(usage.totals?.excluded_mask || 0)} zone masks, {formatCount(usage.totals?.excluded_fault || 0)} faults
+                </div>
+              </div>
+
+              <div className="usage-metric-card">
+                <div className="metric-eyebrow">REMAINING ALLOWANCE</div>
+                <div className="metric-value highlight">{formatCount(usage.remaining || 0)}</div>
+                <div className="metric-meta">
+                  From {formatCount(usage.included || 0)} total included
+                </div>
+              </div>
+
+              <div className="usage-metric-card">
+                <div className="metric-eyebrow">OVERAGE DECISIONS</div>
+                <div className={`metric-value ${(usage.overage_decisions || 0) > 0 ? 'overage-warn' : ''}`}>
+                  {formatCount(usage.overage_decisions || 0)}
+                </div>
+                <div className="metric-meta">
+                  {(usage.overage_decisions || 0) > 0
+                    ? `${formatCents(usage.overage_accrued_cents)} accrued towards cycle invoice`
+                    : 'Within included allowance'}
+                </div>
+              </div>
+
+              <div className="usage-metric-card">
+                <div className="metric-eyebrow">ACCRUED OVERAGE</div>
+                <div className="metric-value">{formatCents(usage.overage_accrued_cents) || '$0.00'}</div>
+                <div className="metric-meta">
+                  {usage.in_trial ? 'Trial period ($0 overage)' : 'Accrued so far this period'}
+                </div>
+              </div>
+            </div>
+
+            {/* Allowance Progress Bar */}
+            <div className="usage-progress-wrap" aria-label="Allowance consumption">
+              <div className="progress-labels">
+                <span>Allowance consumed</span>
+                <span>
+                  {usage.included > 0
+                    ? `${Math.min(100, Math.round(((usage.totals?.billable || 0) / usage.included) * 100))}%`
+                    : '0%'}
+                </span>
+              </div>
+              <div className="progress-track">
+                <div
+                  className={`progress-fill ${(usage.overage_decisions || 0) > 0 ? 'fill-overage' : ''}`}
+                  style={{
+                    width: `${Math.min(100, usage.included > 0 ? Math.round(((usage.totals?.billable || 0) / usage.included) * 100) : 0)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Missing Receipt Gaps Banner */}
+        {usage?.gaps && usage.gaps.length > 0 && (
+          <div className="billing-alert error usage-gaps-alert" role="alert">
+            <TriangleAlert aria-hidden="true" />
+            <div>
+              <strong>Receipt Ledger Gaps Detected ({usage.gaps.length})</strong>
+              <p>
+                Missing receipt sequences were detected in the cryptographic audit log. These are treated as unbilled under-counts:
+              </p>
+              <ul className="gaps-list">
+                {usage.gaps.map((gap, i) => (
+                  <li key={i}>
+                    {typeof gap === 'string' ? (
+                      <code>{gap}</code>
+                    ) : (
+                      <>
+                        Device <code>{gap.device_id}</code> &middot; Log <code>{gap.log_id}</code> &middot; Missing Seqs <strong>{gap.seq_from} &rarr; {gap.seq_to}</strong>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Per-Device Table */}
+        {usage?.devices && usage.devices.length > 0 && (
+          <div className="usage-devices-section">
+            <div className="table-header-row">
+              <h4>Device Ledger Attribution</h4>
+              <span className="devices-count">
+                {usage.devices.length} reporting {usage.devices.length === 1 ? 'device' : 'devices'}
+              </span>
+            </div>
+            <div className="usage-table-wrap">
+              <table className="usage-table">
+                <thead>
+                  <tr>
+                    <th>DEVICE ID</th>
+                    <th>BILLABLE</th>
+                    <th>ZONE DENIALS (MASK)</th>
+                    <th>GATE FAULTS</th>
+                    <th>REPORTS</th>
+                    <th>AUDIT INTEGRITY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.devices.map((d) => {
+                    const hasGap = usage.gaps?.some((g) => (typeof g === 'string' ? g.includes(d.device_id) : g.device_id === d.device_id))
+                    return (
+                      <tr key={d.device_id} className={hasGap ? 'row-has-gap' : ''}>
+                        <td>
+                          <div className="device-id-cell">
+                            <HardDrive className="device-icon" aria-hidden="true" />
+                            <code>{d.device_id}</code>
+                            {hasGap && (
+                              <span className="gap-flag" title="Telemetry receipt gaps detected">
+                                <TriangleAlert aria-hidden="true" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="billable-col"><strong>{formatCount(d.billable)}</strong></td>
+                        <td>{formatCount(d.excluded_mask)}</td>
+                        <td>{formatCount(d.excluded_fault)}</td>
+                        <td>{formatCount(d.reports)}</td>
+                        <td>
+                          {hasGap ? (
+                            <span className="status-pill tone-bad">GAP FLAGGED</span>
+                          ) : (
+                            <span className="status-pill tone-ok">VERIFIED</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Plan Comparison Grid */}
+      <section className="billing-plans-section" aria-label="Available subscription plans">
+        <div className="section-title-wrap">
+          <span className="eyebrow">FLEET TIERS</span>
+          <h3>Select Plan Tier</h3>
           <p>Each paid plan includes signed zone enforcement entitlements for enrolled devices and metered decision overage.</p>
         </div>
 

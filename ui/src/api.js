@@ -122,6 +122,9 @@ export class ShieldApi {
   billingStatus() {
     return this.request('/api/shield/billing')
   }
+  billingUsage() {
+    return this.request('/api/shield/billing/usage')
+  }
   billingCheckout(planId) {
     return this.request('/api/shield/billing/checkout', {
       method: 'POST',
