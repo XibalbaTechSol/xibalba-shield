@@ -52,3 +52,5 @@ services:
         sync: false
       - key: SHIELD_STRIPE_PRICE_TEAM_OVERAGE
         sync: false
+      - key: SHIELD_STRIPE_PORTAL_CONFIGURATION
+        sync: false

@@ -494,3 +494,19 @@
   maximum.
 - Design §9 now records the price suggestions and the trial decision. `render.yaml` declares the
   `SHIELD_STRIPE_*` keys, which the operator sets.
+
+## [2026-11-13] code | Overage meter event at period close (billing phase 3d)
+
+- `invoice.created` (subscription-cycle invoices only) closes a period. The handler re-reads the
+  invoice and the subscription, computes `max(0, billable − seats × included_per_device)` from
+  `usage_reports` received in the period and the period's maximum seat count, and sends a single meter
+  event timestamped inside the period, while the invoice is still a draft.
+- `meter_submissions` is the dedupe ledger. The row is written before the send, which fixes the value,
+  and the Stripe event is marked processed together with the acknowledgement. A send unacknowledged
+  for longer than Stripe's identifier window waits for operator reconciliation instead of being resent.
+- The webhook now records Stripe-side seat changes into `seat_syncs`, so the history covers checkout
+  and portal quantities too.
+- Checkout also validates the meter and the overage price's per-1,000 `transform_quantity`.
+- Limits: immediate cancellations and mid-period plan changes bill no overage (under-billing only). The
+  portal must cancel at period end without plan switching, and the webhook endpoint must subscribe to
+  `invoice.created`. Design §5 has the details.

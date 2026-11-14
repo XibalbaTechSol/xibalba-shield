@@ -20,6 +20,8 @@ plan changes. Configuration (environment, read per request):
 ``SHIELD_STRIPE_METER_ID`` (``mtr_…``)
 ``SHIELD_STRIPE_PRICE_<PLAN>_DEVICE`` / ``SHIELD_STRIPE_PRICE_<PLAN>_OVERAGE`` for ``PRO`` and ``TEAM``
 ``SHIELD_STRIPE_TRIAL_DAYS`` (default 14, ``0`` disables, at most 30)
+``SHIELD_STRIPE_PORTAL_CONFIGURATION`` (optional ``bpc_…``: the portal configuration to open; it must cancel at
+period end and not offer plan switching, see §5. Unset uses the account default.)
 
 Trial (operator decision 2026-11-13): a tenant's first paid checkout includes a 14-day trial with the
 card collected up front; Stripe charges it when the trial ends. `trialing` enforces like `active`. One
@@ -77,12 +79,37 @@ CREATE TABLE IF NOT EXISTS seat_syncs (
     acknowledged_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_seat_syncs_tenant ON seat_syncs(tenant_id, requested_at);
+-- One overage submission per closed period (design §5, phase 3d). Written before the Stripe call and
+-- acknowledged after it: this ledger, not Stripe's ~24h identifier window, is the dedupe authority.
+-- Periods are ISO-8601 UTC, the same format as `usage_reports.received_at`, so windows compare as text.
+CREATE TABLE IF NOT EXISTS meter_submissions (
+    tenant_id TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    plan_id TEXT NOT NULL,
+    seats INTEGER NOT NULL,
+    billable INTEGER NOT NULL,
+    included INTEGER NOT NULL,
+    value INTEGER NOT NULL,
+    identifier TEXT NOT NULL UNIQUE,
+    invoice_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    sent_at TEXT,
+    acknowledged_at TEXT,
+    PRIMARY KEY (tenant_id, period_start)
+);
 """
 
 HANDLED_EVENTS = frozenset({
     "checkout.session.completed", "customer.subscription.created", "customer.subscription.updated",
-    "customer.subscription.deleted",
+    "customer.subscription.deleted", "invoice.created",
 })
+# Overage is metered in single gated decisions and priced per 1,000 through `transform_quantity`, rounded
+# down once per invoice: at most 999 decisions a period go unbilled, never a fraction over-billed.
+OVERAGE_TRANSFORM = {"divide_by": 1000, "round": "down"}
+# A pending submission older than this is outside Stripe's identifier dedupe window: resending it blind
+# could bill twice, so it is reconciled against Stripe's own meter totals first.
+DEDUPE_WINDOW_SECONDS = 23 * 3600
 # Stripe subscription status -> `tenant_plans.status`. Anything that ends the subscription returns the
 # tenant to free; `paused` keeps the plan but never enforces.
 _STATUS_MAP = {
@@ -130,6 +157,7 @@ class BillingConfig:
     meter_id: str = ""
     prices: Mapping[str, PlanPrices] = field(default_factory=dict)
     trial_days: int = DEFAULT_TRIAL_DAYS
+    portal_configuration: str = ""
 
     @classmethod
     def from_env(cls, environ: Optional[Mapping[str, str]] = None) -> "BillingConfig":
@@ -140,6 +168,7 @@ class BillingConfig:
             overage = env.get(f"SHIELD_STRIPE_PRICE_{plan_id.upper()}_OVERAGE", "").strip()
             if device.startswith("price_") and overage.startswith("price_"):
                 prices[plan_id] = PlanPrices(device=device, overage=overage)
+        portal = env.get("SHIELD_STRIPE_PORTAL_CONFIGURATION", "").strip()
         return cls(
             stripe=StripeConfig(
                 secret_key=env.get("SHIELD_STRIPE_SECRET_KEY", "").strip(),
@@ -149,6 +178,7 @@ class BillingConfig:
             meter_id=env.get("SHIELD_STRIPE_METER_ID", "").strip(),
             prices=prices,
             trial_days=_trial_days(env.get("SHIELD_STRIPE_TRIAL_DAYS")),
+            portal_configuration=portal if portal.startswith("bpc_") else "",
         )
 
     @property
@@ -176,15 +206,33 @@ def validate_overage_price(price: Mapping[str, Any], *, price_id: str, plan: Shi
     if (price.get("id") != price_id or price.get("active") is False or price.get("currency") != "usd"
             or price.get("billing_scheme", "per_unit") != "per_unit"
             or price.get("unit_amount") != plan.overage_cents_per_1k
+            or dict(price.get("transform_quantity") or {}) != OVERAGE_TRANSFORM
             or recurring.get("usage_type") != "metered" or recurring.get("meter") != meter_id
             or recurring.get("interval") != "month" or recurring.get("interval_count") != 1):
         raise BillingUnavailable("Stripe overage price does not match the approved Shield catalog")
+
+
+def validate_meter(meter: Mapping[str, Any], *, meter_id: str) -> str:
+    """The meter's event name, after checking it sums the payload keys `send_meter_event` writes."""
+    aggregation = meter.get("default_aggregation") or {}
+    mapping = meter.get("customer_mapping") or {}
+    values = meter.get("value_settings") or {}
+    name = meter.get("event_name")
+    if (meter.get("id") != meter_id or meter.get("status") != "active" or aggregation.get("formula") != "sum"
+            or mapping.get("event_payload_key") != "stripe_customer_id"
+            or values.get("event_payload_key", "value") != "value" or not isinstance(name, str) or not name):
+        raise BillingUnavailable("Stripe meter does not match the approved Shield configuration")
+    return name
 
 
 def _iso(epoch: Any) -> str:
     if isinstance(epoch, bool) or not isinstance(epoch, int):
         raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription period is missing")
     return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _epoch(iso: str) -> float:
+    return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
 
 
 class ShieldBilling:
@@ -241,6 +289,7 @@ class ShieldBilling:
         validate_device_price(gw.request("GET", "/prices/" + prices.device), price_id=prices.device, plan=plan)
         validate_overage_price(gw.request("GET", "/prices/" + prices.overage), price_id=prices.overage, plan=plan,
                                meter_id=cfg.meter_id)
+        validate_meter(gw.request("GET", "/billing/meters/" + cfg.meter_id), meter_id=cfg.meter_id)
         return plan, prices
 
     # -- checkout and portal ------------------------------------------------------------------
@@ -325,12 +374,14 @@ class ShieldBilling:
         return {"url": session["url"]}
 
     def portal(self, *, tenant_id: str, base_url: str) -> dict[str, Any]:
-        _cfg, gw = self._ready()
+        cfg, gw = self._ready()
         record = self.customer(tenant_id)
         if record is None:
             raise BillingRefused(HTTPStatus.CONFLICT, "This tenant has no Stripe billing account yet")
-        result = gw.request("POST", "/billing_portal/sessions", data={
-            "customer": record["customer_id"], "return_url": base_url.rstrip("/") + "/billing"})
+        data = {"customer": record["customer_id"], "return_url": base_url.rstrip("/") + "/billing"}
+        if cfg.portal_configuration:
+            data["configuration"] = cfg.portal_configuration
+        result = gw.request("POST", "/billing_portal/sessions", data=data)
         if not isinstance(result.get("url"), str):
             raise BillingUnavailable("Stripe returned an invalid portal session")
         return {"url": result["url"]}
@@ -354,9 +405,9 @@ class ShieldBilling:
         event = gw.verify_event(body, signature)
         result = self.apply_event(event, cfg=cfg, gw=gw)
         # A duplicate may be the redelivery of a change whose checkpoint failed: acknowledging it before
-        # the state is durable would let Stripe stop retrying while a restart could still lose the plan.
-        if (result.get("plan_id") or result.get("duplicate")) and not self._durable():
-            raise BillingUnavailable("Plan change is not yet durable; Stripe will redeliver")
+        # the state is durable would let Stripe stop retrying while a restart could still lose the change.
+        if (result.get("plan_id") or result.get("duplicate") or result.get("closed")) and not self._durable():
+            raise BillingUnavailable("Billing change is not yet durable; Stripe will redeliver")
         return result
 
     def apply_event(self, event: Mapping[str, Any], *, cfg: BillingConfig, gw: Any) -> dict[str, Any]:
@@ -371,6 +422,8 @@ class ShieldBilling:
         if record is None:
             # Events for Cortex or any other product on the same Stripe account grant nothing here.
             return {"received": True, "ignored": True}
+        if event.get("type") == "invoice.created":
+            return self._close_period(str(event_id), obj, record, cfg=cfg, gw=gw)
         tenant_id = record["tenant_id"]
         sub_id = obj.get("subscription") if event["type"] == "checkout.session.completed" else obj.get("id")
         if not isinstance(sub_id, str) or not sub_id.startswith("sub_"):
@@ -415,6 +468,8 @@ class ShieldBilling:
                  device_item["id"] if device_item else None, overage_item["id"] if overage_item else None,
                  device_item.get("quantity") if device_item else None, _now(), had_trial, _now(), tenant_id))
             self._conn.execute("DELETE FROM checkout_requests WHERE tenant_id=?", (tenant_id,))
+            if device_item:
+                self._observe_seats(tenant_id, sub_id, device_item.get("quantity"))
             # Last statement: its own `with` commits this whole transaction, or rolls all of it back.
             self._plans.set_tenant_plan(tenant_id=tenant_id, plan_id=plan_id, status=status, period_end=period_end)
         return {"received": True, "plan_id": plan_id, "status": status, "tenant_id": tenant_id}
@@ -441,6 +496,138 @@ class ShieldBilling:
                 period_end = device_item.get("current_period_end", sub.get("current_period_end"))
                 return plan_id, dict(device_item), dict(overage_item), _iso(period_end)
         raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription prices do not match the configured Shield catalog")
+
+    # -- period close: overage (phase 3d) -----------------------------------------------------
+    #
+    # Overage is sent once per period, when Stripe creates the period's invoice. A subscription-cycle
+    # invoice stays a draft for the finalization grace period (and for up to 72h while this webhook has
+    # not answered 2xx), and Stripe adds usage reported in that window to it when the meter event's
+    # timestamp falls inside the invoice's service period. Sending only at close means the allowance is
+    # computed once, from the period's final seat count, so no mid-period send can over-bill.
+    #
+    # Known limits (documented in the design doc, §5): other invoice types count only usage received
+    # before they are created, so an immediate cancellation or a mid-period plan change bills no overage
+    # for that period. Both under-bill; neither over-bills. The customer portal must therefore cancel at
+    # period end and must not offer plan switching.
+
+    def _mark_seen(self, event_id: str, **extra: Any) -> dict[str, Any]:
+        with self._conn:
+            record_once(self._conn, event_id, processed_at=int(time.time()))
+        return {"received": True, "ignored": True, **extra}
+
+    def _observe_seats(self, tenant_id: str, sub_id: str, quantity: Any) -> None:
+        """Record the device quantity Stripe reports (checkout, portal) as acknowledged seat history.
+
+        Runs inside the caller's transaction. Only changes are recorded, so a redelivery adds nothing.
+        """
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 0:
+            return
+        last = self._conn.execute(
+            "SELECT quantity FROM seat_syncs WHERE subscription_id=? AND acknowledged_at IS NOT NULL "
+            "ORDER BY acknowledged_at DESC, id DESC LIMIT 1", (sub_id,)).fetchone()
+        if last is None or last["quantity"] != quantity:
+            now = _now()
+            self._conn.execute(
+                "INSERT INTO seat_syncs (tenant_id, subscription_id, quantity, requested_at, acknowledged_at) "
+                "VALUES (?,?,?,?,?)", (tenant_id, sub_id, quantity, now, now))
+
+    def period_seats(self, sub_id: str, start: str, end: str, *, fallback: int) -> int:
+        """The most seats billed at any point in [start, end): the quantity in force when the period
+        began, and every change acknowledged during it. Counting the maximum errs toward a larger
+        allowance, so a seat added late in the period never produces overage the customer did not owe."""
+        in_force = self._conn.execute(
+            "SELECT quantity FROM seat_syncs WHERE subscription_id=? AND acknowledged_at IS NOT NULL "
+            "AND acknowledged_at<=? ORDER BY acknowledged_at DESC, id DESC LIMIT 1", (sub_id, start)).fetchone()
+        during = self._conn.execute(
+            "SELECT MAX(quantity) FROM seat_syncs WHERE subscription_id=? AND acknowledged_at>? AND acknowledged_at<?",
+            (sub_id, start, end)).fetchone()[0]
+        known = [q for q in (in_force["quantity"] if in_force else None, during) if q is not None]
+        return max(known) if known else fallback
+
+    def period_billable(self, tenant_id: str, start: str, end: str) -> int:
+        """Billable decisions received in [start, end) from non-synthetic devices (design §4.3). A report
+        received after the period closes counts toward the period in which it arrived."""
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(u.billable), 0) FROM usage_reports u "
+            "JOIN devices d ON d.tenant_id=u.tenant_id AND d.device_id=u.device_id "
+            "WHERE u.tenant_id=? AND d.synthetic=0 AND u.received_at>=? AND u.received_at<?",
+            (tenant_id, start, end)).fetchone()
+        return int(row[0])
+
+    def _close_period(self, event_id: str, obj: Mapping[str, Any], record: Any, *, cfg: BillingConfig,
+                      gw: Any) -> dict[str, Any]:
+        tenant_id, customer_id = record["tenant_id"], record["customer_id"]
+        invoice_id = obj.get("id")
+        if not isinstance(invoice_id, str) or not invoice_id.startswith("in_"):
+            raise BillingRefused(HTTPStatus.BAD_REQUEST, "Missing invoice reference")
+        invoice = gw.request("GET", "/invoices/" + invoice_id)
+        if invoice.get("customer") != customer_id:
+            raise BillingRefused(HTTPStatus.BAD_REQUEST, "Invoice customer does not match the tenant")
+        sub_id = ((invoice.get("parent") or {}).get("subscription_details") or {}).get("subscription")
+        if (invoice.get("billing_reason") != "subscription_cycle" or not isinstance(sub_id, str)
+                or not sub_id.startswith("sub_")):
+            # Only a cycle invoice closes a usage period that can still take usage (see above).
+            return self._mark_seen(event_id)
+        start, end = invoice.get("period_start"), invoice.get("period_end")
+        period_start, period_end = _iso(start), _iso(end)
+        if end <= start:
+            return self._mark_seen(event_id)
+
+        key = (tenant_id, period_start)
+        row = self._conn.execute("SELECT * FROM meter_submissions WHERE tenant_id=? AND period_start=?", key).fetchone()
+        if row is not None and row["acknowledged_at"]:
+            self._mark_seen(event_id)
+            return {"received": True, "closed": True, "value": row["value"], "replay": True}
+        if invoice.get("status") != "draft":
+            # Past finalization Stripe no longer adds usage to this invoice; resending cannot bill it.
+            logger.error("overage for %s period %s missed its invoice (status %s)", tenant_id, period_start,
+                         invoice.get("status"))
+            return self._mark_seen(event_id, reason="invoice already finalized")
+
+        if row is None:
+            sub = gw.request("GET", "/subscriptions/" + sub_id)
+            if sub.get("customer") != customer_id:
+                raise BillingRefused(HTTPStatus.BAD_REQUEST, "Subscription customer does not match the tenant")
+            plan_id, device_item, _overage_item, _period_end = self._identify(sub, cfg=cfg)
+            plan = self._catalog()[plan_id]
+            seats = self.period_seats(sub_id, period_start, period_end, fallback=int(device_item.get("quantity") or 0))
+            billable = self.period_billable(tenant_id, period_start, period_end)
+            included = seats * plan.included_decisions_per_device
+            trial_end = sub.get("trial_end")
+            in_trial = isinstance(trial_end, int) and not isinstance(trial_end, bool) and end <= trial_end
+            value = 0 if in_trial else max(0, billable - included)
+            with self._conn:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO meter_submissions (tenant_id, period_start, period_end, plan_id, seats, "
+                    "billable, included, value, identifier, invoice_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (tenant_id, period_start, period_end, plan_id, seats, billable, included, value,
+                     f"shield-ovg:{tenant_id}:{start}", invoice_id, _now()))
+            row = self._conn.execute("SELECT * FROM meter_submissions WHERE tenant_id=? AND period_start=?",
+                                     key).fetchone()
+
+        if row["value"] > 0:
+            if row["sent_at"] and time.time() - _epoch(row["sent_at"]) > DEDUPE_WINDOW_SECONDS:
+                # Stripe may have the first send but no longer dedupes its identifier: resending could
+                # bill twice. Stay unacknowledged (Stripe keeps retrying) until an operator reconciles.
+                logger.error("overage for %s period %s needs reconciliation before resending", tenant_id, period_start)
+                raise BillingUnavailable("Overage submission needs reconciliation")
+            event_name = validate_meter(gw.request("GET", "/billing/meters/" + cfg.meter_id), meter_id=cfg.meter_id)
+            with self._conn:
+                self._conn.execute("UPDATE meter_submissions SET sent_at=COALESCE(sent_at, ?) "
+                                   "WHERE tenant_id=? AND period_start=?", (_now(), *key))
+            # Timestamped at the period's midpoint. Stripe adds the event to this draft only if the timestamp is
+            # inside the metered line's service period, and that period's end is truncated (to the minute in a
+            # 2026-11-13 test-clock run): `end - 1` fell after it and slipped to the next invoice. A monthly
+            # midpoint stays well inside Stripe's 35-day window even after the 72h finalization hold.
+            gw.send_meter_event(event_name, customer_id, row["value"], row["identifier"],
+                                timestamp=start + (end - start) // 2)
+        # The event is marked processed only with the acknowledgement: a crash after the send leaves both
+        # undone, and Stripe's redelivery resends under the same identifier.
+        with self._conn:
+            record_once(self._conn, event_id, processed_at=int(time.time()))
+            self._conn.execute("UPDATE meter_submissions SET acknowledged_at=COALESCE(acknowledged_at, ?) "
+                               "WHERE tenant_id=? AND period_start=?", (_now(), *key))
+        return {"received": True, "closed": True, "value": row["value"]}
 
     # -- seats --------------------------------------------------------------------------------
 
