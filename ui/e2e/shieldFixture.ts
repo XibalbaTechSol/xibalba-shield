@@ -33,6 +33,18 @@ export async function stubShieldApi(page: Page, theme?: 'command-center' | 'ligh
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settings: body.settings || {} }) })
       return
     }
+    if (path === '/api/shield/billing/checkout' && route.request().method() === 'POST') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: 'https://checkout.stripe.com/c/pay/cs_test_mock' }) })
+      return
+    }
+    if (path === '/api/shield/billing/portal' && route.request().method() === 'POST') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: 'https://billing.stripe.com/p/session/mock' }) })
+      return
+    }
+    if (path === '/api/shield/billing/sync' && route.request().method() === 'POST') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ synced: true, quantity: 1, changed: false }) })
+      return
+    }
     const responses: Record<string, unknown> = {
       '/api/shield/dashboard-summary': {
         decisions_by_action: {},
@@ -122,6 +134,51 @@ export async function stubShieldApi(page: Page, theme?: 'command-center' | 'ligh
       '/api/shield/cortex-outbox': { outbox: { pending: 0, dead_letter: 0 } },
       '/api/shield/hermes-status': { hermes: { health: 'healthy', healthy: true, transport: 'local-spool', pending: 2, acknowledged_total: 11, dead_letters: 0, agent_id: 'did:integrity:test' } },
       '/api/shield/settings': { settings: { hermesEnabled: true, hermesAnalysisOnly: true, hermesRedactionMode: 'strict', hermesEventScope: 'all', hermesMaxBatch: 10, hermesSpoolMaxBytes: 16777216 } },
+      '/api/shield/billing': {
+        tenant_id: 'tenant-a',
+        billing_configured: true,
+        plan: {
+          tenant_id: 'tenant-a',
+          plan_id: 'free',
+          status: 'active',
+          period_end: null,
+          created_at: '2026-11-01T00:00:00Z',
+          updated_at: '2026-11-01T00:00:00Z',
+        },
+        plans: {
+          free: {
+            id: 'free',
+            name: 'Free',
+            per_device_monthly_cents: 0,
+            included_decisions_per_device: 5000,
+            overage_cents_per_1k: null,
+            max_devices: 2,
+            zone_enforce: false,
+          },
+          pro: {
+            id: 'pro',
+            name: 'Pro',
+            per_device_monthly_cents: 1200,
+            included_decisions_per_device: 25000,
+            overage_cents_per_1k: 40,
+            max_devices: null,
+            zone_enforce: true,
+          },
+          team: {
+            id: 'team',
+            name: 'Team',
+            per_device_monthly_cents: 2000,
+            included_decisions_per_device: 100000,
+            overage_cents_per_1k: 25,
+            max_devices: null,
+            zone_enforce: true,
+          },
+        },
+        has_billing_account: true,
+        trial_available: true,
+        seats: 1,
+        billed_seats: 1,
+      },
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(responses[path] || {}) })
   })

@@ -1015,9 +1015,10 @@ requires-dist = [
     { name = "pycryptodome", specifier = ">=3.20.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", marker = "extra == 'connector'", specifier = ">=2.31.0" },
+    { name = "wasmtime", marker = "extra == 'wasm'", specifier = ">=25.0.0" },
     { name = "web3", marker = "extra == 'connector'", specifier = ">=7.4.0" },
 ]
-provides-extras = ["connector", "mlflow", "autolog", "openai", "anthropic", "langchain"]
+provides-extras = ["connector", "wasm", "mlflow", "autolog", "openai", "anthropic", "langchain"]
 
 [package.metadata.requires-dev]
 dev = [
