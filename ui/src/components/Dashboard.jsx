@@ -61,7 +61,7 @@ const NAV = [
 ]
 const VIEW_LABELS = Object.fromEntries(NAV.map(([id, , label]) => [id, label]))
 
-export function Dashboard({ connection, logout }) {
+export function Dashboard({ connection, logout, onUnauthorized }) {
   const [realOnly, setRealOnly] = useState(() => readSession('shield-real-only') !== 'false')
   const [menu, setMenu] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
@@ -185,9 +185,10 @@ export function Dashboard({ connection, logout }) {
     }
 
     const failure = summary.reason?.message || 'Authentication failed'
-    if (!live && /401|unauthorized|invalid admin token|admin token required/i.test(failure)) {
-      logout('Session expired. Sign in again to reconnect to this tenant.')
-      return
+    if (!live && /401|unauthorized|invalid admin token|admin token required|authentication required/i.test(failure)) {
+      // App decides, after asking the server, whether this tab is really signed out. It never
+      // revokes the shared session cookie because one poll was refused.
+      onUnauthorized?.()
     }
 
     setStatus(
@@ -196,7 +197,7 @@ export function Dashboard({ connection, logout }) {
         : { state: 'error', message: failure }
     )
     setRefreshing(false)
-  }, [api, logout, realOnly, selectedAgentId])
+  }, [api, onUnauthorized, realOnly, selectedAgentId])
 
   const namespaceOptions = sharedNamespaces.length
     ? sharedNamespaces.map((agent) => ({ ...agent, namespaceKey: `${agent.store_id}\0${agent.agent_id}` }))
