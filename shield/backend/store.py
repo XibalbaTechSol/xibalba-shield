@@ -69,6 +69,49 @@ class Enrollment:
     device_config: dict[str, Any]
 
 
+class _BufferedCursor:
+    """A query result read completely while the connection lock was held.
+
+    Callers use `execute(...).fetchone()` and friends. A live sqlite3 cursor steps its statement
+    on every fetch, so returning one let that stepping run outside the lock while other request
+    threads used the same connection. Valid sessions then came back as None (random 401s) or
+    raised IndexError. Buffering moves every step under the lock.
+    """
+
+    __slots__ = ("_rows", "_pos", "rowcount", "lastrowid", "description")
+
+    def __init__(self, cursor: sqlite3.Cursor) -> None:
+        self.description = cursor.description
+        self._rows = cursor.fetchall() if cursor.description is not None else []
+        self._pos = 0
+        self.rowcount = cursor.rowcount
+        self.lastrowid = cursor.lastrowid
+
+    def fetchone(self) -> Any:
+        if self._pos >= len(self._rows):
+            return None
+        row = self._rows[self._pos]
+        self._pos += 1
+        return row
+
+    def fetchmany(self, size: int = 1) -> list[Any]:
+        rows = self._rows[self._pos : self._pos + size]
+        self._pos += len(rows)
+        return rows
+
+    def fetchall(self) -> list[Any]:
+        rows = self._rows[self._pos :]
+        self._pos = len(self._rows)
+        return rows
+
+    def __iter__(self) -> Any:
+        while (row := self.fetchone()) is not None:
+            yield row
+
+    def close(self) -> None:
+        self._pos = len(self._rows)
+
+
 class _ThreadSafeConnection:
     """Thread-safe proxy for sqlite3.Connection under concurrent HTTP requests."""
 
@@ -78,11 +121,11 @@ class _ThreadSafeConnection:
 
     def execute(self, *args: Any, **kwargs: Any) -> Any:
         with self._lock:
-            return self._raw_conn.execute(*args, **kwargs)
+            return _BufferedCursor(self._raw_conn.execute(*args, **kwargs))
 
     def executemany(self, *args: Any, **kwargs: Any) -> Any:
         with self._lock:
-            return self._raw_conn.executemany(*args, **kwargs)
+            return _BufferedCursor(self._raw_conn.executemany(*args, **kwargs))
 
     def executescript(self, *args: Any, **kwargs: Any) -> Any:
         with self._lock:
