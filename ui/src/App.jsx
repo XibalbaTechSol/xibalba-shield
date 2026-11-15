@@ -108,9 +108,21 @@ export default function App() {
     checkOAuthAndSession()
   }, [])
 
+  const signOutLocally = (notice = '') => {
+    const textNotice = typeof notice === 'string' ? notice : ''
+    if (textNotice) {
+      writeSession('shield-auth-notice', textNotice)
+    } else {
+      removeSession('shield-auth-notice')
+    }
+    removeSession('shield-session')
+    removeSession('shield-connection')
+    setView(textNotice ? 'signin' : 'landing')
+  }
+
+  // User-initiated sign-out. The session lives in an HttpOnly cookie this code cannot see, so the
+  // server call is the only way to revoke it and clear the cookie. Gate on the tenant alone.
   const logout = async (notice = '') => {
-    // The session lives in an HttpOnly cookie this code cannot see, so the server call is the
-    // only way to revoke it and clear the cookie. Gate on the tenant alone.
     if (connection.tenant) {
       try {
         await new ShieldApi(connection.baseUrl, connection.tenant, connection.token).auth(
@@ -121,15 +133,36 @@ export default function App() {
         /* local sign-out still proceeds if the control plane is unavailable */
       }
     }
-    const textNotice = typeof notice === 'string' ? notice : ''
-    if (textNotice) {
-      writeSession('shield-auth-notice', textNotice)
-    } else {
-      removeSession('shield-auth-notice')
+    signOutLocally(notice)
+  }
+
+  // A dashboard poll was refused. Never revoke the session on the strength of that alone: the
+  // cookie is shared by every tab, so a tab still showing an old tenant (the cookie now belongs
+  // to another one) would otherwise end the live session of the tab the user is working in.
+  // Ask the server who this browser is now, and only sign this tab out locally.
+  const handleUnauthorized = async () => {
+    if (connection.token) {
+      // Machine-minted admin token, not a cookie session: nothing shared to protect.
+      await logout('Session expired. Sign in again to reconnect to this tenant.')
+      return
     }
-    removeSession('shield-session')
-    removeSession('shield-connection')
-    setView(textNotice ? 'signin' : 'landing')
+    let me = null
+    try {
+      const response = await fetch('/api/shield/auth/me', { credentials: 'include' })
+      if (response.ok) {
+        me = await response.json()
+      } else if (response.status !== 401) {
+        return // control plane trouble, not a lost session: the next poll retries
+      }
+    } catch {
+      return // network error: the next poll retries
+    }
+    if (me && me.account && me.tenant_id) {
+      if (me.tenant_id === connection.tenant) return // the session is fine; the refusal was transient
+      signOutLocally(`You are signed in to ${me.tenant_id} in another tab. Sign in again to return to ${connection.tenant}.`)
+      return
+    }
+    signOutLocally('Session expired. Sign in again to reconnect to this tenant.')
   }
 
   if (view === 'landing') {
@@ -154,5 +187,5 @@ export default function App() {
     )
   }
 
-  return <Dashboard connection={connection} logout={logout} />
+  return <Dashboard connection={connection} logout={logout} onUnauthorized={handleUnauthorized} />
 }
