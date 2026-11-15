@@ -34,7 +34,11 @@ routed through the batched telemetry client) and remains best-effort/logged-not-
 from __future__ import annotations
 
 import inspect
+import json
 import logging
+import os
+import tempfile
+import time
 import queue
 import threading
 from typing import Any
@@ -94,6 +98,8 @@ class IntegrityExporter:
         # chosen label per logical agent rather than inventing ad hoc ones.
         self.agent_id, self.keypair, self.doc = sdk_did.load_or_create_did(agent_label)
         self.bcc_middleware_url = bcc_middleware_url.rstrip("/")
+        self.oracle_url = oracle_url.rstrip("/") if oracle_url else None
+        self._agent_label = agent_label
         # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
         # every BCC commitment now binds chain_id + verifying_contract (the target chain's
         # XibalbaAgentRegistry). Defaults match Base Sepolia (integrity-core CLAUDE.md's
@@ -126,6 +132,60 @@ class IntegrityExporter:
                 name="shield-decision-exporter",
                 daemon=True,
             ).start()
+
+    def _registration_stamp_path(self) -> Path:
+        return sdk_did.agent_dir(self._agent_label) / "oracle_registered.json"
+
+    def register_offchain_once(self) -> dict[str, Any]:
+        """Register this DID with the Oracle off-chain (gas-free), once per Oracle URL.
+
+        Skipped when `ORACLE_URL` is unset or a stamp for this DID and Oracle URL already
+        exists. Success writes `<agent_dir>/oracle_registered.json`; a failure is logged at
+        WARNING and retried on the next start. Never raises and never blocks the sensor.
+        """
+        try:
+            if not self.oracle_url:
+                return {"status": "skipped"}
+            stamp_path = self._registration_stamp_path()
+            try:
+                stamp = json.loads(stamp_path.read_text())
+                if stamp.get("did") == self.agent_id and stamp.get("oracle_url") == self.oracle_url:
+                    return {"status": "skipped"}
+            except (OSError, ValueError, AttributeError):
+                pass  # no/corrupt stamp: register again
+
+            try:
+                from integrity_sdk.registration_offchain import OffchainRegistrationError, register_offchain
+            except ImportError:
+                detail = "integrity-sdk lacks registration_offchain; upgrade"
+                logger.warning("off-chain Oracle registration skipped: %s", detail)
+                return {"status": "failed", "http_status": None, "detail": detail}
+
+            try:
+                reg = register_offchain(self.oracle_url, self.agent_id, self.keypair)
+            except OffchainRegistrationError as exc:
+                logger.warning("off-chain Oracle registration failed (%s): %s", exc.status, exc.detail)
+                return {"status": "failed", "http_status": exc.status, "detail": exc.detail}
+
+            tier = reg.verification_tier
+            stamp_path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=stamp_path.parent, prefix=".oracle_registered.", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as fh:
+                    json.dump({"did": self.agent_id, "oracle_url": self.oracle_url, "tier": tier,
+                               "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, fh)
+                os.replace(tmp, stamp_path)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+            logger.info("registered %s with Oracle off-chain (tier %s, %s)", self.agent_id, tier, reg.outcome)
+            return {"status": "registered", "tier": tier, "outcome": reg.outcome}
+        except Exception as exc:  # never block the sensor
+            logger.warning("off-chain Oracle registration failed: %s", exc)
+            return {"status": "failed", "http_status": None, "detail": str(exc)}
 
     def export_decision(self, decision: PolicyDecision) -> dict[str, Any]:
         intent_type = _intent_type_for(decision)

@@ -563,6 +563,15 @@ def _run(args: argparse.Namespace) -> int:
             # handled by the exporter's bounded durable queue and watchdog retries.
             async_export=True,
         )
+        # Gas-free first-run registration with the Oracle (no-op when oracle_url is unset or a
+        # stamp exists). Runs on a daemon thread: the SDK call can wait up to 30s on a Render
+        # cold start and must never delay the enforcement loop. A failure is logged and
+        # retried on the next start.
+        import threading
+
+        threading.Thread(
+            target=exporter.register_offchain_once, name="shield-offchain-register", daemon=True
+        ).start()
         # A one-time startup check (docs/PRODUCTION_READINESS_PLAN.md §7 item 4), not a
         # per-tick recheck -- Watchdog republishes this same value on every tick rather
         # than calling check_did_preflight again.
