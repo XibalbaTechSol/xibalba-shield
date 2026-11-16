@@ -181,7 +181,7 @@ Shield invents no receipt field). It is opt-in: without the flag the response sa
   held in memory and re-verified at start; rotation and incremental trees are `[PLANNED]`.
   Rotating either key starts a new log.
 
-Verification is `integrity verify --receipts bundle.json --trusted-signer <key>` from
+Verification is `integrity receipts verify --receipts bundle.json --trusted-signer <key>` from
 `integrity-cli`; the daemon prints its signer key at start. Not built: BCC's side of B2 (the same
 receipts from `bcc_middleware`) and the shared conformance vectors.
 
