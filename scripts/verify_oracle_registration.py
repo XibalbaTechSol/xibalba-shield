@@ -28,6 +28,45 @@ for sdk_path in SDK_HINTS:
         break
 
 AGENT_ID = "xibalba-shield"
+_ZERO_ADDR = "0x" + "00" * 20
+
+
+def registry_address(deployments: dict) -> str:
+    """The v3 `AgentRegistry` from the deployments file's singletons.
+
+    The v2 `XibalbaAgentRegistry` is deleted in integrity-core slice D5 and is never read here.
+    """
+    address = (deployments.get("singletons") or {}).get("AgentRegistry")
+    if not address:
+        raise LookupError("no singletons.AgentRegistry in the deployments file")
+    return address
+
+
+def registry_contract(w3, address: str):
+    """Module-level so tests can substitute a fake registry (same seam as integrity-cli's status)."""
+    from integrity_sdk import chain
+
+    return chain._contract(w3, "AgentRegistry", address=address)
+
+
+def read_registration(w3, address: str, agent_did: str) -> dict | None:
+    """`AgentRegistry.resolveDID(did)` as a dict, or None when the DID has no on-chain record."""
+    pubkey, guardian, actor, domain_id, uri, registered_at, retired_at, proof_kind = (
+        registry_contract(w3, address).functions.resolveDID(agent_did).call()
+    )
+    if not any(pubkey):
+        return None
+    return {
+        "agent_registry": address,
+        "pubkey": "0x" + bytes(pubkey).hex(),
+        "guardian": guardian,
+        "actor": None if not actor or actor.lower() == _ZERO_ADDR else actor,
+        "domain_id": "0x" + bytes(domain_id).hex(),
+        "uri": uri,
+        "registered_at": registered_at,
+        "retired_at": retired_at or None,
+        "proof_kind": proof_kind,
+    }
 
 
 def _rpc_reachable(url: str) -> bool:
@@ -60,8 +99,8 @@ def main() -> int:
             print(f"RPC {rpc_url} is unreachable", file=sys.stderr)
             return 1
         deployments = chain.load_deployments(deployments_file)
-        registry_address = deployments["singletons"]["XibalbaAgentRegistry"]
-        resolved = chain.resolve_did(w3, registry_address, agent_did)
+        address = registry_address(deployments)
+        resolved = read_registration(w3, address, agent_did)
     except ModuleNotFoundError as exc:
         print(
             f"registration readback dependency missing: {exc.name}; "
@@ -69,15 +108,22 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    except LookupError as exc:
+        print(f"registration readback blocked: {exc.args[0]} ({deployments_file})", file=sys.stderr)
+        return 1
     except Exception as exc:  # noqa: BLE001
         print(f"registration readback failed: {exc}", file=sys.stderr)
         return 1
 
     if resolved is None:
-        print(f"DID is not registered: {agent_did}", file=sys.stderr)
+        print(f"no on-chain AgentRegistry record for {agent_did} (optional in v3)", file=sys.stderr)
+        return 1
+    if resolved["retired_at"]:
+        print(f"on-chain record for {agent_did} is retired at {resolved['retired_at']}", file=sys.stderr)
         return 1
 
-    print(json.dumps({"did": agent_did, "registration": resolved.__dict__}, indent=2, sort_keys=True))
+    # `status` is what scripts/pilot_gate_report.py grades (--did-artifact).
+    print(json.dumps({"status": "pass", "did": agent_did, "registration": resolved}, indent=2, sort_keys=True))
     return 0
 
 
