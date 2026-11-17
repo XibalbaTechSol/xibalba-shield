@@ -605,12 +605,15 @@ def test_policy_history_and_rollback_end_to_end(tmp_path, capsys):
     first_hash = load_policy_bundle(rules_path).hash
 
     import os
-    st = rules_path.stat()
-    os.utime(rules_path, (st.st_atime + 5, st.st_mtime + 5))
+    first_mtime = rules_path.stat().st_mtime
     _write(rules_path, {"policy_version": "v-2", "policy_revision": 2, "rules": [
         {"rule_id": "a", "name": "A", "version": "1.0.0", "conditions": [], "actions": []},
         {"rule_id": "b", "name": "B", "version": "1.0.0", "conditions": [], "actions": []},
     ]})
+    # Bump AFTER the write: the write resets mtime to "now", which can equal the first
+    # write's mtime on a coarse-timestamp filesystem (Windows CI), and the reloader's
+    # mtime shortcut then skips the reload. Same order as test_hot_reload._bump_mtime.
+    os.utime(rules_path, (first_mtime + 5, first_mtime + 5))
     assert reloader.check_and_reload() is True
 
     code = main(["policy-history", "--rules", str(rules_path)])
