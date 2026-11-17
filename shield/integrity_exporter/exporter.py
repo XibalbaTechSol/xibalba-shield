@@ -101,8 +101,9 @@ class IntegrityExporter:
         self.oracle_url = oracle_url.rstrip("/") if oracle_url else None
         self._agent_label = agent_label
         # integrity-core docs/plans/2026-08-18-phase1-canonical-intent-encoding-proposal.md:
-        # every BCC commitment now binds chain_id + verifying_contract (the target chain's
-        # XibalbaAgentRegistry). Defaults match Base Sepolia (integrity-core CLAUDE.md's
+        # every BCC commitment now binds chain_id + verifying_contract (the target chain's agent
+        # registry: the v2 XibalbaAgentRegistry until integrity-core PR 3.4b moves the binding to
+        # the v3 AgentRegistry, in lockstep with the BCC). Defaults match Base Sepolia (integrity-core CLAUDE.md's
         # "Live deployment"); a device pointed at a different deployment must configure both
         # via DeviceConfig, same as bcc_middleware_url/oracle_url.
         self.chain_id = chain_id
