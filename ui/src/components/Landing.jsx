@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Crosshair, FileCheck2, Fingerprint, LockKeyhole, Radar, RotateCcw, Settings2, Shield, ShieldCheck, SquareTerminal, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, Crosshair, ExternalLink, FileCheck2, Fingerprint, Globe, LockKeyhole, Mail, Phone, Radar, RotateCcw, Settings2, Shield, ShieldCheck, SquareTerminal, Workflow } from 'lucide-react'
 import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
@@ -46,6 +46,9 @@ export function Landing({ next }) {
             <a href="#responders">Responders</a>
             <a href="#agent-security">Agent security</a>
             <a href="#assurance">Assurance</a>
+            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              Company <ExternalLink size={11} />
+            </a>
           </div>
           <div className="nav-actions">
             <button className="quiet" onClick={next}>Sign in</button>
@@ -191,7 +194,19 @@ export function Landing({ next }) {
       <section className="cta" id="control">
         <div>
           <p className="eyebrow">BUILT FOR REAL OPERATIONS</p>
-          <h2>Put your agent fleet behind a verifiable boundary.</h2><p>Start with visibility. Promote responders only when their evidence is complete.</p>
+          <h2>Put your agent fleet behind a verifiable boundary.</h2>
+          <p>Start with visibility. Promote responders only when their evidence is complete.</p>
+          <div style={{ marginTop: '1.25rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '13px', alignItems: 'center' }}>
+            <a href="mailto:jacob@xibalbasolutions.com" style={{ color: 'var(--text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+              <Mail size={14} style={{ color: 'var(--accent-text)' }} /> jacob@xibalbasolutions.com
+            </a>
+            <a href="tel:+12628641589" style={{ color: 'var(--text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+              <Phone size={14} style={{ color: 'var(--accent-text)' }} /> 1 (262) 864-1589
+            </a>
+            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+              <Globe size={14} /> xibalbasolutions.com
+            </a>
+          </div>
         </div>
         <button onClick={next} className="cta-btn">
           Open Shield <ArrowRight aria-hidden="true" />
@@ -199,13 +214,51 @@ export function Landing({ next }) {
       </section>
 
       <footer className="site-footer">
-        <div className="footer-main">
-          <div className="footer-brand"><Brand /><p>Deterministic endpoint security for autonomous systems—local decisions, bounded response, verifiable outcomes.</p><span><span className="status-dot green" /> Local-first by design</span></div>
-          <div className="footer-links"><h3>Platform</h3><a href="#platform">Capabilities</a><a href="#architecture">Architecture</a><a href="#agent-security">Agent security</a></div>
-          <div className="footer-links"><h3>Security</h3><a href="#proof">Trust model</a><a href="#assurance">Assurance</a><button onClick={next}>Operator console</button></div>
-          <div className="footer-links"><h3>Operate</h3><a href="#architecture">Decision path</a><a href="#responders">Proof gates</a><button onClick={next}>Sign in</button></div>
+        <div className="footer-main" style={{ gridTemplateColumns: 'minmax(240px, 1.4fr) repeat(auto-fit, minmax(130px, 1fr))' }}>
+          <div className="footer-brand">
+            <Brand />
+            <p>Deterministic endpoint security for autonomous systems—local decisions, bounded response, verifiable outcomes.</p>
+            <div style={{ marginBottom: '14px' }}>
+              <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-text)', textDecoration: 'none', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <Globe size={12} /> Part of Xibalba Solutions LLC
+              </a>
+            </div>
+            <span><span className="status-dot green" /> Local-first by design</span>
+          </div>
+          <div className="footer-links">
+            <h3>Platform</h3>
+            <a href="#platform">Capabilities</a>
+            <a href="#architecture">Architecture</a>
+            <a href="#agent-security">Agent security</a>
+          </div>
+          <div className="footer-links">
+            <h3>Security</h3>
+            <a href="#proof">Trust model</a>
+            <a href="#assurance">Assurance</a>
+            <button onClick={next}>Operator console</button>
+          </div>
+          <div className="footer-links">
+            <h3>Contact</h3>
+            <a href="mailto:jacob@xibalbasolutions.com" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Mail size={12} /> jacob@xibalbasolutions.com
+            </a>
+            <a href="tel:+12628641589" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Phone size={12} /> 1 (262) 864-1589
+            </a>
+            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Globe size={12} /> xibalbasolutions.com
+            </a>
+            <span style={{ color: 'var(--dim)', fontSize: '11px', marginTop: '4px' }}>Wisconsin, USA</span>
+          </div>
         </div>
-        <div className="footer-bottom"><small>© 2026 Xibalba Technology Solutions</small><span>Linux-first · Policy-driven · Evidence-backed</span></div>
+        <div className="footer-bottom">
+          <small>© {new Date().getFullYear()} <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>Xibalba Solutions LLC</a>. All rights reserved.</small>
+          <div style={{ display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <a href="mailto:jacob@xibalbasolutions.com" style={{ color: 'inherit', textDecoration: 'none' }}>jacob@xibalbasolutions.com</a>
+            <a href="tel:+12628641589" style={{ color: 'inherit', textDecoration: 'none' }}>1 (262) 864-1589</a>
+            <span>Linux-first · Policy-driven · Evidence-backed</span>
+          </div>
+        </div>
       </footer>
     </main>
   )
