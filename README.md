@@ -22,7 +22,7 @@ The Integrity Ecosystem operates as a cohesive, physics-aligned machine economy 
 | Repository | Role | Purpose |
 |---|---|---|
 | **`integrity-core`** | **The Physics Engine of the Machine Economy** | Implements the Autonomous Integrity Score (AIS) as the deterministic reward function ($R_{\text{total}} = R_{\text{task}} + \lambda \cdot \text{AIS}$). Governs on-chain DIDs, Behavioral Commitment Chains (BCC), Merkle state anchors, and cryptographic state verification. |
-| **`xibalba-cortex`** | **The Navigational Engine for Verifiable Autonomy** | Neuro-symbolic knowledge graph and active inference engine. Replaces probabilistic token generation with geometric graph traversal (R-GCN + TKGE), dynamic logit masking, temporal event reification, and domain connectors (Biomedical/MIMIC-IV, FHIR, ChEMBL, CMS cost friction). |
+| **`super-cortex`** | **The Navigational Engine for Verifiable Autonomy** | Neuro-symbolic knowledge graph and active inference engine. Replaces probabilistic token generation with geometric graph traversal (R-GCN + TKGE), dynamic logit masking, temporal event reification, and domain connectors (Biomedical/MIMIC-IV, FHIR, ChEMBL, CMS cost friction). |
 | **`xibalba-shield`** | **Cryptographic Topology & Response Governance** | Enforces topological boundary gating, zero-probability unauthorized state spaces, and vendor-neutral response governance across EDRs and AI agents. Produces tamper-evident audit ledgers and signed evidence. |
 | **`integrity-console`** | **The Universal Verifiable Operator Window** | The unified presentation and account layer. Visualizes agent graph trajectories, multi-agent DID credentials, AIS score distributions, real-time response approval queues, and cryptographic Merkle verification. |
 
@@ -30,7 +30,7 @@ The Integrity Ecosystem operates as a cohesive, physics-aligned machine economy 
 flowchart LR
     subgraph Agents["Autonomous AI Agents & Runtimes"]
         A["Agent / SOAR / MCP"] -->|"Response intent<br/>(hash-bound)"| S["🛡️ xibalba-shield"]
-        A -->|"Geometric graph traversal<br/>(path is proof)"| C["🧠 xibalba-cortex"]
+        A -->|"Geometric graph traversal<br/>(path is proof)"| C["🧠 super-cortex"]
     end
     subgraph EDR["Enterprise EDR (CrowdStrike / Defender)"]
         E["EDR Sensors & Console"] <-->|"Host telemetry &<br/>gated execution"| S

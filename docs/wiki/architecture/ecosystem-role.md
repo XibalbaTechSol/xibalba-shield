@@ -27,7 +27,7 @@ Xibalba Shield is the **Cryptographic Topology & Response Governance Layer** in 
 |---|---|---|---|
 | **`xibalba-shield`** (This Repo) | **🛡️ Cryptographic Topology & Response Governance** | Enforces topological boundary gating, zero-probability unauthorized state spaces, and vendor-neutral response governance across enterprise EDRs (CrowdStrike, Defender) and AI agents (MCP, SOAR). *"The EDR detects and acts; Shield proves who authorized it."* Produces tamper-evident audit ledgers and HIPAA assurance packets. | Cloud Console: [`https://xibalba-shield.onrender.com`](https://xibalba-shield.onrender.com) |
 | **`integrity-core`** | **🦴 The Physics Engine & AI Agent Control Layer** | Implements the Autonomous Integrity Score (AIS) as the deterministic reinforcement learning reward function ($R_{\text{total}} = R_{\text{task}} + \lambda \cdot \text{AIS}$). Governs on-chain DIDs, Policy Packs, Behavioral Commitment Chains (BCC), Merkle state anchors, and cryptographic state verification. | Oracle: [`https://integrity-oracle.onrender.com`](https://integrity-oracle.onrender.com) |
-| **`xibalba-cortex`** | **🧠 The Navigational Engine** | Neuro-symbolic knowledge graph and active inference engine. Replaces probabilistic text generation with geometric graph traversal (R-GCN + TKGE/TransE), dynamic logit masking, temporal event reification, and domain connectors (Biomedical/MIMIC-IV, FHIR live-feeds, ChEMBL, CMS cost friction). | Pilot: [`https://cortex-managed-pilot.onrender.com`](https://cortex-managed-pilot.onrender.com) |
+| **`super-cortex`** | **🧠 The Navigational Engine** | Neuro-symbolic knowledge graph and active inference engine. Replaces probabilistic text generation with geometric graph traversal (R-GCN + TKGE/TransE), dynamic logit masking, temporal event reification, and domain connectors (Biomedical/MIMIC-IV, FHIR live-feeds, ChEMBL, CMS cost friction). | Pilot: [`https://cortex-managed-pilot.onrender.com`](https://cortex-managed-pilot.onrender.com) |
 | **`integrity-console`** | **👁️ The Universal Verifiable Operator Window** | Unified operator presentation layer. Visualizes agent graph navigation trajectories, multi-agent DID credentials, AIS score distributions, real-time response approval queues, and cryptographic Merkle verification. | Operator Window: [`https://integrity-console-test.onrender.com`](https://integrity-console-test.onrender.com) |
 
 ---
@@ -45,7 +45,7 @@ flowchart LR
     Agent["🤖 AI Agent / SOAR"] -->|"Response intent<br/>(hash-bound)"| Shield["🛡️ xibalba-shield<br/>(Response Gateway)"]
     EDR["🏢 Enterprise EDR<br/>(CrowdStrike / Defender)"] <-->|"Telemetry &<br/>gated execution"| Shield
     Shield -->|"Signed action receipts &<br/>audit packets"| Core["🦴 integrity-core<br/>(AIS Physics Engine)"]
-    Cortex["🧠 xibalba-cortex<br/>(Navigational Engine)"] -->|"Session Merkle roots"| Core
+    Cortex["🧠 super-cortex<br/>(Navigational Engine)"] -->|"Session Merkle roots"| Core
     Core -->|"AIS, identity, evidence"| Console["👁️ integrity-console<br/>(Operator Window)"]
 ```
 

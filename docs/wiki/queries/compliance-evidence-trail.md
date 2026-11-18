@@ -18,7 +18,7 @@ source_files:
 - [Open question](#open-question)
 - [What exists today](#what-exists-today)
 - [What's still open](#what-s-still-open)
-- [The other half of this story lives in xibalba-cortex](#the-other-half-of-this-story-lives-in-xibalba-cortex)
+- [The other half of this story lives in super-cortex](#the-other-half-of-this-story-lives-in-super-cortex)
 - [Related pages](#related-pages)
 
 ## Open question
@@ -69,10 +69,10 @@ resolved.
   prove who authorized its deployment or that the running sidecar loaded the intended bytes
   unless runtime status/evidence is also retained.
 
-## The other half of this story lives in `xibalba-cortex`
+## The other half of this story lives in `super-cortex`
 
-This page intentionally shares its title with `xibalba-cortex`'s own
-[`compliance-evidence-trail`](https://github.com/XibalbaTechSol/xibalba-cortex/wiki/compliance-evidence-trail)
+This page intentionally shares its title with `super-cortex`'s own
+[`compliance-evidence-trail`](https://github.com/XibalbaTechSol/super-cortex/wiki/compliance-evidence-trail)
 page, so the two repositories' compliance stories read as one narrative. Shield produces the
 real-time enforcement half and the evidence-export half (this page); Cortex provides the
 queryable-history half — how an already-exported record gets searched, retrieved, and presented
