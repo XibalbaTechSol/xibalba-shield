@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SUPABASE_URL = "https://ftspunijfgcbkuybobhf.supabase.co"
 DEFAULT_AUDIENCE = "authenticated"
-SUPPORTED_PROVIDERS = ("google",)
+SUPPORTED_PROVIDERS = ("google", "github")
 
 
 class SupabaseAuthError(RuntimeError):

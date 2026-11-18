@@ -838,7 +838,7 @@ def make_handler(
                 return
 
             if parsed.path == "/api/shield/auth/providers":
-                self._send_json({"google": True, "github": False})
+                self._send_json({"google": True, "github": True})
                 return
 
             if parsed.path == "/api/shield/nurse-rachel/policy-pack":
@@ -860,11 +860,16 @@ def make_handler(
                 )
                 return
 
-            if parsed.path in ("/api/shield/auth/oauth/google/authorize", "/api/shield/auth/oauth/authorize"):
+            if parsed.path in (
+                "/api/shield/auth/oauth/google/authorize",
+                "/api/shield/auth/oauth/github/authorize",
+                "/api/shield/auth/oauth/authorize",
+            ):
+                provider = "github" if "/github/" in parsed.path else query.get("provider", ["google"])[0]
                 default_redirect = f"{public_base_url or self._request_base_url().rstrip('/')}/"
                 redirect_to = query.get("redirect_to", [""])[0] or default_redirect
                 try:
-                    auth_url = active_supabase_verifier.get_authorization_url("google", redirect_to)
+                    auth_url = active_supabase_verifier.get_authorization_url(provider, redirect_to)
                 except Exception as exc:
                     self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
                     return
@@ -875,7 +880,7 @@ def make_handler(
                     self.send_header("Cache-Control", "no-store")
                     self.end_headers()
                     return
-                self._send_json({"authorization_url": auth_url})
+                self._send_json({"authorization_url": auth_url, "provider": provider})
                 return
 
             if parsed.path == "/api/shield/auth/oidc/login":
