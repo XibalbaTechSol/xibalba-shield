@@ -267,3 +267,118 @@ class OIDCClient:
             email_verified=email_verified,
             raw=claims,
         )
+
+
+class GitHubOAuthClient:
+    """Direct GitHub OAuth 2.0 client with PKCE support."""
+
+    AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+    TOKEN_URL = "https://github.com/login/oauth/access_token"
+    USER_URL = "https://api.github.com/user"
+    EMAILS_URL = "https://api.github.com/user/emails"
+
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str = "",
+    ) -> None:
+        self.client_id = client_id.strip()
+        self.client_secret = client_secret.strip()
+        self.redirect_uri = redirect_uri.strip()
+
+    def get_authorization_url(
+        self,
+        state: str,
+        *,
+        code_challenge: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> str:
+        effective_redirect = (redirect_uri or self.redirect_uri).strip()
+        params: dict[str, str] = {
+            "client_id": self.client_id,
+            "redirect_uri": effective_redirect,
+            "scope": "read:user user:email",
+            "state": state,
+        }
+        if code_challenge:
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = "S256"
+        return f"{self.AUTHORIZE_URL}?{urlencode(params)}"
+
+    def exchange_code(
+        self,
+        code: str,
+        *,
+        code_verifier: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> dict[str, Any]:
+        effective_redirect = (redirect_uri or self.redirect_uri).strip()
+        payload: dict[str, str] = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "redirect_uri": effective_redirect,
+        }
+        if code_verifier:
+            payload["code_verifier"] = code_verifier
+        req = urllib.request.Request(
+            self.TOKEN_URL,
+            data=urlencode(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": "Xibalba-Shield/1.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            raise OAuthError(f"GitHub token exchange failed: {exc}") from exc
+
+    def get_user_info(self, tokens: dict[str, Any]) -> OAuthUserInfo:
+        access_token = str(tokens.get("access_token") or "").strip()
+        if not access_token:
+            raise OAuthError("GitHub token response did not include access_token")
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "Xibalba-Shield/1.0",
+        }
+        try:
+            with urllib.request.urlopen(urllib.request.Request(self.USER_URL, headers=headers), timeout=15) as resp:
+                user = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            raise OAuthError(f"GitHub user fetch failed: {exc}") from exc
+
+        email = str(user.get("email") or "").strip().lower()
+        email_verified = True
+        if not email:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(self.EMAILS_URL, headers=headers), timeout=15) as resp:
+                    emails = json.loads(resp.read().decode("utf-8"))
+                primary = next(
+                    (e for e in emails if e.get("primary") and e.get("verified")),
+                    next((e for e in emails if e.get("verified")), None),
+                )
+                if primary:
+                    email = str(primary.get("email") or "").strip().lower()
+                    email_verified = bool(primary.get("verified", True))
+            except Exception as exc:
+                raise OAuthError(f"GitHub emails fetch failed: {exc}") from exc
+
+        sub = str(user.get("id") or user.get("login") or "").strip()
+        display_name = str(user.get("name") or user.get("login") or (email.split("@")[0] if email else "")).strip()
+        if not email or not sub:
+            raise OAuthError("GitHub provider did not return a verified email and user id")
+
+        return OAuthUserInfo(
+            provider="github",
+            provider_user_id=sub,
+            email=email,
+            display_name=display_name,
+            email_verified=email_verified,
+            raw=user,
+        )
+

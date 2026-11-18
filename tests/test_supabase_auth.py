@@ -38,11 +38,14 @@ def test_supabase_auth_verifier_unit():
         jwks_client=MockJWKClient(public_key),
     )
 
-    # Google is supported
+    # Google and GitHub are supported
     auth_url = verifier.get_authorization_url("google", "https://shield.test/auth")
     assert "https://test.supabase.co/auth/v1/authorize" in auth_url
     assert "provider=google" in auth_url
     assert "redirect_to=https%3A%2F%2Fshield.test%2Fauth" in auth_url
+
+    gh_url = verifier.get_authorization_url("github", "https://shield.test/auth")
+    assert "provider=github" in gh_url
 
     # Unsupported provider raises ValueError
     with pytest.raises(ValueError, match="Unsupported OAuth provider"):
@@ -90,14 +93,14 @@ def test_backend_supabase_oauth_endpoints(tmp_path: Path):
     base_url = f"http://127.0.0.1:{server.server_port}"
 
     try:
-        # 1. Test /api/shield/auth/providers returns google=True, github=False
+        # 1. Test /api/shield/auth/providers returns google=True, github=True
         req = urllib.request.Request(f"{base_url}/api/shield/auth/providers")
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
             assert data["google"] is True
-            assert data["github"] is False
+            assert data["github"] is True
 
-        # 2. Test /api/shield/auth/oauth/google/authorize?redirect=0 returns JSON
+        # 2. Test /api/shield/auth/oauth/google/authorize?redirect=0 and github/authorize?redirect=0 return JSON
         req = urllib.request.Request(
             f"{base_url}/api/shield/auth/oauth/google/authorize?redirect_to=http://127.0.0.1/callback&redirect=0",
             headers={"Accept": "application/json"},
@@ -107,6 +110,15 @@ def test_backend_supabase_oauth_endpoints(tmp_path: Path):
             assert "authorization_url" in data
             assert "ftspunijfgcbkuybobhf.supabase.co" in data["authorization_url"]
             assert "provider=google" in data["authorization_url"]
+
+        gh_req = urllib.request.Request(
+            f"{base_url}/api/shield/auth/oauth/github/authorize?redirect_to=http://127.0.0.1/callback&redirect=0",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(gh_req) as resp:
+            gh_data = json.loads(resp.read().decode())
+            assert "authorization_url" in gh_data
+            assert "provider=github" in gh_data["authorization_url"]
 
         # 3. Test /api/shield/auth/supabase/session creates and authenticates user
         token = jwt.encode(
