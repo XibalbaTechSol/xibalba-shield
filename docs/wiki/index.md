@@ -4,7 +4,7 @@ Xibalba Shield provides cryptographic topology, boundary gating, and verifiable 
 
 > **"The EDR detects and acts. Shield proves who authorized it, under what authority, and that the record is untampered."**
 
-Shield enforces zero-probability state spaces for unauthorized operations and gates response intents across enterprise EDRs (CrowdStrike Falcon, Microsoft Defender) and agent runtimes. It is the boundary and response enforcement layer; `integrity-core` is the physics engine computing the Autonomous Integrity Score (AIS) as the native reward function; `xibalba-cortex` is the navigational knowledge engine; and `integrity-console` is the universal operator window.
+Shield enforces zero-probability state spaces for unauthorized operations and gates response intents across enterprise EDRs (CrowdStrike Falcon, Microsoft Defender) and agent runtimes. It is the boundary and response enforcement layer; `integrity-core` is the physics engine computing the Autonomous Integrity Score (AIS) as the native reward function; `super-cortex` is the navigational knowledge engine; and `integrity-console` is the universal operator window.
 
 Governance/conventions live in `WIKI_SCHEMA.md`; the full catalog with one-line descriptions is `WIKI_INDEX.md`; the change history is `WIKI_LOG.md`.
 
