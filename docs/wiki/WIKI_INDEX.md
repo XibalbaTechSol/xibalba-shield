@@ -4,7 +4,7 @@
 > now — see the schema's "no aspirational content" rule. This is a focused core set covering
 > Shield's actual architecture, not an exhaustive catalog — contributions adding more pages are
 > welcome.
-> Last updated: 2026-11-05 | Total pages: 17 (12 concepts, 2 entities, 2 architecture, 1 query)
+> Last updated: 2026-11-18 | Total pages: 18 (13 concepts, 2 entities, 2 architecture, 1 query)
 
 ## Acronym glossary
 
@@ -30,6 +30,7 @@
 - [SLM Cascade Tiers](concepts/slm-cascade-tiers.md) — the 3-tier Hybrid Cascading Architecture: Tier 1 real, Tier 2 has real inference code now wired via `--slm-backend`, Tier 3 `[PLANNED]`
 - [Sensor Model](concepts/sensor-model.md) — the `Sensor` protocol, the synthetic dev sensor, verified/pending Linux eBPF probes, and honest Windows/macOS stubs
 - [Exporter Remediation](concepts/exporter-remediation.md) — authenticated, bounded `retry`/`flush`/`reconnect` recovery jobs; not a remote shell
+- [Xibalba Solutions Enterprise & Commercial Operations](concepts/xibalba-solutions-enterprise.md) — corporate authority, executive contacts, and the 3 commercial software pillars
 
 ## Entities
 

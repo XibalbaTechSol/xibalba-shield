@@ -537,3 +537,10 @@
 - Limits: immediate cancellations and mid-period plan changes bill no overage (under-billing only). The
   portal must cancel at period end without plan switching, and the webhook endpoint must subscribe to
   `invoice.created`. Design §5 has the details.
+
+## [2026-11-18] docs(wiki) | Document Xibalba Solutions corporate operations and executive contacts
+
+- Documented commercial parent entity Xibalba Solutions LLC (Wisconsin, USA) and executive leadership contacts in `docs/wiki/concepts/xibalba-solutions-enterprise.md`.
+- Published direct leadership communications channels: `jacob@xibalbasolutions.com`, telephone `+1 (262) 864-1589`, and portal `https://xibalbasolutions.com`.
+- Updated `docs/wiki/WIKI_INDEX.md` catalog (18 pages total: 13 concepts) and `docs/wiki/index.md`.
+

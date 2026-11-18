@@ -52,6 +52,7 @@ flowchart TD
 - [SLM Cascade Tiers](concepts/slm-cascade-tiers.md)
 - [Sensor Model](concepts/sensor-model.md)
 - [Exporter Remediation](concepts/exporter-remediation.md)
+- [Xibalba Solutions Enterprise & Commercial Operations](concepts/xibalba-solutions-enterprise.md)
 
 ### Entities
 - [Device Context & Agent Registry](entities/device-context.md)
@@ -63,3 +64,11 @@ flowchart TD
 
 ### Queries
 - [Compliance Evidence Trail](queries/compliance-evidence-trail.md)
+
+## Corporate Operations & Commercial Inquiries
+
+Xibalba Shield is governed and commercially supported by **Xibalba Solutions LLC** (Wisconsin, USA).
+- Executive Leadership & Operations: Jacob S. Vickers ([jacob@xibalbasolutions.com](mailto:jacob@xibalbasolutions.com))
+- Telephone Inquiries: `+1 (262) 864-1589`
+- Corporate Portal: [https://xibalbasolutions.com](https://xibalbasolutions.com)
+- Enterprise & Commercial Overview: [Xibalba Solutions Enterprise & Commercial Operations](concepts/xibalba-solutions-enterprise.md)
