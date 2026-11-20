@@ -51,11 +51,15 @@ class CortexMemoryProvider:
         max_payload_bytes: int = _OUTBOX_MAX_PAYLOAD_BYTES,
         max_pending_rows: int = 32,
         publish_actions: frozenset[str] | None = None,
+        agent_did: str | None = None,
+        scope: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.agent_id = agent_id
         self.device_id = device_id
+        self.agent_did = (agent_did or os.environ.get("SHIELD_AGENT_DID", "did:integrity:68fed1331613937555a59398223e8e87520a87dd0305aac4fd7ecdc32a14a861")).strip()
+        self.scope = (scope or os.environ.get("SHIELD_CORTEX_SCOPE", "agent:shield.local")).strip()
         self.timeout = timeout
         self.max_attempts = max(1, int(max_attempts))
         self.max_payload_bytes = max(1, int(max_payload_bytes))
@@ -66,13 +70,32 @@ class CortexMemoryProvider:
         self._init_outbox()
 
     @classmethod
-    def from_environment(cls, *, device_id: str, agent_id: str | None = None, base_url: str | None = None, token: str | None = None) -> "CortexMemoryProvider | None":
+    def from_environment(
+        cls,
+        *,
+        device_id: str,
+        agent_id: str | None = None,
+        base_url: str | None = None,
+        token: str | None = None,
+        agent_did: str | None = None,
+        scope: str | None = None,
+    ) -> "CortexMemoryProvider | None":
         base_url = (base_url or os.environ.get("XIBALBA_CORTEX_URL", "")).strip()
         token = (token or os.environ.get("XIBALBA_CORTEX_TOKEN", "")).strip()
         canonical_agent_id = (agent_id or os.environ.get("XIBALBA_AGENT_ID", "")).strip()
         if not (base_url and token and canonical_agent_id):
             return None
-        return cls(base_url=base_url, token=token, agent_id=canonical_agent_id, device_id=device_id, outbox_path=os.environ.get("XIBALBA_CORTEX_OUTBOX"))
+        effective_did = (agent_did or os.environ.get("SHIELD_AGENT_DID", "did:integrity:68fed1331613937555a59398223e8e87520a87dd0305aac4fd7ecdc32a14a861")).strip()
+        effective_scope = (scope or os.environ.get("SHIELD_CORTEX_SCOPE", "agent:shield.local")).strip()
+        return cls(
+            base_url=base_url,
+            token=token,
+            agent_id=canonical_agent_id,
+            device_id=device_id,
+            outbox_path=os.environ.get("XIBALBA_CORTEX_OUTBOX"),
+            agent_did=effective_did,
+            scope=effective_scope,
+        )
 
     def _connect_outbox(self) -> sqlite3.Connection:
         self.outbox_path.parent.mkdir(parents=True, exist_ok=True)
@@ -282,13 +305,21 @@ class CortexMemoryProvider:
         payload = {
             "content": content,
             "content_hash": content_hash,
+            "scope": self.scope,
+            "agent_did": self.agent_did,
             "source": {
                 "kind": "shield_event",
                 "locator": f"shield://{self.device_id}/{getattr(getattr(decision, 'event_ref', None), 'event_id', 'event')}",
                 "agent_id": self.agent_id,
+                "agent_did": self.agent_did,
+                "scope": self.scope,
+                "action": action,
                 "metadata": {
                     "device_id": self.device_id,
                     "agent_name": "xibalba-shield",
+                    "agent_did": self.agent_did,
+                    "scope": self.scope,
+                    "action": action,
                     "redaction_version": "allowlist-v1",
                     "redaction_proof": redaction_proof,
                     "event_id": event_id,
@@ -303,6 +334,44 @@ class CortexMemoryProvider:
         }
         self._enqueue(payload, f"shield:{self.device_id}:{event_id}")
         self.flush(limit=20)
+
+    def remember_telemetry(self, telemetry: dict[str, Any], *, kind: str = "device_telemetry") -> dict[str, Any]:
+        """Ingest device telemetry and actions Shield takes directly into Cortex memory."""
+        safe_telemetry = redact_event(telemetry if isinstance(telemetry, dict) else {"telemetry": str(telemetry)})
+        content_payload = {"telemetry": safe_telemetry, "kind": kind, "device_id": self.device_id, "timestamp": time.time()}
+        content = json.dumps(content_payload, sort_keys=True, separators=(",", ":"))
+        redaction_proof = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        content_hash = f"sha256:{redaction_proof}"
+        telemetry_id = f"tel_{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+        payload = {
+            "content": content,
+            "content_hash": content_hash,
+            "scope": self.scope,
+            "agent_did": self.agent_did,
+            "source": {
+                "kind": "shield_telemetry",
+                "locator": f"shield://{self.device_id}/telemetry/{telemetry_id}",
+                "agent_id": self.agent_id,
+                "agent_did": self.agent_did,
+                "scope": self.scope,
+                "metadata": {
+                    "device_id": self.device_id,
+                    "agent_name": "xibalba-shield",
+                    "agent_did": self.agent_did,
+                    "scope": self.scope,
+                    "telemetry_kind": kind,
+                    "redaction_version": "allowlist-v1",
+                    "redaction_proof": redaction_proof,
+                    "telemetry_id": telemetry_id,
+                },
+            },
+            "status": "queued",
+            "evidence_class": "device_telemetry",
+            "idempotency_key": f"shield:{self.device_id}:{telemetry_id}",
+        }
+        self._enqueue(payload, f"shield:{self.device_id}:{telemetry_id}")
+        self.flush(limit=20)
+        return payload
 
 
 __all__ = ["CortexMemoryProvider"]

@@ -259,8 +259,31 @@ function AgentWorkspace({ data, api, refresh }) {
   </>
 }
 
-function NetworkWorkspace({ api }) {
-  return <><WorkspaceHeader eyebrow="NETWORK SHIELD · PREVIEW" title="What can the network control plane touch?" copy="Protected zones and blast-radius limits for network containment. Hermes remains analysis-only here too; production adapters are not enabled from this console." /><NetworkView api={api} /></>
+function NetworkWorkspace({ data, api, refresh, timeRange, initialTab = 'sensors' }) {
+  const [tab, setTab] = useState(initialTab)
+  return (
+    <>
+      <WorkspaceHeader
+        eyebrow="OPERATIONS / NETWORK"
+        title="Sensors & Network Shield"
+        copy="Kernel-level /proc socket telemetry, real-time eBPF and nftables filters, threat flow inspection, and endpoint mesh."
+      />
+      <WorkspaceTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'sensors', label: 'Sensors & Topology' },
+          { id: 'events', label: 'Live Event Stream' },
+          { id: 'inventory', label: 'Enrolled Endpoints', count: data?.devices?.length },
+          { id: 'mesh', label: 'Agent & Hermes Mesh' },
+        ]}
+      />
+      {tab === 'sensors' && <NetworkView api={api} />}
+      {tab === 'events' && <EventStreamView data={data} timeRange={timeRange} />}
+      {tab === 'inventory' && <DeviceInventory data={data} api={api} refresh={refresh} />}
+      {tab === 'mesh' && <AgentWorkspace data={data} api={api} refresh={refresh} />}
+    </>
+  )
 }
 
 function EvidenceMetricStrip({ data }) {
@@ -309,90 +332,195 @@ function AuditPacketBuilder({ data }) {
   return <form className="settings-card audit-packet-builder" onSubmit={generate}><div className="settings-card-header"><div className="settings-card-title"><FileCheck2 size={18} /><h3>Build an audit packet</h3></div><span className="live-status-pill">Local export</span></div><p className="settings-card-desc">Bundle decisions, outcomes, policy history, and settings audit records for the selected telemetry window.</p><div className="settings-fields-grid"><div className="field-group"><label htmlFor="audit-from">From</label><input id="audit-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></div><div className="field-group"><label htmlFor="audit-to">To</label><input id="audit-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></div></div><div className="audit-packet-options">{[['decisions', 'Policy decisions'], ['outcomes', 'Enforcement outcomes'], ['policies', 'Policy version history'], ['settings', 'Settings audit trail']].map(([key, label]) => <label key={key}><input type="checkbox" checked={include[key]} onChange={(event) => setInclude((current) => ({ ...current, [key]: event.target.checked }))} />{label}</label>)}</div><button type="submit" className="primary-btn">Generate packet</button>{message && <p className="form-message success" aria-live="polite">{message}</p>}</form>
 }
 
-function DecisionsWorkspace({ data, api, refresh, timeRange }) {
-  const [tab, setTab] = useState('events')
-  return <><WorkspaceHeader eyebrow="GOVERNANCE / DECISIONS" title="Decisions" copy="Review observed activity, policy evaluation, approvals, and enforcement outcomes as one auditable decision record." /><WorkspaceTabs active={tab} onChange={setTab} tabs={[{ id: 'policy-enforcement', label: 'Policy & enforcement', count: data.outcomes.length }, { id: 'events', label: 'Event stream' }, { id: 'approvals', label: 'Approvals & guardrails' }]} />{tab === 'policy-enforcement' ? <div className="decisions-policy-workspace"><section className="decisions-policy-section" aria-labelledby="decisions-policy-title"><div className="decisions-policy-heading"><p className="eyebrow">POLICY AUTHORITY</p><h3 id="decisions-policy-title">Policy catalog</h3><p>Review tenant-scoped enforcement profiles and select the policy source used by Shield.</p></div><PoliciesView data={data} api={api} refresh={refresh} /></section><section className="decisions-policy-section" aria-labelledby="decisions-enforcement-title"><div className="decisions-policy-heading"><p className="eyebrow">ENFORCEMENT OUTCOMES</p><h3 id="decisions-enforcement-title">Containment &amp; enforcement</h3><p>Configure approval boundaries and inspect every recorded enforcement outcome.</p></div><ContainmentView outcomes={data.outcomes} api={api} data={data} /></section></div> : tab === 'events' ? <EventStreamView data={data} timeRange={timeRange} /> : <div className="decisions-approvals-workspace"><section className="decisions-approvals-section" aria-labelledby="decisions-guardrails-title"><div className="decisions-approvals-heading"><p className="eyebrow">CHANGE GOVERNANCE</p><h3 id="decisions-guardrails-title">Containment &amp; guardrail approvals</h3><p>Review high-impact settings changes and their explicit approval state.</p></div><SettingsChangeQueue api={api} /></section><section className="decisions-approvals-section" aria-labelledby="decisions-transactions-title"><div className="decisions-approvals-heading"><p className="eyebrow">TRANSACTION CONTROL</p><h3 id="decisions-transactions-title">Approvals &amp; transactions</h3><p>Inspect transaction intents and operator approval requirements in the same governance view.</p></div><TransactionWorkbench api={api} /></section></div>}</>
-}
-
 function EvidenceWorkspace({ data, api }) {
-  return <>
-    <WorkspaceHeader eyebrow="ASSURANCE / EVIDENCE" title="Evidence" copy="Confirm what Shield observed, what was exported, and what the evidence supports. Synthetic fallback data stays hidden." />
-    <div className="evidence-unified-workspace">
-      <section className="evidence-unified-section" aria-labelledby="evidence-exporter-title">
-        <div className="evidence-unified-heading">
-          <p className="eyebrow">EXPORT ASSURANCE</p>
-          <h3 id="evidence-exporter-title">Evidence &amp; exporter</h3>
-          <p>Review signed decisions, exporter state, receipt verification, and remediation controls.</p>
-        </div>
-        <EvidenceMetricStrip data={data} />
-        <EvidenceChainStatus data={data} />
-        <div className="evidence-reference-grid"><Resource title="Exporter status by device" copy="DID preflight, queue, and receipt publication"><JsonRows rows={data.exporter} /></Resource><AuditPacketBuilder data={data} /></div>
-        <EvidenceControls api={api} rows={data.exporter || []} />
-        <RemediationForm api={api} />
-      </section>
-      <section className="evidence-unified-section" aria-labelledby="evidence-quality-title">
-        <div className="evidence-unified-heading">
-          <p className="eyebrow">DETECTION ASSURANCE</p>
-          <h3 id="evidence-quality-title">Detection quality</h3>
-          <p>Inspect labeled runtime coverage and generate a verification report.</p>
-        </div>
-        <DetectionQualityView data={data.quality} summary={data.summary} api={api} />
-      </section>
-    </div>
-  </>
+  return (
+    <>
+      <WorkspaceHeader
+        eyebrow="ASSURANCE / EVIDENCE"
+        title="Evidence"
+        copy="Confirm what Shield observed, what was exported, and what the evidence supports. Synthetic fallback data stays hidden."
+      />
+      <div className="evidence-unified-workspace">
+        <section className="evidence-unified-section" aria-labelledby="evidence-exporter-title">
+          <div className="evidence-unified-heading">
+            <p className="eyebrow">EXPORT ASSURANCE</p>
+            <h3 id="evidence-exporter-title">Evidence &amp; exporter</h3>
+            <p>Review signed decisions, exporter state, receipt verification, and remediation controls.</p>
+          </div>
+          <EvidenceMetricStrip data={data} />
+          <EvidenceChainStatus data={data} />
+          <div className="evidence-reference-grid">
+            <Resource title="Exporter status by device" copy="DID preflight, queue, and receipt publication">
+              <JsonRows rows={data.exporter} />
+            </Resource>
+            <AuditPacketBuilder data={data} />
+          </div>
+          <EvidenceControls api={api} rows={data.exporter || []} />
+          <RemediationForm api={api} />
+        </section>
+        <section className="evidence-unified-section" aria-labelledby="evidence-quality-title">
+          <div className="evidence-unified-heading">
+            <p className="eyebrow">DETECTION ASSURANCE</p>
+            <h3 id="evidence-quality-title">Detection quality</h3>
+            <p>Inspect labeled runtime coverage and generate a verification report.</p>
+          </div>
+          <DetectionQualityView data={data.quality} summary={data.summary} api={api} />
+        </section>
+      </div>
+    </>
+  )
 }
 
-function ConfigurationWorkspace({ connection, logout, data, api, refresh }) {
-  return <>
-    <WorkspaceHeader eyebrow="CONFIGURATION" title="What is the fleet configured to do?" copy="Signed policy bundles, response boundaries, guardrails, and destinations. Containment and guardrail changes go through two-step approval and can be rolled back." />
-    <div className="configuration-unified">
-      <section className="configuration-section" aria-labelledby="configuration-policies-title">
-        <div className="configuration-section-heading">
-          <p className="eyebrow">PRESELECTED POLICY BUNDLES</p>
-          <h3 id="configuration-policies-title">Policy bundle</h3>
-          <p>Select from three pre-engineered zero-trust policy profiles, deploy to enrolled devices, or inspect rollback history.</p>
+export function PolicyStudioWorkspace({ data, api, refresh }) {
+  const [tab, setTab] = useState('opa')
+  return (
+    <>
+      <WorkspaceHeader
+        eyebrow="GOVERNANCE / POLICIES"
+        title="Policy Studio & OPA Engine"
+        copy="Live Rego policy editing, automated bundle compilation, zero-trust profile assignment, and rollback history."
+      />
+      <WorkspaceTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'opa', label: 'OPA Policy Studio & Rego Editor' },
+          { id: 'bundles', label: 'Enrolled Device Bundles' },
+          { id: 'rollback', label: 'Rollback & Recovery' },
+        ]}
+      />
+      {tab === 'opa' && <OpaPoliciesView api={api} />}
+      {tab === 'bundles' && <PoliciesView data={data} api={api} refresh={refresh} />}
+      {tab === 'rollback' && <RollbackForm api={api} />}
+    </>
+  )
+}
+
+export function ResponseSurface({ data, api, refresh, timeRange, connection }) {
+  const [tab, setTab] = useState('workbench')
+  return (
+    <>
+      <WorkspaceHeader
+        eyebrow="SECURITY / RESPONSE"
+        title="Response & Containment"
+        copy="Manage real-time malicious flow containment, process termination, pending approvals, and verified response ledgers."
+      />
+      <WorkspaceTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'workbench', label: 'Response Workspace & Approvals' },
+          { id: 'outcomes', label: 'Containment Outcomes & History', count: data?.outcomes?.length },
+          { id: 'approvals', label: 'Guardrail & Transaction Approvals' },
+        ]}
+      />
+      {tab === 'workbench' && (
+        <ResponseWorkspace api={api} refresh={refresh} timeRange={timeRange} connection={connection} />
+      )}
+      {tab === 'outcomes' && (
+        <ContainmentView outcomes={data?.outcomes || []} api={api} data={data} />
+      )}
+      {tab === 'approvals' && (
+        <div className="decisions-approvals-workspace">
+          <section className="decisions-approvals-section" aria-labelledby="decisions-guardrails-title">
+            <div className="decisions-approvals-heading">
+              <p className="eyebrow">CHANGE GOVERNANCE</p>
+              <h3 id="decisions-guardrails-title">Containment &amp; guardrail approvals</h3>
+              <p>Review high-impact settings changes and their explicit approval state.</p>
+            </div>
+            <SettingsChangeQueue api={api} />
+          </section>
+          <section className="decisions-approvals-section" aria-labelledby="decisions-transactions-title">
+            <div className="decisions-approvals-heading">
+              <p className="eyebrow">TRANSACTION CONTROL</p>
+              <h3 id="decisions-transactions-title">Approvals &amp; transactions</h3>
+              <p>Inspect transaction intents and operator approval requirements in the same governance view.</p>
+            </div>
+            <TransactionWorkbench api={api} />
+          </section>
         </div>
-        <PoliciesView data={data} api={api} refresh={refresh} />
-      </section>
-      <section className="configuration-section" aria-labelledby="configuration-integrations-title">
-        <div className="configuration-section-heading">
-          <p className="eyebrow">DELIVERY & CONNECTORS</p>
-          <h3 id="configuration-integrations-title">Integrations</h3>
-          <p>Configure SIEM, SOAR, and event delivery boundaries.</p>
-        </div>
-        <IntegrationsView data={data} api={api} refresh={refresh} />
-      </section>
-      <section className="configuration-section" aria-labelledby="configuration-opa-title">
-        <div className="configuration-section-heading">
-          <p className="eyebrow">LOCAL POLICY ENGINE</p>
-          <h3 id="configuration-opa-title">OPA policies</h3>
-          <p>Inspect the policy sources and evaluation contract used by Shield.</p>
-        </div>
-        <OpaPoliciesView api={api} />
-      </section>
-      <section className="configuration-section" aria-labelledby="configuration-developer-title">
-        <div className="configuration-section-heading">
-          <p className="eyebrow">ADVANCED ACCESS</p>
-          <h3 id="configuration-developer-title">Developer contract & API explorer</h3>
-          <p>Test authenticated control-plane contracts and inspect developer diagnostics.</p>
-        </div>
-        <DeveloperView connection={connection} />
-      </section>
-    </div>
-  </>
+      )}
+    </>
+  )
+}
+
+export function SettingsWorkspace({ initialTab = 'system', connection, logout, data, api, refresh, billingReturn }) {
+  const [tab, setTab] = useState(initialTab)
+  return (
+    <>
+      <WorkspaceHeader
+        eyebrow="SYSTEM & IDENTITY"
+        title="Settings & System Management"
+        copy="Operator credentials, Base Sepolia ERC-8004 identity passports, subscription billing, and verified audit packets."
+      />
+      <WorkspaceTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'system', label: 'Identity & Security Posture' },
+          { id: 'billing', label: 'Billing & Plans' },
+          { id: 'commissioning', label: 'Commissioning & Enrollment' },
+          { id: 'integrations', label: 'SIEM & Integrations' },
+          { id: 'evidence', label: 'Assurance & Audit Evidence' },
+          { id: 'developer', label: 'Developer Contract & Diagnostics' },
+        ]}
+      />
+      {tab === 'system' && <SettingsView connection={connection} logout={logout} data={data} />}
+      {tab === 'billing' && <BillingView api={api} refresh={refresh} connection={connection} billingReturn={billingReturn} data={data} />}
+      {tab === 'commissioning' && <CommissioningView data={data} api={api} />}
+      {tab === 'integrations' && <IntegrationsView data={data} api={api} refresh={refresh} />}
+      {tab === 'evidence' && <EvidenceWorkspace data={data} api={api} />}
+      {tab === 'developer' && <DeveloperView connection={connection} />}
+    </>
+  )
 }
 
 export function ResourceView({ view, data, api, refresh, connection, logout, timeRange, billingReturn }) {
-  if (view === 'agent') return <AgentWorkspace data={data} api={api} refresh={refresh} />
-  if (view === 'network') return <NetworkWorkspace api={api} />
-  if (view === 'response') return <ResponseWorkspace api={api} refresh={refresh} timeRange={timeRange} connection={connection} />
-  if (view === 'commissioning') return <CommissioningView data={data} api={api} />
-  if (view === 'decisions') return <DecisionsWorkspace data={data} api={api} refresh={refresh} timeRange={timeRange} />
-  if (view === 'evidence') return <EvidenceWorkspace data={data} api={api} />
-  if (view === 'settings') return <SettingsView connection={connection} logout={logout} data={data} />
-  if (view === 'billing') return <BillingView api={api} refresh={refresh} connection={connection} billingReturn={billingReturn} data={data} />
-  if (view === 'configuration') return <ConfigurationWorkspace connection={connection} logout={logout} data={data} api={api} refresh={refresh} />
-  return <Resource title="Evidence" copy="Authenticated evidence records"><JsonRows rows={data.exporter} /></Resource>
+  if (view === 'policies' || view === 'decisions') {
+    return <PolicyStudioWorkspace data={data} api={api} refresh={refresh} />
+  }
+  if (view === 'network' || view === 'agent') {
+    return (
+      <NetworkWorkspace
+        data={data}
+        api={api}
+        refresh={refresh}
+        timeRange={timeRange}
+        initialTab={view === 'agent' ? 'mesh' : 'sensors'}
+      />
+    )
+  }
+  if (view === 'response') {
+    return (
+      <ResponseSurface
+        data={data}
+        api={api}
+        refresh={refresh}
+        timeRange={timeRange}
+        connection={connection}
+      />
+    )
+  }
+  if (view === 'settings' || view === 'billing' || view === 'commissioning' || view === 'evidence' || view === 'configuration') {
+    const initialTab =
+      view === 'billing' ? 'billing'
+      : view === 'commissioning' ? 'commissioning'
+      : view === 'evidence' ? 'evidence'
+      : view === 'configuration' ? 'integrations'
+      : 'system'
+    return (
+      <SettingsWorkspace
+        initialTab={initialTab}
+        connection={connection}
+        logout={logout}
+        data={data}
+        api={api}
+        refresh={refresh}
+        billingReturn={billingReturn}
+      />
+    )
+  }
+  return <PolicyStudioWorkspace data={data} api={api} refresh={refresh} />
 }
 
 function DetectionQualityView({ data, summary, api }) {
