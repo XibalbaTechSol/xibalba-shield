@@ -58,8 +58,33 @@ Shield runs and enforces policy on its own — on a laptop, an SMB workstation, 
 
 ### 3. Hermes Shield Agent Boundary
 The Settings → Hermes Agent panel configures a tenant-scoped, analysis-only profile. Enrolled agents fetch the validated profile at startup and apply bounded delivery controls. The Hermes analyst profile (`shield/hermes_analyst.py`) operates in shadow mode with strictly validated advisories, zero tool exposure, and rate/spend caps. It provides cognitive advisory analysis without holding execution authority.
-    Eyes -->|"Operator interventions<br/>& policy updates"| Agent
-```
+
+### 4. Agent0 Architecture & ERC-8004 Identity Mesh
+Shield natively adopts the three-tier modular Agent0 / ERC-8004 Public Passport standard across its defense and response fleet:
+- **`shield.local` (Token #4)**: Local Edge Daemon running a high-speed Jev classification model (`jev-fast-classifier`) bound to DID `did:integrity:68fed1331613937555a59398223e8e87520a87dd0305aac4fd7ecdc32a14a861`. Streams local process and network telemetry directly into Super-Cortex memory under scope `agent:shield.local`.
+- **`shield.cloud` (Token #5)**: Fleet Defense Coordinator powered by Hermes 3 70B (`hermes-3-70b`) bound to DID `did:integrity:2ea17967f7a65589d570ca7e800844701fb36e6aa7374243e8766de8651f6bc4`. Orchestrates fleet policy, global threat intelligence, and compliance exports under scope `agent:shield.cloud`.
+- **Ecosystem Triad Peer Compatibility**: Interoperates with `xibalba.agy` (Token #10774, `agent:agy`), `xibalba.claude` (Token #6, `agent:claude`), and `xibalba.codex` (Token #7, `agent:codex`).
+- **Cryptographic A2A Mesh**: Secure Agent-to-Agent message exchange over RFC 8785 Canonical JSON envelopes with mutual Ed25519 DID signatures and policy confinement verification.
+
+### 5. Zero-Mock Kernel Procfs Network Telemetry & Real Containment
+Shield enforces real, zero-mock host and network visibility directly from kernel interfaces:
+- **Direct Procfs Sockets**: `ProcNetTcpSensor` reads active socket tables from `/proc/net/tcp` and `/proc/net/tcp6`, decoding hex IP/port tuples and mapping socket inodes through `/proc/[pid]/fd/*` to reliably extract originating PIDs without synthetic shims.
+- **Malicious Flow Detection**: Continuously audits outbound flows for high-risk C2 ports (e.g. 4444, 1337, 6667, 31337) and unregistered connection destinations.
+- **Kernel-Level Containment**: Deterministic containment through `NftFlowBlocker` (nftables/iptables drop rules) and process termination (`os.kill(pid, signal.SIGTERM)`), spooling cryptographic receipts to the Integrity audit ledger.
+
+### 6. Policy Pack Studio & Live OPA Rego Engine
+Security operators can inspect, author, validate, and hot-deploy Open Policy Agent (OPA) policy packs:
+- **Curated Policy Packs**: Ship with out-of-the-box profiles for `smb`, `professional-services`, and `regulated` (HIPAA §164.312), alongside custom operator packs.
+- **Interactive Rego Studio**: Live code editor with syntax checks, package header validation, and local disk persistence to `shield/policies/rego/*.rego`.
+- **Zero-Downtime Hot Deploy**: Pushes updated Rego rules directly to live OPA instances via `PUT {opa_url}/v1/policies/{policy_id}.rego`, with instant hash validation and automated rollback capabilities.
+
+### 7. Reimagined 5-Surface Cloud Console UI
+The web-based Cloud Control Plane Console has been consolidated from 9 fragmented legacy views down to 5 canonical surfaces matching Integrity Console:
+1. **Overview**: Real-time fleet health, active containments, and Agent0 mesh topology.
+2. **Policies**: Policy Pack Studio, interactive OPA Rego editor, and versioned distribution controls.
+3. **Network**: Real-time procfs socket flows, sensor telemetry, and active firewall filters.
+4. **Response**: Incident approval queue, containment actions, and historical execution ledgers.
+5. **Settings**: Node identity, RFC 8628 commissioning ladder, telemetry export, and billing tiers.
 
 See [`integrity-core/docs/architecture/ecosystem-dependencies.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/architecture/ecosystem-dependencies.md) for the canonical ownership boundaries.
 
@@ -256,13 +281,15 @@ Xibalba Shield delivers two unified operational surfaces: a web-based **Cloud Co
 
 #### 1. Cloud Control Plane & Operator Console (`ui/`)
 
-Hosted in production at [`https://xibalba-shield.onrender.com`](https://xibalba-shield.onrender.com), the Cloud Console provides centralized visibility, RFC 8628 device commissioning, and fleet policy distribution.
+Hosted in production at [`https://xibalba-shield.onrender.com`](https://xibalba-shield.onrender.com), the Cloud Console provides centralized visibility, RFC 8628 device commissioning, and fleet policy distribution across 5 unified surfaces:
 
 ![Xibalba Shield Cloud Console](assets/shield_cloud_dashboard.png)
 
-- **Operational Posture**: Real-time fleet health, active process containments, rule decisions, and evidence export pipeline health.
-- **Commissioning Ladder**: Four progressive rungs of endpoint trust (Observe → Recommend → Enforce narrow classes → Autonomous cascade).
-- **Assurance & Evidence**: Verifiable cryptographic audit bundles linked to the Integrity Protocol on-chain ledger.
+- **Overview (Posture & Mesh)**: Real-time fleet health, active process containments, rule decisions, and Agent0 ERC-8004 identity mesh topology.
+- **Policies (Policy Studio & OPA Editor)**: In-browser live Rego policy pack authoring, validation, hot deployment, and rollback ledger.
+- **Network (Sensors & Network Shield)**: Live procfs socket flows (`/proc/net/tcp`), inode-to-PID mapping, and active egress containment.
+- **Response (Response & Containment)**: Incident triage, single-use human authorization queue, and execution ledgers.
+- **Settings (System & Identity)**: Hardware commissioning ladder, Super-Cortex memory scopes, and billing entitlements.
 
 ![Xibalba Shield Commissioning Ladder](assets/shield_cloud_commissioning.png)
 
@@ -309,14 +336,7 @@ See the [Android & Mobile Agent Companion Runbook](docs/runbooks/android-agent.m
 
 ### Console visual contract
 
-The Shield-owned React/Vite console under `ui/` is the operator surface for Posture, Agent,
-Network, Decisions, Evidence, and Configuration. Its command-center theme uses the graphite
-palette, Barlow typography, square controls, one-pixel rectangular window borders, and a shared
-surface hierarchy across nested cards, drawers, and modal dialogs. Decorative registration
-crosses are intentionally not rendered at card corners. The visual contract is exercised by
-`ui/e2e/design-system.spec.ts` at 390px, 1280px, and 1600px, alongside the route, drawer, modal,
-and overflow coverage in the other `ui/e2e/` suites. Browser tests use mocked control-plane
-responses and do not claim live service or provider verification.
+The Shield-owned React/Vite console under `ui/` is the operator surface consolidated into 5 canonical views matching Integrity Console: Overview, Policies, Network, Response, and Settings. Legacy deep links (`/decisions`, `/evidence`, `/agent`, `/billing`, `/commissioning`) are seamlessly aliased to their corresponding surfaces. Its command-center theme uses the graphite palette, Barlow typography, square controls, one-pixel rectangular window borders, and a shared surface hierarchy across nested cards, drawers, and modal dialogs. Decorative registration crosses are intentionally not rendered at card corners. The visual contract is exercised by `ui/e2e/design-system.spec.ts` at 390px, 1280px, and 1600px, alongside the route, drawer, modal, and overflow coverage in the other `ui/e2e/` suites. Browser tests use mocked control-plane responses and do not claim live service or provider verification.
 
 Inference is shadow-only. Jev or another provider can classify risk, estimate transitions, or
 recommend escalation, but cannot authorize, deny, contain, sign evidence, or delay the deterministic
