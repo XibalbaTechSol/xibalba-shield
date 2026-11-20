@@ -49,15 +49,11 @@ async function fetchCortexNamespaces() {
 }
 
 const NAV = [
-  ['overview', Gauge, 'Posture', 'COMMAND CENTER'],
-  ['agent', HardDrive, 'Agent', 'OPERATIONS'],
-  ['network', Activity, 'Network', 'OPERATIONS'],
-  ['response', ShieldAlert, 'Response', 'GOVERNANCE'],
-  ['decisions', Workflow, 'Decisions', 'GOVERNANCE'],
-  ['commissioning', Layers, 'Commissioning', 'GOVERNANCE'],
-  ['evidence', FileSearch, 'Evidence', 'ASSURANCE'],
-  ['configuration', Sliders, 'Configuration', 'SYSTEM'],
-  ['billing', CreditCard, 'Billing', 'SYSTEM'],
+  ['overview', Gauge, 'Posture & Mesh', 'COMMAND CENTER'],
+  ['policies', Sliders, 'Policy Studio', 'GOVERNANCE'],
+  ['network', Activity, 'Sensors & Network', 'OPERATIONS'],
+  ['response', ShieldAlert, 'Response & Containment', 'SECURITY'],
+  ['settings', Layers, 'System & Identity', 'SYSTEM'],
 ]
 const VIEW_LABELS = Object.fromEntries(NAV.map(([id, , label]) => [id, label]))
 
@@ -260,21 +256,27 @@ export function Dashboard({ connection, logout, onUnauthorized }) {
         </header>
 
         <nav>
-          {['COMMAND CENTER', 'OPERATIONS', 'GOVERNANCE', 'ASSURANCE', 'SYSTEM'].map((section) => <div key={section} className="nav-group">
-            <small>{section}</small>
-            {NAV.filter(([, , , group]) => group === section).map(([id, Icon, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={view === id ? 'active' : ''}
-              onClick={() => openView(id)}
-            >
-              <Icon aria-hidden="true" />
-              <span>{label}</span>
-              {id === 'fleet' && <i>{data.devices.length}</i>}
-            </button>
-            ))}
-          </div>)}
+          {['COMMAND CENTER', 'OPERATIONS', 'GOVERNANCE', 'SECURITY', 'SYSTEM'].map((section) => {
+            const items = NAV.filter(([, , , group]) => group === section)
+            if (!items.length) return null
+            return (
+              <div key={section} className="nav-group">
+                <small>{section}</small>
+                {items.map(([id, Icon, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={view === id ? 'active' : ''}
+                    onClick={() => openView(id)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
+                    {id === 'network' && data.devices.length > 0 && <i>{data.devices.length}</i>}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </nav>
         <div className="bottom-profile" style={{ marginTop: 'auto', padding: '1rem 0.75rem 0' }}>
           {profileMenu && <div className="profile-menu" role="menu">
@@ -385,15 +387,11 @@ export function Dashboard({ connection, logout, onUnauthorized }) {
           </div>
           <nav className="command-nav" aria-label="Control plane navigation">
             {[
-              ['overview', 'Posture'],
-              ['agent', 'Agent'],
-              ['network', 'Network'],
-              ['response', 'Response'],
-              ['decisions', 'Decisions'],
-              ['commissioning', 'Commissioning'],
-              ['evidence', 'Evidence'],
-              ['configuration', 'Configuration'],
-              ['billing', 'Billing'],
+              ['overview', 'Posture & Mesh'],
+              ['policies', 'Policy Studio'],
+              ['network', 'Sensors & Network'],
+              ['response', 'Response & Containment'],
+              ['settings', 'System & Identity'],
             ].map(([id, label]) => (
               <button key={id} type="button" className={view === id ? 'active' : ''} onClick={() => openView(id)}>
                 {label}

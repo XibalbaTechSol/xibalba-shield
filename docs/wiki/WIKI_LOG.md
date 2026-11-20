@@ -1,5 +1,14 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-20] feat | Agent0 mesh, procfs telemetry, policy studio, and 5-surface UI
+
+- Registered Base Sepolia ERC-8004 tokens for `shield.local` (#4, model `jev-fast-classifier`, scope `agent:shield.local`) and `shield.cloud` (#5, model `hermes-3-70b`, scope `agent:shield.cloud`) with mutual DID verification over RFC 8785 canonical A2A.
+- Implemented `ProcNetTcpSensor` parsing `/proc/net/tcp` socket tables, mapping socket inodes to PIDs via `/proc/<pid>/fd`, and executing real zero-mock containment via `NftFlowBlocker` and `SIGTERM`.
+- Ingested device and flow telemetry into Super-Cortex memory scoped to `agent:shield.local` and `agent:shield.cloud` with SHA-256 redaction proofs.
+- Added Policy Pack Studio and live Rego editor supporting custom pack discovery, syntax checks, disk persistence, and hot OPA deployment via `PUT /v1/policies/<id>`.
+- Reimagined Shield Cloud Console UI into 5 canonical surfaces matching Console: Posture & Mesh (`overview`), Policy Studio (`policies`), Sensors & Network (`network`), Response & Containment (`response`), and System & Identity (`settings`).
+- Created wiki concepts: `agent0-architecture.md`, `procfs-network-sensor.md`, and `policy-studio-opa.md`.
+
 ## [2026-11-14] ops | Render sandbox checkout passed; allowance measurement started
 
 - A sandbox Pro checkout on the deployed service passed end to end. Webhooks were answered 200, and

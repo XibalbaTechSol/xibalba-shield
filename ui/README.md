@@ -17,29 +17,37 @@ The Xibalba Shield Cloud Console provides centralized visibility, operational go
 
 ---
 
-## Architecture & Views
+## Architecture & 5 Canonical Surfaces
 
-![Xibalba Shield Commissioning Ladder](../assets/shield_cloud_commissioning.png)
+The Shield Cloud Console is reimagined around 5 canonical operational surfaces matching the Integrity Console:
 
-### 1. Command Center: Operational Posture (`/`)
-- **Fleet Protection Status**: Headline metric indicating real-time containment and security state across enrolled devices.
-- **Runtime Health**: Live telemetry monitoring Policy Evaluator, Open Policy Agent (OPA), eBPF Kernel Probe, and IPC Bridge connectivity.
-- **Responder Readiness**: Capability matrix showing enforcement status for process freezing (`SIGSTOP`), cgroup isolation, process termination, and scoped network blocking.
+### 1. Command Center: Posture & Mesh (`overview`)
+- **Fleet Protection Status**: Real-time headline containment, active threat counts, and zero-trust health across enrolled endpoints.
+- **Runtime Health**: Live connectivity monitoring for Policy Evaluator, OPA daemon, eBPF/procfs kernel probes, and IPC bridges.
+- **Agent0 Mesh Status**: Cryptographic identity states and active Base Sepolia ERC-8004 tokens for `shield.local` (#4) and `shield.cloud` (#5).
 
-### 2. Operations: Agent & Network
-- **Agent Matrix**: Real-time status of local endpoint agents, versioning, uptime, and last heartbeat timestamps.
-- **Network Topology**: Sensor coverage over inbound/outbound flows, egress IP filtering, and API endpoint monitoring.
+### 2. Governance: Policy Studio & OPA Engine (`policies`)
+- **Interactive Policy Pack Studio**: Live in-browser Rego editor for editing, validating, and deploying policies.
+- **Hot OPA Deployment**: Instantly pushes Rego updates via `PUT /v1/policies/<id>` to the active OPA engine.
+- **Preselected Zero-Trust Bundles**: Rapid assignment between SMB, Professional Services, Regulated, and Custom profiles with audit-backed rollbacks.
 
-### 3. Governance: Decisions & Commissioning
-- **Decision Stream**: Live ledger of allow/contain/deny decisions evaluated by local endpoint engines.
-- **Commissioning Ladder**: Four progressive rungs of endpoint trust:
-  1. *Observe*: Open-loop telemetry recording without enforcement.
-  2. *Recommend*: Controller proposes containment actions requiring human operator approval.
-  3. *Enforce Narrow Classes*: Closed-loop enforcement for high-confidence, low-regret action classes.
-  4. *Autonomous Cascade*: Full autonomous defense combining local rules, fast edge models, and cloud fleet reasoning.
+### 3. Operations: Sensors & Network (`network`)
+- **Real Linux Procfs Sensor**: Kernel `/proc/net/tcp` socket inspection with inode-to-PID mapping across `/proc/<pid>/fd`.
+- **Live Event Stream**: Real-time stream of network and system events with interactive time range filtering.
+- **Enrolled Endpoints**: Full hardware and OS attestation inventory for enrolled fleet devices.
+- **Agent & Hermes Mesh**: Multi-agent telemetry linking local edge classification to cloud reasoning.
 
-### 4. Assurance: Evidence & Audit Packets
-- Downloadable cryptographic audit bundles signed with Ed25519 keys and verifiable against the Integrity Protocol ledger.
+### 4. Security: Response & Containment (`response`)
+- **Response Action Queue**: Pending approval queue for high-impact actions (kill process, drop flow, freeze cgroup) requiring human or two-person authorization.
+- **Containment Outcomes Ledger**: Verifiable history of executed containment actions with cryptographic SHA-256 hashes.
+- **Guardrails & Transaction Approvals**: Boundary enforcement controls and change governance queues.
+
+### 5. System: System & Identity (`settings`)
+- **System Posture & Operator Identity**: Tenant switching, admin token minting, and SMTP alert delivery configuration.
+- **Subscription Billing & Plans**: Self-serve Free / Pro / Team catalog, Stripe customer portal, and resource usage gauges.
+- **Commissioning & RFC 8628 Enrollment**: Endpoint onboarding ladder and pairing workflows.
+- **SIEM & Connectors**: Export pipelines to enterprise SIEM/SOAR platforms.
+- **Assurance & Audit Evidence**: Generation of cryptographic audit bundles verifiable against the Integrity Protocol.
 
 ---
 

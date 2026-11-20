@@ -4,7 +4,7 @@
 > now — see the schema's "no aspirational content" rule. This is a focused core set covering
 > Shield's actual architecture, not an exhaustive catalog — contributions adding more pages are
 > welcome.
-> Last updated: 2026-11-18 | Total pages: 18 (13 concepts, 2 entities, 2 architecture, 1 query)
+> Last updated: 2026-11-20 | Total pages: 21 (16 concepts, 2 entities, 2 architecture, 1 query)
 
 ## Acronym glossary
 
@@ -14,10 +14,13 @@
 - [OTel](concepts/event-router.md) — OpenTelemetry
 - [eBPF](concepts/sensor-model.md) — extended Berkeley Packet Filter (Linux kernel-level sensing)
 - [OPA](concepts/policy-engine.md) — Open Policy Agent
-- [A2A](concepts/slm-cascade-tiers.md) — Agent-to-Agent (Tier 3 escalation protocol, `[PLANNED]`)
+- [A2A](concepts/agent0-architecture.md) — Agent-to-Agent communication over canonical RFC 8785 envelopes
 
 ## Concepts
 
+- [Agent0 Architecture & A2A Security Mesh](concepts/agent0-architecture.md) — ERC-8004 tokens (#4 shield.local, #5 shield.cloud, #10774 xibalba.agy), mutual DID verification, and policy confinement
+- [Kernel Procfs Network Sensor & Real Containment](concepts/procfs-network-sensor.md) — real `/proc/net/tcp` socket telemetry, inode-to-PID correlation, and zero-mock containment via `NftFlowBlocker` & `SIGTERM`
+- [Policy Pack Studio & Live OPA Editor](concepts/policy-studio-opa.md) — in-browser Rego editor with live validation, disk persistence, and hot runtime deployment via `PUT /v1/policies/<id>`
 - [Configurable Advisory Inference](concepts/advisory-inference.md) — tenant-configurable Jev, local classifier, Lila JSON, and OpenAI-compatible advisory providers with deterministic enforcement authority preserved
 - [Event Router](concepts/event-router.md) — `EventRouter.handle()`'s exact step ordering: Tier 1 → optional Tier 2 → containment (before any network call) → guardrail hooks → two independent export paths → event log
 - [Policy Engine](concepts/policy-engine.md) — Tier 1; delegates evaluation to a local OPA sidecar with packaged, explicitly selected profile bundles

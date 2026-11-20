@@ -137,7 +137,7 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
           <h2>Is the fleet protected right now?</h2>
           <span>{preview ? 'Control plane unavailable: synthetic and preview records are not shown.' : 'Authenticated telemetry, policy decisions, and containment outcomes across the enrolled fleet.'}</span>
         </div>
-        <button className="primary" type="button" onClick={() => openView('decisions')} disabled={preview} title={preview ? 'Reconnect to the control plane before deploying policy' : undefined}>
+        <button className="primary" type="button" onClick={() => openView('policies')} disabled={preview} title={preview ? 'Reconnect to the control plane before deploying policy' : undefined}>
           <ShieldCheck aria-hidden="true" /> Deploy policy
         </button>
       </section>
@@ -245,7 +245,7 @@ export function Overview({ data, protectedCount, openView, preview: _preview = f
         <p className="telemetry-footnote">Source: authenticated local runtime process sampling and Shield decision telemetry. CPU cores and memory are host-level runtime samples; missing samples remain unverified.</p>
       </section>
 
-      {policyConflict && <section className="api-alert" role="alert"><TriangleAlert aria-hidden="true" /><span><b>Policy state differs across authorities.</b> The control plane reports {policyVersions.join(', ')}, while runtime status reports {runtimePolicyVersions.join(', ')}. Reconcile before deploying or evaluating enforcement.</span><button type="button" onClick={() => openView('decisions')}>Review policy</button></section>}
+      {policyConflict && <section className="api-alert" role="alert"><TriangleAlert aria-hidden="true" /><span><b>Policy state differs across authorities.</b> The control plane reports {policyVersions.join(', ')}, while runtime status reports {runtimePolicyVersions.join(', ')}. Reconcile before deploying or evaluating enforcement.</span><button type="button" onClick={() => openView('policies')}>Review policy</button></section>}
 
       <section className="command-grid" aria-label="Control plane readiness">
         <article className="panel readiness-panel">
