@@ -146,4 +146,34 @@ export class ShieldApi {
       tenant: false,
     })
   }
+
+  agent0Search(query = '', { chainId = 84532, capability = '', confinedOnly = false } = {}) {
+    const q = new URLSearchParams()
+    if (query) q.set('q', query)
+    if (chainId) q.set('chain_id', chainId)
+    if (capability) q.set('capability', capability)
+    if (confinedOnly) q.set('confined_only', 'true')
+    const qs = q.toString() ? `?${q.toString()}` : ''
+    return this.request(`/api/shield/agent0/search${qs}`)
+  }
+
+  agent0Passport(tokenId = 10774, chainId = 84532) {
+    return this.request(`/api/shield/agent0/passport?token_id=${encodeURIComponent(tokenId)}&chain_id=${encodeURIComponent(chainId)}`)
+  }
+
+  agent0Talk({ message, contextId = null, newConversation = false, agentDid = '', tokenId = 10774, chainId = 84532 } = {}) {
+    return this.request('/api/shield/agent0/talk', {
+      method: 'POST',
+      body: {
+        tenant_id: this.tenantId,
+        message,
+        context_id: contextId,
+        newConversation,
+        agent_did: agentDid,
+        token_id: tokenId,
+        chain_id: chainId,
+      },
+      tenant: false,
+    })
+  }
 }
