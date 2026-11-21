@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowRight,
   Check,
+  CheckCircle2,
   Copy,
   Cpu,
   Crosshair,
@@ -18,11 +19,13 @@ import {
   Phone,
   Radar,
   RotateCcw,
+  Send,
   Server,
   Settings2,
   Shield,
   ShieldCheck,
   Sliders,
+  Sparkles,
   SquareTerminal,
   Terminal,
   Workflow,
@@ -31,48 +34,66 @@ import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
 const CONTROL_LOOP_FLOW = `flowchart LR
-  SP["Signed pack<br/>setpoint · constraint vector C"] --> SUM(("Σ"))
-  SUM --> HK["Hook<br/>evaluates C on post-state"]
-  HK -->|admit / revert<br/>fail-closed| AG["Agent & Workload<br/>the plant"]
-  AG -->|"what actually happened"| SH["🛡️ Shield Endpoint Defense<br/><b>The Plant Sensor & Enforcer</b><br/>kernel procfs · eBPF · EDR · nftables"]
-  SH -->|"evidence spans"| OR["Oracle<br/>verify · epoch · anchor"]
-  OR -->|"verified state estimate"| SUM
-  OR -->|"verified"| AIS["AIS<br/>bounded gain"]
-  AIS -.->|"widen finite bound"| SP
-  AG -->|"settle"| CH["Chain<br/>anchors · settlement"]
-  SH -.->|"anchorRoot"| CH`
+  SP["Signed Setpoint Pack<br/>constraint vector C"] --> SUM(("Σ"))
+  SUM --> HK["Pre/Post Hook<br/>evaluates C on state"]
+  HK -->|admit or revert| AG["Autonomous Workload<br/>the physical plant"]
+  AG -->|"actual execution"| SH["Shield Host Defense<br/>sensor & enforcer"]
+  SH -->|"evidence spans"| OR["Integrity Oracle<br/>verify & epoch anchor"]
+  OR -->|"state estimate"| SUM
+  OR -->|"verified proof"| AIS["AIS Engine<br/>bounded adaptive gain"]
+  AIS -.->|"adapt bound"| SP
+  AG -->|"settlement"| CH["Settlement Chain<br/>anchored state root"]
+  SH -.->|"anchor root"| CH`
 
-const DECISION_FLOW = `flowchart LR
-  A["Kernel & EDR Telemetry<br/>procfs · eBPF · Falcon"] --> B["Normalize & Enrich<br/>correlation tags · hash binding"]
-  B --> C{"Response Gateway<br/>deterministic gate"}
-  C -->|allow| D["Endpoint Execution<br/>SIGSTOP · cgroup · nftables"]
-  C -->|escalate| G["Operator Queue<br/>two-person sign-off"]
-  G -->|approved| D
-  C -->|deny| H["Terminal Block<br/>fail-closed drop"]
-  D --> F["Integrity Receipt<br/>Ed25519 hash-chained ledger"]
-  F -.->|"evidence anchor"| P["Integrity Protocol"]`
+const HYBRID_A2A_FLOW = `flowchart LR
+  subgraph EDGE["Edge Host · shield.local (Fast Classifier)"]
+    direction TB
+    K["Kernel Telemetry<br/>procfs · eBPF · sockets"] --> C{"Fast Classifier<br/>OPA gate (&lt; 2ms)"}
+    C -->|benign / admit| OK["Admit Workload<br/>unhindered execution"]
+    C -->|breach / halt| CONT["Host Containment<br/>SIGSTOP · nftables"]
+    CONT --> EV["Evidence Ledger<br/>Ed25519 hash chain"]
+  end
+
+  subgraph MESH["Secure A2A Protocol (RFC 8785)"]
+    direction TB
+    DID["Mutual DID Auth<br/>ERC-8004 Passports"]
+    ENV["Canonical Envelopes<br/>RFC 8785 · SHA-256"]
+    DID --- ENV
+  end
+
+  subgraph CLOUD["Cloud Defense · shield.cloud (Production LLM)"]
+    direction TB
+    LLM["Production LLM<br/>Hermes-3 70B reasoning"]
+    CORR["Fleet Correlation<br/>multi-agent threat graph"]
+    POL["Policy Synthesis<br/>signed OPA distribution"]
+    LLM --> CORR --> POL
+  end
+
+  C -->|"flagged detection"| MESH
+  MESH -->|"verified envelope"| LLM
+  POL -.->|"signed policy push"| EDGE`
 
 const RESPONSE_FLOW = `flowchart LR
-  A["Response Intent"] --> E{"Cryptographic Gate<br/>RFC 8628 DID & policy"}
-  B["Actor DID & Role"] --> E
-  C["Policy Hash Bundle"] --> E
-  D["Two-Person Sign-off"] --> E
-  E -->|allow / approved| F["Atomic Consume"]
-  E -->|deny / expired| G["Fail Closed"]
-  F --> H["EDR: Contain Host"]
-  F --> I["EDR: Kill Process"]
-  F --> J["OS: cgroup freeze & nftables"]`
+  A["Response Intent<br/>remediation proposal"] --> E{"Cryptographic Gate<br/>deterministic verify"}
+  B["Actor DID & Role<br/>verified Ed25519 key"] --> E
+  C["Policy Bundle<br/>signed OPA hash lock"] --> E
+  D["Operator Sign-off<br/>two-person quorum"] --> E
+  E -->|allow / approved| F["Atomic Consume<br/>single-use execution"]
+  E -->|deny / expired| G["Fail Closed<br/>terminal drop & log"]
+  F --> H["Contain Host<br/>isolated interface"]
+  F --> I["Kill Process<br/>targeted SIGKILL"]
+  F --> J["OS Freeze<br/>cgroups & nftables"]`
 
 const AGENT_FLOW = `flowchart LR
-  A["Agent Intent<br/>tool call / model action"] --> B["Cryptographic Boundary<br/>DID verification"]
+  A["Agent Intent<br/>tool call or model action"] --> B["Cryptographic Boundary<br/>mutual DID verification"]
   B --> C["Deterministic Policy<br/>geometric traversal checks"]
-  C --> D["Response Intent Gateway"]
-  D --> E["EDR & Kernel Execution<br/>procfs · eBPF · host"]
-  E --> F["Post-Action Verification<br/>state differential audit"]
-  F --> G["Attested Evidence Chain<br/>hash-linked ledger"]
-  H["Signed Tenant Policy"] -.->|"governs"| B
+  C --> D["Response Gateway<br/>execution intent triage"]
+  D --> E["Kernel Execution<br/>procfs · eBPF telemetry"]
+  E --> F["State Verification<br/>differential audit check"]
+  F --> G["Evidence Chain<br/>hash-linked receipt log"]
+  H["Signed Tenant Policy<br/>immutable OPA bundle"] -.->|"governs"| B
   H -.->|"governs"| D
-  I["Sensors & EDR Connectors"] -.->|"observes"| E`
+  I["Sensors & Connectors<br/>kernel telemetry feeds"] -.->|"observes"| E`
 
 const INSTALL_OPTIONS = [
   {
@@ -116,11 +137,24 @@ const INSTALL_OPTIONS = [
 export function Landing({ next }) {
   const [activeInstallTab, setActiveInstallTab] = useState('daemon')
   const [copied, setCopied] = useState(false)
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    organization: '',
+    scope: 'Endpoint Agent Deployment',
+    message: '',
+  })
+  const [contactSubmitted, setContactSubmitted] = useState(false)
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleContactSubmit = (e) => {
+    e.preventDefault()
+    setContactSubmitted(true)
   }
 
   const activeInstall = INSTALL_OPTIONS.find((opt) => opt.id === activeInstallTab) || INSTALL_OPTIONS[0]
@@ -136,6 +170,7 @@ export function Landing({ next }) {
             <a href="#install">Install</a>
             <a href="#architecture">Architecture</a>
             <a href="#agent-security">Agent security</a>
+            <a href="#contact">Contact</a>
           </div>
           <div className="nav-actions">
             <button className="quiet" onClick={next}>Sign in</button>
@@ -167,7 +202,7 @@ export function Landing({ next }) {
           </h1>
 
           <p className="lede">
-            Deterministic Linux endpoint defense, kernel telemetry, zero-probability boundary gating, and fail-closed host containment. Built as an autonomous endpoint security platform that operates completely standalone or serves as the ground-truth physical plant sensor and runtime enforcer in closed control loops.
+            A hybrid endpoint defense architecture combining sub-millisecond local classification on the host with deep production LLM reasoning in the cloud—communicating securely over the cryptographic A2A protocol. Shield enforces fail-closed containment at the kernel boundary while correlating fleet-wide threats across autonomous agent workloads.
           </p>
 
           <div className="hero-actions">
@@ -199,35 +234,35 @@ export function Landing({ next }) {
               <div className="hero-metric-header">
                 <span className="hero-metric-status" aria-hidden="true" />
                 <Cpu size={18} aria-hidden="true" />
-                <h3>Zero Kernel Modules</h3>
+                <h3>Local Fast Classifier</h3>
               </div>
-              <p>Native Linux procfs, eBPF CO-RE, and socket tables without kernel panics or out-of-tree drivers.</p>
+              <p>Sub-millisecond classification and OPA evaluation on the edge daemon for wire-speed containment without cloud latency.</p>
               <div className="hero-metric-footer">
-                <code>LINUX 4.18+ / 5.x / 6.x</code>
+                <code>&lt; 2MS LATENCY · SHIELD.LOCAL</code>
               </div>
             </div>
 
             <div className="hero-metric-card">
               <div className="hero-metric-header">
                 <span className="hero-metric-status" aria-hidden="true" />
-                <LockKeyhole size={18} aria-hidden="true" />
-                <h3>Cryptographic Gateways</h3>
+                <Workflow size={18} aria-hidden="true" />
+                <h3>Secure A2A Protocol</h3>
               </div>
-              <p>EDR containment, process termination, and policy actions gated by actor DID and OPA hash bundles.</p>
+              <p>Flagged detections escalate to cloud fleet models over mutual Ed25519 DIDs and canonical RFC 8785 envelopes.</p>
               <div className="hero-metric-footer">
-                <code>RFC 8628 · BOUNDARY VERIFIED</code>
+                <code>RFC 8785 · ERC-8004 PASSPORTS</code>
               </div>
             </div>
 
             <div className="hero-metric-card">
               <div className="hero-metric-header">
                 <span className="hero-metric-status" aria-hidden="true" />
-                <FileCheck2 size={18} aria-hidden="true" />
-                <h3>Ed25519 Hash Ledger</h3>
+                <Sparkles size={18} aria-hidden="true" />
+                <h3>Cloud LLM Reasoning</h3>
               </div>
-              <p>Every sensor event, gate evaluation, and responder outcome written to an append-only cryptographic chain.</p>
+              <p>Production frontier LLMs perform deep chain-of-thought analysis and fleet correlation over flagged edge detections.</p>
               <div className="hero-metric-footer">
-                <code>100% OFFLINE · IMMUTABLE EVIDENCE</code>
+                <code>HERMES-3 70B · SHIELD.CLOUD</code>
               </div>
             </div>
           </div>
@@ -236,20 +271,20 @@ export function Landing({ next }) {
 
       <section className="proof" id="proof" aria-label="Key architectural properties">
         <div>
-          <b>Kernel-level</b>
-          <span>procfs &amp; eBPF coverage</span>
+          <b>Local classifier</b>
+          <span>&lt; 2ms edge speed</span>
         </div>
         <div>
-          <b>Default deny</b>
-          <span>policy enforcement</span>
+          <b>Cloud LLM reasoning</b>
+          <span>deep anomaly analysis</span>
         </div>
         <div>
-          <b>Append-only</b>
-          <span>decision evidence</span>
+          <b>Secure A2A mesh</b>
+          <span>mutual DID authentication</span>
         </div>
         <div>
-          <b>Local first</b>
-          <span>works without cloud</span>
+          <b>Fail-closed</b>
+          <span>kernel-level containment</span>
         </div>
       </section>
 
@@ -257,13 +292,13 @@ export function Landing({ next }) {
         <header>
           <p className="eyebrow">THE SHIELD PLATFORM</p>
           <h2 id="platform-heading">Security that moves at agent speed.</h2>
-          <p>One operational surface for fleet posture, policy decisions, and containment evidence.</p>
+          <p>A hybrid defense mesh uniting deterministic edge classification and deep cloud reasoning.</p>
         </header>
         <div className="feature-grid">
           {[
-            [Radar, 'See every action', 'Process, file, and network telemetry in one live event stream.'],
-            [Fingerprint, 'Enforce identity', 'Bind decisions to verified agents, devices, and identities.'],
-            [FileCheck2, 'Prove the outcome', 'Every action produces durable, reviewable evidence.']
+            [Cpu, 'Fast Edge Classifier', 'Sub-2ms local classification and deterministic OPA bounding right on the host—no cloud round-trip required for containment.'],
+            [Workflow, 'Secure A2A Mesh', 'Mutual Ed25519 DID authentication and RFC 8785 canonical envelopes connect edge daemons to the defense fleet with zero trust.'],
+            [Sparkles, 'Production LLM Reasoning', 'Cloud reasoning coordinator (Hermes-3 70B) runs deep contextual analysis on detections flagged by edge nodes.']
           ].map(([Icon, title, copy]) => (
             <article key={title} className="feature-card">
               <span className="feature-icon"><Icon aria-hidden="true" /></span>
@@ -403,13 +438,56 @@ export function Landing({ next }) {
 
       <section className="landing-architecture" id="architecture" aria-labelledby="architecture-heading">
         <div className="landing-section-copy">
-          <p className="eyebrow"><span aria-hidden="true" /> HOST DEFENSE &amp; TELEMETRY</p>
-          <h2 id="architecture-heading">From kernel telemetry to <em>provable action.</em></h2>
+          <p className="eyebrow"><span aria-hidden="true" /> HYBRID EDGE-TO-CLOUD ARCHITECTURE</p>
+          <h2 id="architecture-heading">Local classification speed. <em>Cloud LLM reasoning.</em></h2>
           <p>
-            Shield turns low-level Linux signals into high-confidence decisions on the host. The local policy path remains independent of cloud availability; evidence export happens after the decision.
+            Endpoint containment cannot tolerate cloud round-trips when a rogue process executes unauthorized actions. Conversely, a lightweight edge daemon cannot maintain full fleet threat graphs or run multi-step reasoning. Shield solves this with a two-tier hybrid architecture: an ultra-fast classification agent (<code>shield.local</code>) operating directly on the Linux host for immediate fail-closed containment, paired with a cloud defense coordinator (<code>shield.cloud</code>) running large production LLMs for deep reasoning over flagged detections—exchanged securely over the cryptographic Agent-to-Agent (A2A) protocol.
           </p>
         </div>
-        <MermaidDiagram chart={DECISION_FLOW} label="Shield telemetry, local policy, containment, and evidence flow" />
+        <MermaidDiagram chart={HYBRID_A2A_FLOW} label="Shield hybrid architecture: Local classification on edge, secure A2A protocol, and cloud LLM deep reasoning" />
+        <div className="hybrid-tier-grid">
+          <article className="hybrid-tier-card">
+            <div className="hybrid-tier-header">
+              <span className="hybrid-tier-badge local">EDGE DAEMON · #4</span>
+              <h3>shield.local (Fast Classifier)</h3>
+            </div>
+            <p className="hybrid-tier-desc">Runs directly on the host alongside workloads, evaluating kernel events in microseconds without cloud dependencies.</p>
+            <ul className="hybrid-tier-list">
+              <li><b>Classification model:</b> Specialized low-latency classifier (<code>jev-fast-classifier</code>) &amp; deterministic OPA engine.</li>
+              <li><b>Execution latency:</b> &lt; 2ms decision time; admits benign actions and immediately halts policy breaches.</li>
+              <li><b>Physical containment:</b> Executes reversible SIGSTOP, cgroup freezing, and nftables destination drops.</li>
+              <li><b>Autonomous fallback:</b> 100% offline-capable; fails closed if network connectivity is severed.</li>
+            </ul>
+          </article>
+
+          <article className="hybrid-tier-card">
+            <div className="hybrid-tier-header">
+              <span className="hybrid-tier-badge a2a">MESH PROTOCOL · RFC 8785</span>
+              <h3>Secure A2A Mesh Bridge</h3>
+            </div>
+            <p className="hybrid-tier-desc">Cryptographic communication channel connecting edge hosts to cloud reasoning nodes with zero trust.</p>
+            <ul className="hybrid-tier-list">
+              <li><b>Mutual DID handshake:</b> Ed25519 identity verification and on-chain ERC-8004 passport tokens.</li>
+              <li><b>Canonical payloads:</b> Envelopes serialized via RFC 8785 canonical JSON with SHA-256 integrity digests.</li>
+              <li><b>Escalation queue:</b> Transmits flagged anomalies, ambient socket traces, and telemetry context for deep inspection.</li>
+              <li><b>Attested feedback:</b> Ingested into Super-Cortex memory with strict <code>agent:*</code> cryptographic boundaries.</li>
+            </ul>
+          </article>
+
+          <article className="hybrid-tier-card">
+            <div className="hybrid-tier-header">
+              <span className="hybrid-tier-badge cloud">CLOUD FLEET · #5</span>
+              <h3>shield.cloud (Production LLM)</h3>
+            </div>
+            <p className="hybrid-tier-desc">Scalable cloud defense intelligence analyzing escalated incidents across all fleet nodes.</p>
+            <ul className="hybrid-tier-list">
+              <li><b>Production models:</b> Frontier open-weights reasoning LLMs (<code>hermes-3-70b</code> / cloud frontier reasoning models).</li>
+              <li><b>Deep incident reasoning:</b> Evaluates intent vs telemetry context, reconstructs attack trees, and detects evasion.</li>
+              <li><b>Fleet correlation:</b> Correlates coordinated multi-host anomalies and novel zero-day attack vectors.</li>
+              <li><b>Policy distribution:</b> Synthesizes hardened OPA constraint rules and pushes signed updates to edge daemons.</li>
+            </ul>
+          </article>
+        </div>
       </section>
 
       <section className="landing-response" id="responders" aria-labelledby="response-heading">
@@ -442,7 +520,7 @@ export function Landing({ next }) {
           <p className="eyebrow"><span aria-hidden="true" /> DUAL-LAYER PROTECTION</p>
           <h2 id="agent-security-heading">One security boundary across agent intent and host execution.</h2>
           <p>
-            Shield protects autonomous systems at two layers. Semantic guardrails inspect what an agent is attempting to do, while Linux sensors observe what actually reaches the operating system. A local deterministic policy engine connects both views without putting cloud inference in the enforcement path.
+            Shield protects autonomous systems across two distinct layers: an ultra-fast classification agent running on the Linux host (<code>shield.local</code>) that evaluates kernel events in microseconds, and an asynchronous cloud defense coordinator (<code>shield.cloud</code>) that evaluates flagged telemetry using production LLMs over an authenticated Agent-to-Agent (A2A) mesh. A local deterministic policy engine connects both views without putting cloud inference in the blocking enforcement path.
           </p>
         </div>
         <MermaidDiagram chart={AGENT_FLOW} label="Shield agent request, guardrail, kernel execution, and evidence correlation flow" />
@@ -462,125 +540,232 @@ export function Landing({ next }) {
         <p className="agent-security-boundary"><LockKeyhole size={14} /> Shield is the enforcement authority shown here. External intelligence can inform policy design, but it cannot bypass local policy, approval, or responder-readiness gates.</p>
       </section>
 
-      <section className="cta" id="control">
-        <div>
-          <p className="eyebrow">BUILT FOR REAL OPERATIONS</p>
-          <h2>Put your agent fleet behind a verifiable boundary.</h2>
-          <p>Start with visibility. Promote responders only when their evidence is complete.</p>
-          <div style={{ marginTop: '1.25rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '13px', alignItems: 'center' }}>
-            <a href="mailto:jacob@xibalbasolutions.com" style={{ color: 'var(--text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
-              <Mail size={14} style={{ color: 'var(--accent-text)' }} /> jacob@xibalbasolutions.com
-            </a>
-            <a href="tel:+12628641589" style={{ color: 'var(--text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
-              <Phone size={14} style={{ color: 'var(--accent-text)' }} /> 1 (262) 864-1589
-            </a>
-            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-              <Globe size={14} /> xibalbasolutions.com
-            </a>
+      {/* Contact Section mirroring Cortex #xc-contact */}
+      <section className="landing-contact" id="contact" aria-labelledby="contact-heading">
+        <div className="contact-grid">
+          <div className="contact-info">
+            <div>
+              <p className="eyebrow"><span aria-hidden="true" /> CONTACT LEADERSHIP</p>
+              <h2 id="contact-heading">Direct Inquiries &amp; Dedicated Deployments</h2>
+            </div>
+            <p>
+              Reach out for dedicated enterprise Xibalba Shield deployments, high-throughput autonomous agent fleet protection, custom eBPF / OPA policy bundles, or confidential security assessments.
+            </p>
+
+            <div className="contact-channels">
+              <a href="mailto:jacob@xibalbasolutions.com" className="contact-channel-card">
+                <span className="contact-channel-icon" aria-hidden="true">
+                  <Mail size={18} />
+                </span>
+                <div className="contact-channel-meta">
+                  <span className="contact-channel-label">Executive Email</span>
+                  <span className="contact-channel-value">jacob@xibalbasolutions.com</span>
+                </div>
+              </a>
+
+              <a href="tel:+12628641589" className="contact-channel-card">
+                <span className="contact-channel-icon" aria-hidden="true">
+                  <Phone size={18} />
+                </span>
+                <div className="contact-channel-meta">
+                  <span className="contact-channel-label">Direct Telephone</span>
+                  <span className="contact-channel-value">1 (262) 864-1589</span>
+                </div>
+              </a>
+
+              <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" className="contact-channel-card">
+                <span className="contact-channel-icon" aria-hidden="true">
+                  <Globe size={18} />
+                </span>
+                <div className="contact-channel-meta">
+                  <span className="contact-channel-label">Parent Company</span>
+                  <span className="contact-channel-value">
+                    xibalbasolutions.com <ExternalLink size={12} aria-hidden="true" />
+                  </span>
+                </div>
+              </a>
+            </div>
+
+            <div className="contact-location">
+              <MapPin size={14} aria-hidden="true" />
+              <span>Xibalba Solutions LLC · Operations based in Wisconsin, USA</span>
+            </div>
           </div>
+
+          <form onSubmit={handleContactSubmit} className="contact-form-wrap">
+            <input name="website" type="text" tabIndex="-1" autoComplete="off" style={{ display: 'none' }} />
+
+            <div className="contact-form-row">
+              <div className="contact-field">
+                <label htmlFor="contact-name">Your Name *</label>
+                <input
+                  id="contact-name"
+                  name="name"
+                  required
+                  placeholder="Dr. Elena Rostova"
+                  value={contactForm.name}
+                  onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                />
+              </div>
+              <div className="contact-field">
+                <label htmlFor="contact-email">Email Address *</label>
+                <input
+                  id="contact-email"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="elena@organization.com"
+                  value={contactForm.email}
+                  onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="contact-form-row">
+              <div className="contact-field">
+                <label htmlFor="contact-org">Organization</label>
+                <input
+                  id="contact-org"
+                  name="organization"
+                  placeholder="Autonomous Systems Lab"
+                  value={contactForm.organization}
+                  onChange={(e) => setContactForm({ ...contactForm, organization: e.target.value })}
+                />
+              </div>
+              <div className="contact-field">
+                <label htmlFor="contact-scope">Inquiry Scope</label>
+                <select
+                  id="contact-scope"
+                  name="scope"
+                  value={contactForm.scope}
+                  onChange={(e) => setContactForm({ ...contactForm, scope: e.target.value })}
+                >
+                  <option value="Endpoint Agent Deployment">Dedicated Endpoint Daemon Deployment</option>
+                  <option value="Agent Fleet Security Audit">Agent Fleet Security Audit</option>
+                  <option value="Custom OPA / eBPF Rule Authoring">Custom OPA / eBPF Rule Authoring</option>
+                  <option value="Enterprise / Partnership Inquiry">Enterprise / Partnership Inquiry</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="contact-field">
+              <label htmlFor="contact-message">Message or Deployment Inquiry *</label>
+              <textarea
+                id="contact-message"
+                name="message"
+                required
+                rows={4}
+                placeholder="Describe your host environment, agent frameworks, containment requirements, or custom Linux telemetry needs..."
+                value={contactForm.message}
+                onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+              />
+            </div>
+
+            <div className="contact-form-footer">
+              <span className="contact-reassurance">Direct executive transmission · Zero tracking</span>
+              <button type="submit" className="contact-submit-btn">
+                <Send size={14} aria-hidden="true" />
+                <span>Send Message</span>
+              </button>
+            </div>
+
+            {contactSubmitted && (
+              <div className="contact-feedback-banner" role="status">
+                <CheckCircle2 size={16} aria-hidden="true" />
+                <span>Your inquiry has been received. Jacob from Xibalba Solutions will follow up promptly.</span>
+              </div>
+            )}
+          </form>
         </div>
-        <button onClick={next} className="cta-btn">
-          Open Shield <ArrowRight aria-hidden="true" />
-        </button>
       </section>
 
+      {/* Footer mirroring Cortex */}
       <footer className="site-footer">
         <div className="footer-main">
+          {/* Brand & Mission Column */}
           <div className="footer-brand">
-            <Brand />
+            <div className="footer-brand-header">
+              <Brand />
+              <span className="footer-badge">HOST DEFENSE</span>
+            </div>
             <p>
-              Deterministic Linux endpoint defense, response governance, and fail-closed host containment for autonomous agent systems.
+              Deterministic Linux host defense, kernel telemetry observation, and fail-closed containment for autonomous agent fleets.
             </p>
             <div className="footer-brand-meta">
+              <div className="footer-meta-line">Deterministic Hash Chains · RFC 8628 DIDs</div>
               <a
                 href="https://xibalbasolutions.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="footer-brand-parent"
               >
-                <Globe size={13} aria-hidden="true" />
-                <span>Commercial vertical of Xibalba Solutions LLC</span>
+                <Globe size={12} aria-hidden="true" />
+                <span>Commercial pillar of Xibalba Solutions LLC</span>
+                <ExternalLink size={10} aria-hidden="true" />
               </a>
-              <div className="footer-brand-badge">
-                <span className="status-dot green" aria-hidden="true" />
-                <span>Local-first · Zero cloud runtime dependency</span>
-              </div>
             </div>
           </div>
 
+          {/* Platform Navigation */}
           <div className="footer-links">
-            <h3>Platform</h3>
-            <a href="#install">Install &amp; Quickstart</a>
-            <a href="#loop">Control Loop Spec</a>
+            <p className="footer-col-title">Platform</p>
             <a href="#platform">Endpoint Capabilities</a>
-            <a href="#architecture">Kernel Telemetry</a>
-            <a href="#responders">Proof-Gated Responders</a>
-          </div>
-
-          <div className="footer-links">
-            <h3>Ecosystem</h3>
-            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">
-              Xibalba Solutions LLC
-            </a>
-            <a href="#loop">Integrity Protocol</a>
-            <a href="#loop">Super-Cortex AIS Memory</a>
-            <a href="#agent-security">Agent0 ERC-8004 Identity</a>
-            <a href="#install">Zero-Trust Device Pairing</a>
-          </div>
-
-          <div className="footer-links">
-            <h3>Governance</h3>
-            <a href="#proof">Default-Deny Invariants</a>
-            <a href="#responders">Two-Person Sign-off</a>
-            <a href="#assurance">Host Containment Bounds</a>
-            <a href="#proof">Ed25519 Hash Ledger</a>
+            <a href="#architecture">Hybrid Architecture</a>
+            <a href="#responders">Proof Responders</a>
+            <a href="#agent-security">Dual-Layer Security</a>
+            <a href="#install">Quick Install</a>
             <button onClick={next} className="footer-console-btn">
-              Operator Console <ArrowRight size={12} aria-hidden="true" />
+              Operator Console <ArrowRight size={11} aria-hidden="true" />
             </button>
           </div>
 
+          {/* Ecosystem Links */}
+          <div className="footer-links">
+            <p className="footer-col-title">Xibalba Ecosystem</p>
+            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">
+              Xibalba Solutions LLC <ExternalLink size={10} aria-hidden="true" />
+            </a>
+            <a href="https://cortex-managed-pilot.onrender.com" target="_blank" rel="noopener noreferrer">
+              Super-Cortex (AIS Memory) <ExternalLink size={10} aria-hidden="true" />
+            </a>
+            <a href="https://github.com/xibalbatechsol/integrity-core" target="_blank" rel="noopener noreferrer">
+              Integrity Protocol <ExternalLink size={10} aria-hidden="true" />
+            </a>
+            <a href="https://github.com/xibalbatechsol/xibalba-shield" target="_blank" rel="noopener noreferrer">
+              Xibalba Shield (EDR) <ExternalLink size={10} aria-hidden="true" />
+            </a>
+            <a href="https://github.com/xibalbatechsol" target="_blank" rel="noopener noreferrer">
+              GitHub Organization <ExternalLink size={10} aria-hidden="true" />
+            </a>
+          </div>
+
+          {/* Direct Contact Column */}
           <div className="footer-contact">
-            <h3>Executive Inquiries</h3>
-            <p className="footer-contact-desc">
-              Direct engineering access for enterprise deployments, custom eBPF telemetry, and closed control loop integrations.
-            </p>
+            <p className="footer-col-title">Direct Contact</p>
             <div className="footer-contact-list">
               <a href="mailto:jacob@xibalbasolutions.com" className="footer-contact-item">
-                <Mail size={13} aria-hidden="true" />
+                <Mail size={12} aria-hidden="true" />
                 <span>jacob@xibalbasolutions.com</span>
               </a>
               <a href="tel:+12628641589" className="footer-contact-item">
-                <Phone size={13} aria-hidden="true" />
-                <span>+1 (262) 864-1589</span>
-              </a>
-              <a
-                href="https://xibalbasolutions.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="footer-contact-item"
-              >
-                <Globe size={13} aria-hidden="true" />
-                <span>xibalbasolutions.com</span>
+                <Phone size={12} aria-hidden="true" />
+                <span>1 (262) 864-1589</span>
               </a>
               <div className="footer-contact-item footer-location">
-                <MapPin size={13} aria-hidden="true" />
+                <MapPin size={12} aria-hidden="true" />
                 <span>Wisconsin, United States</span>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Bottom Bar */}
         <div className="footer-bottom">
           <div className="footer-bottom-copy">
-            <small>
-              © {new Date().getFullYear()} <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">Xibalba Solutions LLC</a>. All rights reserved. Registered in Wisconsin, USA.
-            </small>
+            &copy; {new Date().getFullYear()} <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">Xibalba Solutions LLC</a>. All rights reserved. Registered in Wisconsin, USA.
           </div>
           <div className="footer-bottom-specs">
-            <span className="spec-tag">LINUX 4.18+ / 5.x / 6.x</span>
-            <span className="spec-tag">RFC 8628 DID &amp; OPA REGO</span>
-            <span className="spec-tag">ED25519 HASH CHAIN</span>
-            <span className="spec-tag">FAIL-CLOSED ENFORCER</span>
+            <span className="spec-tag">Local-First · Host-Authoritative · RFC 8628 DIDs</span>
           </div>
         </div>
       </footer>
