@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react'
+import { Activity } from 'lucide-react'
 
 let renderQueue = Promise.resolve()
 
@@ -10,8 +11,6 @@ export function MermaidDiagram({ chart, label }) {
   useEffect(() => {
     let active = true
     renderQueue = renderQueue.then(() => import('mermaid')).then(({ default: mermaid }) => {
-      // Take the diagram's palette from the live design tokens rather than
-      // repeating hex values here, so it follows whichever theme is applied.
       const scope = document.querySelector('.console') ?? document.documentElement
       const token = (name, fallback) =>
         getComputedStyle(scope).getPropertyValue(name).trim() || fallback
@@ -20,16 +19,25 @@ export function MermaidDiagram({ chart, label }) {
         securityLevel: 'strict',
         theme: 'base',
         themeVariables: {
-          background: token('--panel', '#1b1f23'),
-          primaryColor: token('--panel-elevated', '#262b30'),
-          primaryTextColor: token('--text', '#eef0f1'),
-          primaryBorderColor: token('--neutral-700', '#5d5d60'),
+          background: token('--panel', '#171c22'),
+          primaryColor: token('--panel-elevated', '#1f262f'),
+          primaryTextColor: token('--text', '#f0f3f6'),
+          primaryBorderColor: '#364352',
           lineColor: token('--accent', '#94bce3'),
-          secondaryColor: token('--panel', '#1b1f23'),
-          tertiaryColor: token('--bg', '#14171a'),
+          secondaryColor: token('--panel', '#171c22'),
+          tertiaryColor: token('--bg', '#101418'),
+          edgeLabelBackground: '#13181f',
           fontFamily: 'Barlow, system-ui, sans-serif',
+          fontSize: '13px',
         },
-        flowchart: { curve: 'basis', htmlLabels: true, nodeSpacing: 28, rankSpacing: 42 },
+        flowchart: {
+          curve: 'monotoneX',
+          htmlLabels: true,
+          nodeSpacing: 46,
+          rankSpacing: 54,
+          padding: 16,
+          useMaxWidth: true,
+        },
       })
       return mermaid.render(`mermaid-${id}`, chart)
     })
@@ -38,7 +46,20 @@ export function MermaidDiagram({ chart, label }) {
     return () => { active = false }
   }, [chart, id])
 
-  return <div className="mermaid-frame" role="img" aria-label={label}>
-    {svg ? <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: svg }} /> : <span className="mermaid-loading">{error || 'Rendering architecture…'}</span>}
-  </div>
+  return (
+    <div className="mermaid-frame" role="img" aria-label={label}>
+      <div className="mermaid-frame-header">
+        <span className="mermaid-frame-title">
+          <Activity size={12} aria-hidden="true" />
+          {label || 'Architecture Topology'}
+        </span>
+        <span className="mermaid-frame-badge">TOPOLOGY SPECIFICATION</span>
+      </div>
+      {svg ? (
+        <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : (
+        <span className="mermaid-loading">{error || 'Rendering architecture…'}</span>
+      )}
+    </div>
+  )
 }

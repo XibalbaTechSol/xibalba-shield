@@ -42,36 +42,36 @@ const CONTROL_LOOP_FLOW = `flowchart LR
   SH -.->|"anchorRoot"| CH`
 
 const DECISION_FLOW = `flowchart LR
-  A[Kernel & EDR telemetry<br/>Falcon · Defender · eBPF] --> B[Normalize<br/>deduplicate · enrich]
-  B --> C{Response Gateway<br/>hash-bound intent}
-  C -->|allow| D[Endpoint execution]
-  C -->|escalate| G[Operator approval queue]
+  A["Kernel & EDR Telemetry<br/>procfs · eBPF · Falcon"] --> B["Normalize & Enrich<br/>correlation tags · hash binding"]
+  B --> C{"Response Gateway<br/>deterministic gate"}
+  C -->|allow| D["Endpoint Execution<br/>SIGSTOP · cgroup · nftables"]
+  C -->|escalate| G["Operator Queue<br/>two-person sign-off"]
   G -->|approved| D
-  C -->|deny| H[Terminal block]
-  D --> F[Integrity Receipt<br/>tamper-evident ledger]
-  F -. anchored to .-> P[Integrity Protocol]`
+  C -->|deny| H["Terminal Block<br/>fail-closed drop"]
+  D --> F["Integrity Receipt<br/>Ed25519 hash-chained ledger"]
+  F -.->|"evidence anchor"| P["Integrity Protocol"]`
 
 const RESPONSE_FLOW = `flowchart LR
-  A[Response Intent] --> E{Cryptographic Gate}
-  B[Actor DID & role] --> E
-  C[Policy hash] --> E
-  D[Two-person approval] --> E
-  E -->|allow / approved| F[Atomic Consume]
-  E -->|deny / expired| G[Fail Closed]
-  F --> H[EDR: Contain Host]
-  F --> I[EDR: Kill Process]
-  F --> J[OS: cgroup freeze]`
+  A["Response Intent"] --> E{"Cryptographic Gate<br/>RFC 8628 DID & policy"}
+  B["Actor DID & Role"] --> E
+  C["Policy Hash Bundle"] --> E
+  D["Two-Person Sign-off"] --> E
+  E -->|allow / approved| F["Atomic Consume"]
+  E -->|deny / expired| G["Fail Closed"]
+  F --> H["EDR: Contain Host"]
+  F --> I["EDR: Kill Process"]
+  F --> J["OS: cgroup freeze & nftables"]`
 
 const AGENT_FLOW = `flowchart LR
-  A[Agent intent] --> B[Cryptographic boundary gate]
-  B --> C[Geometric traversal checks]
-  C --> D[Response intent gateway]
-  D --> E[EDR / Kernel execution]
-  E --> F[Post-action verification]
-  F --> G[Attested evidence chain]
-  H[Signed tenant policy] -. governs .-> B
-  H -. governs .-> D
-  I[Sensors & EDR connectors] -. observes .-> E`
+  A["Agent Intent<br/>tool call / model action"] --> B["Cryptographic Boundary<br/>DID verification"]
+  B --> C["Deterministic Policy<br/>geometric traversal checks"]
+  C --> D["Response Intent Gateway"]
+  D --> E["EDR & Kernel Execution<br/>procfs · eBPF · host"]
+  E --> F["Post-Action Verification<br/>state differential audit"]
+  F --> G["Attested Evidence Chain<br/>hash-linked ledger"]
+  H["Signed Tenant Policy"] -.->|"governs"| B
+  H -.->|"governs"| D
+  I["Sensors & EDR Connectors"] -.->|"observes"| E`
 
 const INSTALL_OPTIONS = [
   {
@@ -130,16 +130,11 @@ export function Landing({ next }) {
         <nav className="site-nav" aria-label="Main Navigation">
           <a className="brand-link" href="#top" aria-label="Xibalba Shield home"><Brand /></a>
           <div className="nav-links">
-            <a href="#install">Install</a>
-            <a href="#loop">Control loop</a>
             <a href="#platform">Platform</a>
+            <a href="#loop">Control loop</a>
+            <a href="#install">Install</a>
             <a href="#architecture">Architecture</a>
-            <a href="#responders">Responders</a>
             <a href="#agent-security">Agent security</a>
-            <a href="#assurance">Assurance</a>
-            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              Company <ExternalLink size={11} />
-            </a>
           </div>
           <div className="nav-actions">
             <button className="quiet" onClick={next}>Sign in</button>
@@ -149,24 +144,31 @@ export function Landing({ next }) {
       </header>
 
       <section className="hero" id="top">
-        <div className="hero-copy">
-          <img
-            className="hero-logo"
-            src="/shield-logo-large.webp"
-            alt=""
-            width="640"
-            height="691"
-          />
-          <p className="eyebrow">
-            <span aria-hidden="true" /> INDEPENDENT ENDPOINT SECURITY &amp; RESPONSE GOVERNANCE
-          </p>
+        <div className="hero-content">
+          <div className="hero-badge">
+            <span className="hero-badge-dot" aria-hidden="true" />
+            <span>INDEPENDENT LINUX ENDPOINT DEFENSE &amp; RESPONSE GOVERNANCE</span>
+          </div>
+
+          <div className="hero-brand-wrap">
+            <img
+              className="hero-logo"
+              src="/shield-logo-large.webp"
+              alt="Xibalba Shield logo"
+              width="640"
+              height="691"
+            />
+          </div>
+
           <h1>
             The EDR detects and acts.<br />
             <em>Shield proves who authorized it.</em>
           </h1>
+
           <p className="lede">
-            Deterministic Linux endpoint defense, kernel telemetry, zero-probability boundary gating, and fail-closed host containment. Built as an autonomous endpoint platform that operates completely standalone or serves as the ground-truth sensor and enforcer in closed control loops.
+            Deterministic Linux endpoint defense, kernel telemetry, zero-probability boundary gating, and fail-closed host containment. Built as an autonomous endpoint security platform that operates completely standalone or serves as the ground-truth physical plant sensor and runtime enforcer in closed control loops.
           </p>
+
           <div className="hero-actions">
             <a href="#install" className="primary big" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               <Download size={18} aria-hidden="true" /> Install Shield
@@ -174,31 +176,29 @@ export function Landing({ next }) {
             <button className="quiet big" onClick={next}>
               Explore console <ArrowRight aria-hidden="true" />
             </button>
-            <a href="#loop" className="learn-more-link">See control loop</a>
+            <a href="#loop" className="hero-secondary-link">
+              <Activity size={15} aria-hidden="true" /> Control loop spec
+            </a>
           </div>
-          <div className="checks">
-            <span><ShieldCheck aria-hidden="true" /> Standalone host containment</span>
-            <span><ShieldCheck aria-hidden="true" /> Hash-bound EDR response governance</span>
-            <span><ShieldCheck aria-hidden="true" /> Tamper-evident ledger &amp; HIPAA packets</span>
-          </div>
-        </div>
 
-        <div className="hero-art command-preview" aria-label="Shield command center preview">
-          <div className="preview-topbar"><span><Shield size={14} /> COMMAND CENTER</span><i><span /> LOCAL-FIRST</i></div>
-          <div className="preview-heading"><div><h2>Operational readiness</h2><p>Evidence-backed status across the enforcement boundary.</p></div><strong>Read-only authority</strong></div>
-          <div className="preview-body">
-            <div className="preview-capabilities">
-              {[
-                ['Response Gateway', 'Active & hash-bound', 'green'],
-                ['EDR Connectors (CrowdStrike)', 'Verified via SDK', 'green'],
-                ['Action Ledger', 'Tamper-evident chain', 'green'],
-                ['Hermes Analyst', 'Analysis only', 'blue'],
-                ['Integrity Protocol Exporter', 'Anchoring verified', 'green'],
-              ].map(([label, state, tone]) => <div className="preview-row" key={label}><span className={`preview-dot ${tone}`} /><b>{label}</b><em>{state}</em><span className="preview-arrow">→</span></div>)}
+          <div className="hero-checks">
+            <div className="hero-check-item">
+              <ShieldCheck size={16} aria-hidden="true" />
+              <span>Standalone host containment</span>
             </div>
-            <aside className="preview-actions"><h3>Next operator actions</h3><ol><li>Review escalated response intents</li><li>Configure tenant containment mode</li><li>Generate HIPAA audit packet</li></ol><small>Actions remain blocked until cryptographic authorization passes.</small></aside>
+            <div className="hero-check-item">
+              <LockKeyhole size={16} aria-hidden="true" />
+              <span>Hash-bound EDR response gates</span>
+            </div>
+            <div className="hero-check-item">
+              <Cpu size={16} aria-hidden="true" />
+              <span>Zero kernel module requirement</span>
+            </div>
+            <div className="hero-check-item">
+              <FileCheck2 size={16} aria-hidden="true" />
+              <span>Tamper-evident Ed25519 ledger</span>
+            </div>
           </div>
-          <div className="preview-footer"><span><Activity size={13} /> Observed locally</span><span><FileCheck2 size={13} /> Evaluated deterministically</span><span><LockKeyhole size={13} /> Containment remains host-authoritative</span></div>
         </div>
       </section>
 
@@ -247,10 +247,8 @@ export function Landing({ next }) {
 
       <section className="landing-loop" id="loop" aria-labelledby="loop-heading">
         <div className="landing-section-copy">
-          <div>
-            <p className="eyebrow">CONTROL THEORY &amp; CLOSED-LOOP INTEGRITY</p>
-            <h2 id="loop-heading">Where Shield works in the <em>control loop.</em></h2>
-          </div>
+          <p className="eyebrow"><span aria-hidden="true" /> CONTROL THEORY &amp; CLOSED-LOOP INTEGRITY</p>
+          <h2 id="loop-heading">Where Shield works in the <em>control loop.</em></h2>
           <p>
             A feedback controller cannot stabilize a system without accurate plant measurements. Prompt guardrails fail because reinforcement learning agents treat them as thermodynamic friction and optimize around them. Shield is the physical plant sensor and fail-closed enforcer: observing what actually happened at the OS and network layer, executing containment when bounds revert, and publishing signed evidence spans to close the control loop.
           </p>
@@ -283,10 +281,8 @@ export function Landing({ next }) {
 
       <section className="landing-install" id="install" aria-labelledby="install-heading">
         <div className="landing-section-copy">
-          <div>
-            <p className="eyebrow">DEPLOYMENT &amp; QUICKSTART</p>
-            <h2 id="install-heading">Install Shield on any <em>Linux host or cluster.</em></h2>
-          </div>
+          <p className="eyebrow"><span aria-hidden="true" /> DEPLOYMENT &amp; QUICKSTART</p>
+          <h2 id="install-heading">Install Shield on any <em>Linux host or cluster.</em></h2>
           <p>
             Shield operates as a self-contained endpoint defense agent. Whether deployed as a hardened systemd daemon on bare-metal servers, containerized on Kubernetes edge nodes, or run via CLI on developer workstations, Shield brings kernel-level visibility and fail-closed containment to your infrastructure.
           </p>
@@ -374,18 +370,36 @@ export function Landing({ next }) {
       </section>
 
       <section className="landing-architecture" id="architecture" aria-labelledby="architecture-heading">
-        <div className="landing-section-copy"><h2 id="architecture-heading">From kernel telemetry to <em>provable action.</em></h2><p>Shield turns low-level Linux signals into high-confidence decisions on the host. The local policy path remains independent of cloud availability; evidence export happens after the decision.</p></div>
+        <div className="landing-section-copy">
+          <p className="eyebrow"><span aria-hidden="true" /> HOST DEFENSE &amp; TELEMETRY</p>
+          <h2 id="architecture-heading">From kernel telemetry to <em>provable action.</em></h2>
+          <p>
+            Shield turns low-level Linux signals into high-confidence decisions on the host. The local policy path remains independent of cloud availability; evidence export happens after the decision.
+          </p>
+        </div>
         <MermaidDiagram chart={DECISION_FLOW} label="Shield telemetry, local policy, containment, and evidence flow" />
       </section>
 
       <section className="landing-response" id="responders" aria-labelledby="response-heading">
-        <div className="landing-section-copy"><h2 id="response-heading">A <em>proof-gated</em> response lifecycle.</h2><p>Powerful responders are never enabled by a UI switch or configuration flag alone. Runtime evidence, identity, policy integrity, rollback validation, audit delivery, and approval must all be current.</p></div>
+        <div className="landing-section-copy">
+          <p className="eyebrow"><span aria-hidden="true" /> ENFORCEMENT GATING</p>
+          <h2 id="response-heading">A <em>proof-gated</em> response lifecycle.</h2>
+          <p>
+            Powerful responders are never enabled by a UI switch or configuration flag alone. Runtime evidence, identity, policy integrity, rollback validation, audit delivery, and approval must all be current.
+          </p>
+        </div>
         <MermaidDiagram chart={RESPONSE_FLOW} label="Proof-gated responder readiness flow" />
         <p className="diagram-caption"><LockKeyhole size={14} /> Any missing, stale, or device-mismatched proof keeps the responder unavailable.</p>
       </section>
 
       <section className="landing-assurance" id="assurance" aria-labelledby="assurance-heading">
-        <div><h2 id="assurance-heading">Operational assurance by design.</h2><p>Security that stays close to the workload, records what happened, and limits every response to the smallest justified boundary.</p></div>
+        <div className="landing-section-copy">
+          <p className="eyebrow"><span aria-hidden="true" /> OPERATIONAL ASSURANCE</p>
+          <h2 id="assurance-heading">Operational assurance by design.</h2>
+          <p>
+            Security that stays close to the workload, records what happened, and limits every response to the smallest justified boundary.
+          </p>
+        </div>
         <div className="assurance-rows">
           {[[SquareTerminal, 'Local-first', 'Sensing, policy evaluation, and containment run on the host.'], [FileCheck2, 'Auditable', 'Decisions and outcomes carry durable evidence and correlation.'], [Crosshair, 'Scoped', 'Responses target a process, cgroup, or exact destination flow.'], [RotateCcw, 'Reversible', 'Safe actions support rollback; destructive actions require approval.']].map(([Icon, title, text]) => <div key={title}><Icon /><b>{title}</b><span>{text}</span></div>)}
         </div>
@@ -393,8 +407,11 @@ export function Landing({ next }) {
 
       <section className="landing-agent-security" id="agent-security" aria-labelledby="agent-security-heading">
         <div className="agent-security-intro">
-          <div><Shield aria-hidden="true" /><h2 id="agent-security-heading">One security boundary across agent intent and host execution.</h2></div>
-          <p>Shield protects autonomous systems at two layers. Semantic guardrails inspect what an agent is attempting to do, while Linux sensors observe what actually reaches the operating system. A local deterministic policy engine connects both views without putting cloud inference in the enforcement path.</p>
+          <p className="eyebrow"><span aria-hidden="true" /> DUAL-LAYER PROTECTION</p>
+          <h2 id="agent-security-heading">One security boundary across agent intent and host execution.</h2>
+          <p>
+            Shield protects autonomous systems at two layers. Semantic guardrails inspect what an agent is attempting to do, while Linux sensors observe what actually reaches the operating system. A local deterministic policy engine connects both views without putting cloud inference in the enforcement path.
+          </p>
         </div>
         <MermaidDiagram chart={AGENT_FLOW} label="Shield agent request, guardrail, kernel execution, and evidence correlation flow" />
         <div className="metadata-rail" aria-label="Shield security coverage"><span>Security coverage</span>{['Ingress', 'Retrieval', 'Model routing', 'Tool calls', 'Process execution', 'File writes', 'Network flows', 'Post-action checks'].map((item) => <b key={item}>{item}</b>)}</div>
