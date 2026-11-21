@@ -1,0 +1,36 @@
+"""Deterministic local advisory matching with explicit freshness and provenance."""
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+from pathlib import Path
+from typing import Any
+
+
+def load_advisories(path: Path, *, max_age_seconds: int = 86400) -> dict[str, Any]:
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    doc = json.loads(raw)
+    if not isinstance(doc, dict) or not isinstance(doc.get("advisories"), list):
+        raise ValueError("advisory source must contain an advisories array")
+    updated = float(doc.get("updated_at", 0))
+    if updated <= 0 or time.time() - updated > max_age_seconds:
+        raise ValueError("advisory source is stale")
+    return {"source_hash": digest, "updated_at": updated, "advisories": doc["advisories"]}
+
+
+def match_advisories(inventory: dict[str, Any], source: dict[str, Any], *, max_findings: int = 256) -> dict[str, Any]:
+    if max_findings < 1:
+        raise ValueError("max_findings must be positive")
+    packages = {(p.get("name"), p.get("version")) for p in inventory.get("packages", []) if isinstance(p, dict)}
+    findings = []
+    for advisory in source.get("advisories", []):
+        if not isinstance(advisory, dict):
+            continue
+        if (advisory.get("package"), advisory.get("version")) in packages:
+            findings.append({k: advisory.get(k) for k in ("id", "package", "version", "severity", "summary")})
+            if len(findings) >= max_findings:
+                break
+    return {"status": "matched", "source_hash": source.get("source_hash"),
+            "updated_at": source.get("updated_at"), "known_findings": findings}
