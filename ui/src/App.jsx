@@ -97,19 +97,21 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    // Automatically restore session if returning from Supabase OAuth or active cookie exists
+    // Automatically restore session if returning from Auth0/OAuth or active cookie exists
     const checkOAuthAndSession = async () => {
       const hash = window.location.hash || ''
-      if (hash && hash.includes('access_token=')) {
+      if (hash && (hash.includes('access_token=') || hash.includes('id_token='))) {
         const params = new URLSearchParams(hash.replace(/^#/, ''))
         const accessToken = params.get('access_token')
-        if (accessToken) {
+        const idToken = params.get('id_token')
+        const token = idToken || accessToken
+        if (token) {
           try {
-            const response = await fetch('/api/shield/auth/supabase/session', {
+            const response = await fetch('/api/shield/auth/auth0/session', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({ access_token: accessToken }),
+              body: JSON.stringify({ access_token: accessToken, id_token: idToken }),
             })
             if (response.ok) {
               const payload = await response.json()
