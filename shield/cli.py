@@ -849,6 +849,8 @@ def _run(args: argparse.Namespace) -> int:
         # `local-run` reaches here with its own namespace, which has no such option.
         sensor_status_file=getattr(args, "sensor_status_file", None),
         inventory_state_file=getattr(args, "inventory_state_file", None),
+        advisory_source=getattr(args, "advisory_source", None),
+        advisory_max_age=getattr(args, "advisory_max_age", 86400),
     )
     watchdog.start()
 
@@ -1413,6 +1415,10 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--tier3-receipt-dir", type=Path, default=None)
     p_run.add_argument("--inventory-state-file", type=Path, default=None,
                        help="persist only the previous endpoint inventory hash for restart-safe drift detection")
+    p_run.add_argument("--advisory-source", type=Path, default=None,
+                       help="optional local advisory database for watchdog vulnerability matching")
+    p_run.add_argument("--advisory-max-age", type=int, default=86400,
+                       help="maximum advisory database age in seconds")
     p_run.add_argument("--cortex-url", default=None, help="optional redacted Cortex memory endpoint; also accepts XIBALBA_CORTEX_URL")
     p_run.add_argument("--cortex-token", default=None, help="optional Cortex memory token; also accepts XIBALBA_CORTEX_TOKEN")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,

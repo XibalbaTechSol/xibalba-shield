@@ -52,12 +52,16 @@ class Watchdog:
         responder_status: dict[str, Any] | None = None,
         sensor_status_file: Path | str | None = None,
         inventory_state_file: Path | str | None = None,
+        advisory_source: Path | str | None = None,
+        advisory_max_age: int = 86400,
     ) -> None:
         self._interval = interval
         # Opt-in (`shield run --sensor-status-file`): a local copy of each tick's sensor health for
         # the gate daemon's sensor-silence check (`shield.gate_zone`). None writes nothing.
         self._sensor_status_file = Path(sensor_status_file) if sensor_status_file is not None else None
         self._inventory_state_file = Path(inventory_state_file) if inventory_state_file is not None else None
+        self._advisory_source = Path(advisory_source) if advisory_source is not None else None
+        self._advisory_max_age = advisory_max_age
         self._device_config = device_config
         self._policy_engine = policy_engine
         self._reloader = reloader
@@ -234,6 +238,14 @@ class Watchdog:
         try:
             from .inventory import collect_inventory, inventory_drift
             snapshot = collect_inventory()
+            if getattr(self, "_advisory_source", None) is not None:
+                from .advisories import load_advisories, match_advisories
+                try:
+                    snapshot["vulnerability"] = match_advisories(
+                        snapshot, load_advisories(self._advisory_source, max_age_seconds=getattr(self, "_advisory_max_age", 86400))
+                    )
+                except (OSError, ValueError, TypeError) as exc:
+                    snapshot["vulnerability"] = {"status": "unavailable", "known_findings": None, "error": str(exc)}
             drift = inventory_drift(self._previous_inventory, snapshot)
             self._previous_inventory = {"snapshot_hash": snapshot.get("snapshot_hash")}
             self._save_inventory_baseline(self._previous_inventory)
