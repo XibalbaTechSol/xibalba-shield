@@ -75,6 +75,7 @@ class Watchdog:
             "last_sync_at": None,
             "error": "not synchronized",
         }
+        self._previous_inventory: dict[str, Any] | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -226,11 +227,13 @@ class Watchdog:
             inventory_status=self._inventory_status(),
         )
 
-    @staticmethod
-    def _inventory_status() -> dict[str, object]:
+    def _inventory_status(self) -> dict[str, object]:
         try:
-            from .inventory import collect_inventory
+            from .inventory import collect_inventory, inventory_drift
+            snapshot = collect_inventory()
+            drift = inventory_drift(self._previous_inventory, snapshot)
+            self._previous_inventory = {"snapshot_hash": snapshot.get("snapshot_hash")}
             return {"healthy": True, "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "snapshot": collect_inventory()}
+                    "snapshot_hash": snapshot.get("snapshot_hash"), "drift": drift}
         except Exception as exc:  # noqa: BLE001 -- inventory is observational
             return {"healthy": False, "error": str(exc)}
