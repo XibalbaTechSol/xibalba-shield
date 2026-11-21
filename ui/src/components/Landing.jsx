@@ -96,31 +96,31 @@ const RESPONSE_FLOW = `flowchart LR
   F --> I["Kill Process<br/>targeted SIGKILL"]
   F --> J["OS Freeze<br/>cgroups & nftables"]`
 
-const AGENT_FLOW = `flowchart LR
-  subgraph EDGE["Layer 1: Host Enforcement · shield.local (Fast Classifier)"]
+const DUAL_LAYER_FLOW = `flowchart LR
+  subgraph INTENT["Layer 1: Semantic Intent Gate (Pre-Action)"]
     direction TB
-    A["Agent Workload<br/>tool call or model intent"] --> B["Pre-Action Gate<br/>deterministic OPA check"]
-    B --> C["Kernel Execution<br/>procfs · eBPF sensors"]
-    C --> D["Host Containment<br/>cgroup freeze · SIGSTOP"]
+    A["Agent Reasoning<br/>model prompt & intent"] --> B["Tool Proposal<br/>invocation schema & target"]
+    B --> C["Deterministic OPA Gate<br/>sub-2ms argument validation"]
   end
 
-  subgraph MESH["Cryptographic Mesh Boundary"]
+  subgraph BRIDGE["Cryptographic Nonce & Correlation Bridge"]
     direction TB
-    E["Secure A2A Bridge<br/>RFC 8628 DID auth"]
-    F["Canonical Receipt<br/>hash-chained evidence log"]
-    E --- F
+    NONCE["Invocation Nonce<br/>deterministic session token"]
+    HASH["Signed Intent Hash<br/>immutable Ed25519 receipt"]
+    NONCE --- HASH
   end
 
-  subgraph CLOUD["Layer 2: Cloud Intelligence · shield.cloud (Production LLM)"]
+  subgraph KERNEL["Layer 2: Host Execution Enforcer (Post-Action)"]
     direction TB
-    G["Telemetry Ingestion<br/>socket & exec span triage"] --> H["Deep LLM Reasoning<br/>Hermes-3 70B threat model"]
-    H --> I["Policy Distribution<br/>signed OPA rule synthesis"]
+    D["Kernel Execution<br/>procfs & eBPF CO-RE sensors"] --> E{"Ground-Truth Check<br/>boundary conformance"}
+    E -->|conforming| F["Admit & Record<br/>append hash-chained span"]
+    E -->|divergent| G["Fail-Closed Actuator<br/>cgroup freeze · SIGSTOP · nftables"]
   end
 
-  B -->|"flagged anomaly"| E
-  E -->|"verified envelope"| G
-  I -.->|"hardened policy push"| B
-  C -.->|"telemetry feed"| F`
+  C -->|"authorized intent"| NONCE
+  NONCE -->|"correlate"| D
+  C -.->|"policy deny"| G
+  D -.->|"telemetry proof"| HASH`
 
 const INSTALL_OPTIONS = [
   {
@@ -526,28 +526,38 @@ export function Landing({ next }) {
         </div>
       </section>
 
-      <section className="landing-response" id="responders" aria-labelledby="response-heading">
+      <section className="landing-response" id="assurance" aria-labelledby="assurance-heading">
         <div className="landing-section-copy">
-          <p className="eyebrow"><span aria-hidden="true" /> ENFORCEMENT GATING</p>
-          <h2 id="response-heading">A <em>proof-gated</em> response lifecycle.</h2>
+          <p className="eyebrow"><span aria-hidden="true" /> PROOF-GATED CONTAINMENT &amp; OPERATIONAL ASSURANCE</p>
+          <h2 id="assurance-heading">Cryptographically gated response. <em>Operational assurance by design.</em></h2>
           <p>
-            Powerful responders are never enabled by a UI switch or configuration flag alone. Runtime evidence, identity, policy integrity, rollback validation, audit delivery, and approval must all be current.
+            Powerful containment responders are never enabled by a configuration toggle alone. Every enforcement action requires valid runtime evidence, verified Ed25519 identity, signed policy locks, and quorum approval. In production, Shield restricts every mitigation to the smallest justified boundary with guaranteed rollback.
           </p>
         </div>
-        <MermaidDiagram chart={RESPONSE_FLOW} label="Proof-gated responder readiness flow" />
-        <p className="diagram-caption"><LockKeyhole size={14} /> Any missing, stale, or device-mismatched proof keeps the responder unavailable.</p>
-      </section>
+        <MermaidDiagram chart={RESPONSE_FLOW} label="Proof-gated responder readiness and containment execution lifecycle" />
+        <p className="diagram-caption"><LockKeyhole size={14} /> Any missing, stale, or device-mismatched proof keeps the responder strictly unavailable.</p>
 
-      <section className="landing-assurance" id="assurance" aria-labelledby="assurance-heading">
-        <div className="landing-section-copy">
-          <p className="eyebrow"><span aria-hidden="true" /> OPERATIONAL ASSURANCE</p>
-          <h2 id="assurance-heading">Operational assurance by design.</h2>
-          <p>
-            Security that stays close to the workload, records what happened, and limits every response to the smallest justified boundary.
-          </p>
-        </div>
-        <div className="assurance-rows">
-          {[[SquareTerminal, 'Local-first', 'Sensing, policy evaluation, and containment run on the host.'], [FileCheck2, 'Auditable', 'Decisions and outcomes carry durable evidence and correlation.'], [Crosshair, 'Scoped', 'Responses target a process, cgroup, or exact destination flow.'], [RotateCcw, 'Reversible', 'Safe actions support rollback; destructive actions require approval.']].map(([Icon, title, text]) => <div key={title}><Icon /><b>{title}</b><span>{text}</span></div>)}
+        <div className="assurance-grid">
+          <div className="assurance-card">
+            <SquareTerminal size={20} className="assurance-icon" aria-hidden="true" />
+            <h3>Local-First Containment</h3>
+            <p>Sensing, policy evaluation, and containment run directly on the host plant in microseconds with zero cloud latency.</p>
+          </div>
+          <div className="assurance-card">
+            <FileCheck2 size={20} className="assurance-icon" aria-hidden="true" />
+            <h3>Cryptographic Audit</h3>
+            <p>Decisions and outcomes carry durable Ed25519 hash-chain evidence and correlation nonces for forensic playback.</p>
+          </div>
+          <div className="assurance-card">
+            <Crosshair size={20} className="assurance-icon" aria-hidden="true" />
+            <h3>Surgically Scoped</h3>
+            <p>Mitigations target a specific PID, cgroup v2 controller, or destination network packet—never whole-node kill.</p>
+          </div>
+          <div className="assurance-card">
+            <RotateCcw size={20} className="assurance-icon" aria-hidden="true" />
+            <h3>Reversible Fail-Closed</h3>
+            <p>Non-destructive actions (SIGSTOP, cgroup freeze, nftables block) support instant rollback; destructive steps require quorum.</p>
+          </div>
         </div>
       </section>
 
@@ -556,24 +566,86 @@ export function Landing({ next }) {
           <p className="eyebrow"><span aria-hidden="true" /> DUAL-LAYER PROTECTION</p>
           <h2 id="agent-security-heading">One security boundary across agent intent and host execution.</h2>
           <p>
-            Shield protects autonomous systems across two distinct layers: an ultra-fast classification agent running on the Linux host (<code>shield.local</code>) that evaluates kernel events in microseconds, and an asynchronous cloud defense coordinator (<code>shield.cloud</code>) that evaluates flagged telemetry using production LLMs over an authenticated Agent-to-Agent (A2A) mesh. A local deterministic policy engine connects both views without putting cloud inference in the blocking enforcement path.
+            Autonomous reinforcement learning agents reason in software, but their consequences occur in the OS kernel. Traditional guardrails inspect prompts but cannot see process forks; traditional EDR monitors syscalls but lacks LLM intent context. Shield unifies both into a single, closed security boundary.
           </p>
         </div>
-        <MermaidDiagram chart={AGENT_FLOW} label="Shield agent request, guardrail, kernel execution, and evidence correlation flow" />
-        <div className="metadata-rail" aria-label="Shield security coverage"><span>Security coverage</span>{['Ingress', 'Retrieval', 'Model routing', 'Tool calls', 'Process execution', 'File writes', 'Network flows', 'Post-action checks'].map((item) => <b key={item}>{item}</b>)}</div>
-        <div className="agent-security-details">
-          <article><Workflow /><h3>Correlate intent with execution</h3><p>Shield carries stable identifiers from an agent request through policy evaluation, attempted action, kernel telemetry, containment, and evidence publication. Operators can reconstruct what was requested, what policy decided, what the host observed, and whether the outcome matched expectations.</p><ul><li>Agent, tenant, device, session, and invocation scope.</li><li>Policy version and deterministic decision reason.</li><li>Requested, attempted, completed, and verified outcomes.</li><li>Explicit gaps when telemetry or evidence is unavailable.</li></ul></article>
-          <article><Settings2 /><h3>Configure enforcement deliberately</h3><p>Teams select sensor cadence, evidence behavior, guardrail coverage, containment mode, and cooldowns through versioned tenant settings. Sensitive containment and guardrail changes enter an approval queue and can be rejected or rolled back with a complete audit trail.</p><ul><li>Audit-only, approval, or policy-authorized response modes.</li><li>Independent guardrails for retrieval, routing, output, tools, and post-action state.</li><li>Signed policy distribution with downgrade protection.</li><li>Responder capability stays locked until runtime proof passes.</li></ul></article>
+
+        <MermaidDiagram chart={DUAL_LAYER_FLOW} label="Shield dual-layer security boundary: Correlating semantic intent with kernel execution reality" />
+
+        <div className="dual-layer-pillars">
+          <article className="dual-pillar-card">
+            <div className="dual-pillar-header">
+              <span className="dual-pillar-badge">LAYER 1 · PRE-ACTION BOUNDARY</span>
+              <Workflow size={20} aria-hidden="true" />
+            </div>
+            <h3>Semantic Intent Gate</h3>
+            <p className="dual-pillar-desc">
+              Intercepts tool proposals, prompt ingress, and model outputs before execution begins. Deterministic OPA policies verify arguments, model parameters, and access privileges in sub-2ms.
+            </p>
+            <ul className="dual-pillar-list">
+              <li>
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span><b>Tool Argument Validation:</b> Enforces strict schemas on bash commands, file paths, and network URIs.</span>
+              </li>
+              <li>
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span><b>Context Taint Guard:</b> Intercepts adversarial prompt injections and untrusted context before model ingestion.</span>
+              </li>
+              <li>
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span><b>Fail-Closed Runtime Gate:</b> Rejects unauthorized intents at the agent wrapper before any OS syscall occurs.</span>
+              </li>
+            </ul>
+          </article>
+
+          <article className="dual-pillar-card">
+            <div className="dual-pillar-header">
+              <span className="dual-pillar-badge">LAYER 2 · POST-ACTION BOUNDARY</span>
+              <Terminal size={20} aria-hidden="true" />
+            </div>
+            <h3>Kernel Execution Enforcer</h3>
+            <p className="dual-pillar-desc">
+              Observes physical execution state at the Linux kernel boundary via eBPF probes and procfs. If an executing thread escapes software sandboxes, Shield enforces boundary reality on the host plant.
+            </p>
+            <ul className="dual-pillar-list">
+              <li>
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span><b>eBPF CO-RE Telemetry:</b> Captures process forks, file descriptor writes, and raw socket connections.</span>
+              </li>
+              <li>
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span><b>Reversible Host Containment:</b> Freezes cgroup v2 slices, sends SIGSTOP, and drops unauthorized egress via nftables.</span>
+              </li>
+              <li>
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span><b>Independent Plant Authority:</b> Operates with kernel capabilities (CAP_BPF, CAP_NET_ADMIN)—cannot be prompt-jailbroken.</span>
+              </li>
+            </ul>
+          </article>
         </div>
-        <div className="shield-capabilities">
-          <article><span>01</span><div><h3>Live event timeline</h3><p>Filter process, file, network, and agent events by severity and decision. Expand each record to inspect normalized context, policy rationale, evidence state, and correlation identifiers.</p></div></article>
-          <article><span>02</span><div><h3>Pre-action guardrails</h3><p>Evaluate ingress, retrieved context, model destinations, generated output, and tool requests before execution. Unavailable policy dependencies fail closed instead of silently allowing work.</p></div></article>
-          <article><span>03</span><div><h3>Kernel-level observation</h3><p>Use eBPF process, file-write, and TCP-connect sensors—or a split privileged helper—to observe real host activity independently of the agent framework.</p></div></article>
-          <article><span>04</span><div><h3>Bounded containment</h3><p>Start with reversible SIGSTOP. Promote cgroup freeze, explicit kill, or destination-scoped nftables blocking only after device-bound runtime evidence and operator approval.</p></div></article>
-          <article><span>05</span><div><h3>Post-action verification</h3><p>Compare the expected state transition with observed results. A mismatch becomes an enforcement anomaly rather than an unqualified success.</p></div></article>
-          <article><span>06</span><div><h3>Evidence and integrations</h3><p>Publish durable decision and outcome records, monitor exporter queues, and route normalized events into SIEM, webhooks, and incident-response systems.</p></div></article>
+
+        <div className="dual-layer-deck">
+          <div className="dual-deck-card">
+            <Fingerprint size={18} aria-hidden="true" />
+            <h4>Invocation Correlation</h4>
+            <p>Stable nonces cryptographically bind every eBPF syscall back to the specific agent session, prompt token, and tool call.</p>
+          </div>
+          <div className="dual-deck-card">
+            <FileCheck2 size={18} aria-hidden="true" />
+            <h4>Deterministic Policy Engine</h4>
+            <p>Unified OPA bundles evaluate both semantic tool schemas and kernel-level network/process rules without drift.</p>
+          </div>
+          <div className="dual-deck-card">
+            <LockKeyhole size={18} aria-hidden="true" />
+            <h4>Ed25519 Hash-Chained Logs</h4>
+            <p>Every intent proposal, policy verdict, and kernel containment event is signed locally into tamper-evident ledgers.</p>
+          </div>
+          <div className="dual-deck-card">
+            <Cpu size={18} aria-hidden="true" />
+            <h4>Closed-Loop Feedback</h4>
+            <p>Signed execution evidence publishes to the Integrity Oracle to update trust scores and eliminate reward hacking.</p>
+          </div>
         </div>
-        <p className="agent-security-boundary"><LockKeyhole size={14} /> Shield is the enforcement authority shown here. External intelligence can inform policy design, but it cannot bypass local policy, approval, or responder-readiness gates.</p>
       </section>
 
       {/* Contact Section mirroring Cortex #xc-contact */}
@@ -710,18 +782,14 @@ export function Landing({ next }) {
             <p>
               Deterministic Linux host defense, kernel telemetry observation, and fail-closed containment for autonomous agent fleets.
             </p>
-            <div className="footer-brand-meta">
-              <div className="footer-meta-line">Deterministic Hash Chains · RFC 8628 DIDs</div>
-            </div>
           </div>
 
           {/* Platform Navigation */}
           <div className="footer-links">
             <p className="footer-col-title">Platform</p>
-            <a href="#platform">Endpoint Capabilities</a>
-            <a href="#architecture">Hybrid Architecture</a>
-            <a href="#agent-security">Dual-Layer Protection</a>
-            <a href="#install">Quickstart Install</a>
+            <a href="#architecture">Architecture</a>
+            <a href="#agent-security">Agent Security</a>
+            <a href="#install">Quickstart</a>
             <button onClick={next} className="footer-console-btn">
               Operator Console <ArrowRight size={11} aria-hidden="true" />
             </button>
@@ -751,9 +819,6 @@ export function Landing({ next }) {
         <div className="footer-bottom">
           <div className="footer-bottom-copy">
             &copy; {new Date().getFullYear()} Xibalba Shield. All rights reserved.
-          </div>
-          <div className="footer-bottom-specs">
-            <span className="spec-tag">Local-First · Host-Authoritative · RFC 8628 DIDs</span>
           </div>
         </div>
       </footer>
