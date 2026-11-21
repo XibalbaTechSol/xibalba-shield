@@ -44,6 +44,24 @@ flowchart LR
     end
 ```
 
+## Repository Directory Structure
+
+The repository is structured according to the unified ecosystem standard:
+
+```text
+xibalba-shield/
+├── shield/              # Core Python defense engine (gate, policy, sensors, broker, api)
+├── device-app/          # Native host daemon, Rust device-core, packaging
+├── ui/                  # React/Vite operator console & public landing page
+├── policies/            # Open Policy Agent (OPA) Rego policy packs
+├── packs/               # Domain-specific detection and rule packs
+├── tests/               # Comprehensive test suites (unit, contract, e2e)
+├── scripts/             # Operational, daemon management, and verification scripts
+├── docs/                # Architecture specifications and compliance documentation
+├── packaging/           # Distribution artifacts (.deb, systemd units)
+└── tools/               # Developer utilities and diagnostic helpers
+```
+
 ## Shield Architecture & Capabilities
 
 ### 1. Hash-Bound Response Gateway & Action Ledger
