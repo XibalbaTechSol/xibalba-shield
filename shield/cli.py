@@ -98,6 +98,17 @@ def _status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _inventory(args: argparse.Namespace) -> int:
+    from .inventory import collect_inventory
+    import json
+    snapshot = collect_inventory(max_processes=args.max_processes, max_packages=args.max_packages)
+    if args.hash_only:
+        print(json.dumps({"schema": snapshot["schema"], "snapshot_hash": snapshot["snapshot_hash"]}, sort_keys=True))
+    else:
+        print(json.dumps(snapshot, indent=2, sort_keys=True))
+    return 0
+
+
 def _events(args: argparse.Namespace) -> int:
     log = EventLog(args.log_path)
     rows = log.recent(args.recent)
@@ -1225,6 +1236,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_status = sub.add_parser("status", help="show a summary of what Shield has observed")
     p_status.set_defaults(func=_status)
+
+    p_inventory = sub.add_parser("inventory", help="show bounded endpoint metadata and posture")
+    p_inventory.add_argument("--max-processes", type=int, default=256)
+    p_inventory.add_argument("--max-packages", type=int, default=512)
+    p_inventory.add_argument("--hash-only", action="store_true", help="print only the canonical snapshot hash")
+    p_inventory.set_defaults(func=_inventory)
 
     p_events = sub.add_parser("events", help="show recent policy decisions")
     p_events.add_argument("--recent", type=int, default=20)
