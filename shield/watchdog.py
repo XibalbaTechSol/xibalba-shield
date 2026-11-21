@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -222,4 +223,14 @@ class Watchdog:
             did_preflight_detail=self._did_preflight_status,
             responder_status=self._responder_status,
             settings_status=self._settings_status,
+            inventory_status=self._inventory_status(),
         )
+
+    @staticmethod
+    def _inventory_status() -> dict[str, object]:
+        try:
+            from .inventory import collect_inventory
+            return {"healthy": True, "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "snapshot": collect_inventory()}
+        except Exception as exc:  # noqa: BLE001 -- inventory is observational
+            return {"healthy": False, "error": str(exc)}
