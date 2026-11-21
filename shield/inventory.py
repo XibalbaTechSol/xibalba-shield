@@ -52,6 +52,9 @@ def collect_inventory(*, max_processes: int = 256, max_packages: int = 512) -> d
         "posture": _posture(),
         "processes": processes,
         "packages": packages,
+        "vulnerability": {"status": "unavailable", "advisory_source": None,
+                           "packages_in_scope": len(packages), "known_findings": None,
+                           "reason": "no trusted advisory database configured"},
         "limits": {"max_processes": max_processes, "max_packages": max_packages},
     }
     snapshot["snapshot_hash"] = hashlib.sha256(
@@ -91,4 +94,16 @@ def inventory_drift(previous: dict[str, Any] | None, current: dict[str, Any]) ->
         "previous_hash": previous_hash,
         "current_hash": current_hash,
         "comparable": bool(previous_hash and current_hash),
+    }
+
+
+def vulnerability_readiness(inventory: dict[str, Any], *, advisory_source: str | None = None) -> dict[str, Any]:
+    """Return honest vulnerability posture; absence of an advisory source is not a clean result."""
+    packages = inventory.get("packages", [])
+    return {
+        "status": "unavailable" if not advisory_source else "source_configured",
+        "advisory_source": advisory_source,
+        "packages_in_scope": len(packages) if isinstance(packages, list) else 0,
+        "known_findings": None,
+        "reason": "no trusted advisory database configured" if not advisory_source else "advisory matching pending",
     }
