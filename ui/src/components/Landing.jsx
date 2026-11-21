@@ -34,16 +34,28 @@ import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
 
 const CONTROL_LOOP_FLOW = `flowchart LR
-  SP["Signed Setpoint Pack<br/>constraint vector C"] --> SUM(("Σ"))
-  SUM --> HK["Pre/Post Hook<br/>evaluates C on state"]
-  HK -->|admit or revert| AG["Autonomous Workload<br/>the physical plant"]
-  AG -->|"actual execution"| SH["Shield Host Defense<br/>sensor & enforcer"]
-  SH -->|"evidence spans"| OR["Integrity Oracle<br/>verify & epoch anchor"]
-  OR -->|"state estimate"| SUM
-  OR -->|"verified proof"| AIS["AIS Engine<br/>bounded adaptive gain"]
-  AIS -.->|"adapt bound"| SP
-  AG -->|"settlement"| CH["Settlement Chain<br/>anchored state root"]
-  SH -.->|"anchor root"| CH`
+  subgraph PROTOCOL["Integrity Protocol (Closed-Loop Governance)"]
+    direction TB
+    SP["Signed Setpoint Pack<br/>boundary vector C"] --> HK["Boundary Gate Hook<br/>evaluates C on state"]
+    OR["Integrity Oracle<br/>verify & epoch anchor"] --> AIS["AIS Engine<br/>adaptive gain (K, L)"]
+    AIS -.->|"adapt bounds"| SP
+  end
+
+  subgraph WORKLOAD["Physical Host (Plant)"]
+    direction TB
+    AG["Autonomous Agent<br/>workload plant (x)"]
+  end
+
+  subgraph SHIELD["Xibalba Shield (Host Sensor & Enforcer)"]
+    direction TB
+    SEN["Kernel Sensor (y = Cx + v)<br/>procfs · eBPF · sockets"] --> GATE{"Local OPA Engine<br/>fail-closed triage"}
+    GATE -->|breach| CONT["Physical Actuator (u)<br/>SIGSTOP · nftables"]
+    GATE -->|admit| LOG["Signed Evidence Log<br/>Ed25519 hash chain"]
+  end
+
+  HK -->|admit or revert| AG
+  AG -->|"actual execution"| SEN
+  LOG -->|"signed evidence spans"| OR`
 
 const HYBRID_A2A_FLOW = `flowchart LR
   subgraph EDGE["Edge Host · shield.local (Fast Classifier)"]
@@ -85,15 +97,30 @@ const RESPONSE_FLOW = `flowchart LR
   F --> J["OS Freeze<br/>cgroups & nftables"]`
 
 const AGENT_FLOW = `flowchart LR
-  A["Agent Intent<br/>tool call or model action"] --> B["Cryptographic Boundary<br/>mutual DID verification"]
-  B --> C["Deterministic Policy<br/>geometric traversal checks"]
-  C --> D["Response Gateway<br/>execution intent triage"]
-  D --> E["Kernel Execution<br/>procfs · eBPF telemetry"]
-  E --> F["State Verification<br/>differential audit check"]
-  F --> G["Evidence Chain<br/>hash-linked receipt log"]
-  H["Signed Tenant Policy<br/>immutable OPA bundle"] -.->|"governs"| B
-  H -.->|"governs"| D
-  I["Sensors & Connectors<br/>kernel telemetry feeds"] -.->|"observes"| E`
+  subgraph EDGE["Layer 1: Host Enforcement · shield.local (Fast Classifier)"]
+    direction TB
+    A["Agent Workload<br/>tool call or model intent"] --> B["Pre-Action Gate<br/>deterministic OPA check"]
+    B --> C["Kernel Execution<br/>procfs · eBPF sensors"]
+    C --> D["Host Containment<br/>cgroup freeze · SIGSTOP"]
+  end
+
+  subgraph MESH["Cryptographic Mesh Boundary"]
+    direction TB
+    E["Secure A2A Bridge<br/>RFC 8628 DID auth"]
+    F["Canonical Receipt<br/>hash-chained evidence log"]
+    E --- F
+  end
+
+  subgraph CLOUD["Layer 2: Cloud Intelligence · shield.cloud (Production LLM)"]
+    direction TB
+    G["Telemetry Ingestion<br/>socket & exec span triage"] --> H["Deep LLM Reasoning<br/>Hermes-3 70B threat model"]
+    H --> I["Policy Distribution<br/>signed OPA rule synthesis"]
+  end
+
+  B -->|"flagged anomaly"| E
+  E -->|"verified envelope"| G
+  I -.->|"hardened policy push"| B
+  C -.->|"telemetry feed"| F`
 
 const INSTALL_OPTIONS = [
   {
@@ -183,7 +210,7 @@ export function Landing({ next }) {
         <div className="hero-content">
           <div className="hero-badge">
             <span className="hero-badge-dot" aria-hidden="true" />
-            <span>INDEPENDENT LINUX ENDPOINT DEFENSE &amp; RESPONSE GOVERNANCE</span>
+            <span>SOVEREIGN LINUX HOST DEFENSE · INTEGRITY CLOSED-LOOP ENFORCER</span>
           </div>
 
           <div className="hero-brand-wrap">
@@ -202,7 +229,7 @@ export function Landing({ next }) {
           </h1>
 
           <p className="lede">
-            A hybrid endpoint defense architecture combining sub-millisecond local classification on the host with deep production LLM reasoning in the cloud—communicating securely over the cryptographic A2A protocol. Shield enforces fail-closed containment at the kernel boundary while correlating fleet-wide threats across autonomous agent workloads.
+            Xibalba Shield is a standalone, host-authoritative EDR for Linux servers and autonomous agent fleets—delivering sub-2ms deterministic containment, kernel telemetry observation, and cryptographic authorization completely offline without external dependencies. When integrated with the Integrity Protocol, Shield becomes the physical plant sensor and fail-closed actuator that feeds verified evidence into the Oracle, mathematically closing the cybernetic control loop.
           </p>
 
           <div className="hero-actions">
@@ -221,24 +248,36 @@ export function Landing({ next }) {
             <div className="hero-metric-card">
               <div className="hero-metric-header">
                 <span className="hero-metric-status" aria-hidden="true" />
-                <ShieldCheck size={18} aria-hidden="true" />
-                <h3>Host-Authoritative</h3>
+                <Shield size={18} aria-hidden="true" />
+                <h3>100% Standalone Ready</h3>
               </div>
-              <p>Reversible SIGSTOP, cgroup freeze, and nftables destination drop executed directly on the physical host.</p>
+              <p>Operates completely offline with native procfs/eBPF sensors, local deterministic OPA rules, and Ed25519 hash-chained logs. Zero external dependencies required.</p>
               <div className="hero-metric-footer">
-                <code>FAIL-CLOSED · LOCAL ENFORCER</code>
+                <code>LOCAL-FIRST · SOVEREIGN EDR</code>
               </div>
             </div>
 
             <div className="hero-metric-card">
               <div className="hero-metric-header">
                 <span className="hero-metric-status" aria-hidden="true" />
-                <Cpu size={18} aria-hidden="true" />
-                <h3>Local Fast Classifier</h3>
+                <ShieldCheck size={18} aria-hidden="true" />
+                <h3>Host-Authoritative Enforcer</h3>
               </div>
-              <p>Sub-millisecond classification and OPA evaluation on the edge daemon for wire-speed containment without cloud latency.</p>
+              <p>Reversible SIGSTOP, cgroup v2 freeze, and nftables destination drops executed directly at the Linux kernel boundary without cloud roundtrips.</p>
               <div className="hero-metric-footer">
-                <code>&lt; 2MS LATENCY · SHIELD.LOCAL</code>
+                <code>FAIL-CLOSED · LOCAL CONTAINMENT</code>
+              </div>
+            </div>
+
+            <div className="hero-metric-card">
+              <div className="hero-metric-header">
+                <span className="hero-metric-status" aria-hidden="true" />
+                <Radar size={18} aria-hidden="true" />
+                <h3>Integrity Closed Loop</h3>
+              </div>
+              <p>Feeds ground-truth socket and process execution evidence spans to the Integrity Oracle, closing the control loop and preventing model reward hacking.</p>
+              <div className="hero-metric-footer">
+                <code>y = C x + v · SENSOR FEEDBACK</code>
               </div>
             </div>
 
@@ -246,23 +285,11 @@ export function Landing({ next }) {
               <div className="hero-metric-header">
                 <span className="hero-metric-status" aria-hidden="true" />
                 <Workflow size={18} aria-hidden="true" />
-                <h3>Secure A2A Protocol</h3>
+                <h3>Hybrid A2A Intelligence</h3>
               </div>
-              <p>Flagged detections escalate to cloud fleet models over mutual Ed25519 DIDs and canonical RFC 8785 envelopes.</p>
+              <p>Local sub-2ms fast classifier escalates flagged anomalies to cloud reasoning models (Hermes-3 70B) over mutual Ed25519 DIDs and canonical envelopes.</p>
               <div className="hero-metric-footer">
-                <code>RFC 8785 · ERC-8004 PASSPORTS</code>
-              </div>
-            </div>
-
-            <div className="hero-metric-card">
-              <div className="hero-metric-header">
-                <span className="hero-metric-status" aria-hidden="true" />
-                <Sparkles size={18} aria-hidden="true" />
-                <h3>Cloud LLM Reasoning</h3>
-              </div>
-              <p>Production frontier LLMs perform deep chain-of-thought analysis and fleet correlation over flagged edge detections.</p>
-              <div className="hero-metric-footer">
-                <code>HERMES-3 70B · SHIELD.CLOUD</code>
+                <code>RFC 8785 · SHIELD.LOCAL &amp; CLOUD</code>
               </div>
             </div>
           </div>
@@ -315,32 +342,41 @@ export function Landing({ next }) {
       <section className="landing-loop" id="loop" aria-labelledby="loop-heading">
         <div className="landing-section-copy">
           <p className="eyebrow"><span aria-hidden="true" /> CONTROL THEORY &amp; CLOSED-LOOP INTEGRITY</p>
-          <h2 id="loop-heading">Where Shield works in the <em>control loop.</em></h2>
+          <h2 id="loop-heading">Where Shield works in the control loop—<em>and why it stands alone.</em></h2>
           <p>
-            A feedback controller cannot stabilize a system without accurate plant measurements. Prompt guardrails fail because reinforcement learning agents treat them as thermodynamic friction and optimize around them. Shield is the physical plant sensor and fail-closed enforcer: observing what actually happened at the OS and network layer, executing containment when bounds revert, and publishing signed evidence spans to close the control loop.
+            In control theory, a feedback controller cannot stabilize a dynamic plant without accurate, independent measurements. In autonomous AI systems, prompt guardrails fail because reinforcement learning agents treat prompt text as thermodynamic friction and optimize around it—resulting in reward hacking and boundary evasion.
+          </p>
+          <p>
+            Shield bridges sovereign host security and protocol governance. <b>Operating independently</b>, Shield is an offline, host-authoritative Linux EDR that halts rogue processes with sub-2ms local OPA rules. <b>Operating within the Integrity Protocol</b>, Shield acts as the indispensable physical plant sensor (<code>y = C x + v</code>) and runtime actuator (<code>u</code>): measuring ground-truth kernel telemetry, executing physical containment when boundary constraints revert, and publishing signed evidence spans to the Oracle to mathematically close the control loop.
           </p>
         </div>
-        <MermaidDiagram chart={CONTROL_LOOP_FLOW} label="Closed control loop: Signed pack, Hook, Agent plant, Shield sensor, Oracle, AIS, and Settlement chain" />
+        <MermaidDiagram chart={CONTROL_LOOP_FLOW} label="Closed control loop: Signed pack, Boundary Hook, Agent plant, Shield sensor & enforcer, Oracle, AIS, and Settlement chain" />
         <p className="diagram-caption">
-          <LockKeyhole size={14} /> Shield is the physical plant sensor and runtime enforcer (y = C x + v). It measures ground truth on the host and executes fail-closed physical containment if the hook reverts.
+          <LockKeyhole size={14} /> Shield is the physical plant sensor and runtime enforcer (y = C x + v). It operates standalone on the host and closes the feedback loop when connected to the Integrity Oracle.
         </p>
         <div className="loop-callout-grid">
           <article className="loop-callout-card">
-            <h3><Radar size={16} /> 1. The Plant Sensor (Observation)</h3>
+            <h3><Shield size={16} /> 1. Sovereign Endpoint Defense</h3>
             <p>
-              Shield sits alongside the agent workload, monitoring raw Linux telemetry: /proc/net/tcp socket tables, process exec events, file writes, and network flows. It captures ground truth regardless of what the LLM claims it did.
+              Shield operates 100% offline and standalone. It evaluates Linux kernel events, socket connections, and process spawns in microseconds, executes local containment, and writes tamper-evident Ed25519 hash-chained logs without requiring cloud infrastructure.
             </p>
           </article>
           <article className="loop-callout-card">
-            <h3><Sliders size={16} /> 2. Fail-Closed Enforcer (Containment)</h3>
+            <h3><Radar size={16} /> 2. Physical Plant Sensor (y = C x + v)</h3>
             <p>
-              When a policy gate or boundary hook evaluates constraint vector C and reverts, Shield enforces physical containment on the host: dropping egress via nftables, issuing SIGSTOP, freezing cgroups, or terminating rogue processes.
+              In an Integrity-governed fleet, Shield sits alongside the agent workload, observing ground truth via /proc/net/tcp and eBPF sensors. It captures physical execution state independently of what the agent or LLM claims it did.
             </p>
           </article>
           <article className="loop-callout-card">
-            <h3><ShieldCheck size={16} /> 3. Evidence Spans to Oracle (Feedback)</h3>
+            <h3><Sliders size={16} /> 3. Fail-Closed Actuator (Physical Containment)</h3>
             <p>
-              Shield emits signed, tamper-evident evidence spans to the Oracle. The Oracle verifies state estimates, updates the Autonomous Integrity Score (AIS), and anchors Merkle roots to the settlement chain—preventing reward hacking.
+              When an Integrity boundary hook evaluates constraint vector C and reverts, software guardrails fail to stop executing threads. Shield enforces physical reality: dropping network egress via nftables, freezing cgroups, and halting rogue processes.
+            </p>
+          </article>
+          <article className="loop-callout-card">
+            <h3><ShieldCheck size={16} /> 4. Evidence Feedback to Oracle</h3>
+            <p>
+              Shield emits cryptographically signed evidence spans to the Integrity Oracle. The Oracle updates the Autonomous Integrity Score (AIS), adjusts adaptive gains, and anchors Merkle roots to the settlement chain—closing the control loop.
             </p>
           </article>
         </div>
@@ -351,7 +387,7 @@ export function Landing({ next }) {
           <p className="eyebrow"><span aria-hidden="true" /> DEPLOYMENT &amp; QUICKSTART</p>
           <h2 id="install-heading">Install Shield on any <em>Linux host or cluster.</em></h2>
           <p>
-            Shield operates as a self-contained endpoint defense agent. Whether deployed as a hardened systemd daemon on bare-metal servers, containerized on Kubernetes edge nodes, or run via CLI on developer workstations, Shield brings kernel-level visibility and fail-closed containment to your infrastructure.
+            Shield operates as an independent, self-contained endpoint defense agent. Whether deployed as a hardened systemd daemon on bare-metal servers, containerized on Kubernetes edge nodes, or run via CLI on developer workstations, Shield brings kernel-level visibility and fail-closed containment to your infrastructure—operating standalone out of the box or feeding ground-truth evidence into the Integrity Protocol.
           </p>
         </div>
 
@@ -428,8 +464,8 @@ export function Landing({ next }) {
             <div className="install-feature-item">
               <ShieldCheck size={16} aria-hidden="true" />
               <div>
-                <b>Air-Gap &amp; Standalone Ready</b>
-                <span>Full OPA policy execution, sensor loops, and local containment function without external internet.</span>
+                <b>100% Standalone &amp; Protocol-Ready</b>
+                <span>Full OPA policy execution and local containment operate offline, while evidence spans cleanly feed the Integrity Oracle.</span>
               </div>
             </div>
           </div>
@@ -572,23 +608,6 @@ export function Landing({ next }) {
                   <span className="contact-channel-value">1 (262) 864-1589</span>
                 </div>
               </a>
-
-              <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" className="contact-channel-card">
-                <span className="contact-channel-icon" aria-hidden="true">
-                  <Globe size={18} />
-                </span>
-                <div className="contact-channel-meta">
-                  <span className="contact-channel-label">Parent Company</span>
-                  <span className="contact-channel-value">
-                    xibalbasolutions.com <ExternalLink size={12} aria-hidden="true" />
-                  </span>
-                </div>
-              </a>
-            </div>
-
-            <div className="contact-location">
-              <MapPin size={14} aria-hidden="true" />
-              <span>Xibalba Solutions LLC · Operations based in Wisconsin, USA</span>
             </div>
           </div>
 
@@ -693,16 +712,6 @@ export function Landing({ next }) {
             </p>
             <div className="footer-brand-meta">
               <div className="footer-meta-line">Deterministic Hash Chains · RFC 8628 DIDs</div>
-              <a
-                href="https://xibalbasolutions.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="footer-brand-parent"
-              >
-                <Globe size={12} aria-hidden="true" />
-                <span>Commercial pillar of Xibalba Solutions LLC</span>
-                <ExternalLink size={10} aria-hidden="true" />
-              </a>
             </div>
           </div>
 
@@ -711,32 +720,11 @@ export function Landing({ next }) {
             <p className="footer-col-title">Platform</p>
             <a href="#platform">Endpoint Capabilities</a>
             <a href="#architecture">Hybrid Architecture</a>
-            <a href="#responders">Proof Responders</a>
-            <a href="#agent-security">Dual-Layer Security</a>
-            <a href="#install">Quick Install</a>
+            <a href="#agent-security">Dual-Layer Protection</a>
+            <a href="#install">Quickstart Install</a>
             <button onClick={next} className="footer-console-btn">
               Operator Console <ArrowRight size={11} aria-hidden="true" />
             </button>
-          </div>
-
-          {/* Ecosystem Links */}
-          <div className="footer-links">
-            <p className="footer-col-title">Xibalba Ecosystem</p>
-            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">
-              Xibalba Solutions LLC <ExternalLink size={10} aria-hidden="true" />
-            </a>
-            <a href="https://cortex-managed-pilot.onrender.com" target="_blank" rel="noopener noreferrer">
-              Super-Cortex (AIS Memory) <ExternalLink size={10} aria-hidden="true" />
-            </a>
-            <a href="https://github.com/xibalbatechsol/integrity-core" target="_blank" rel="noopener noreferrer">
-              Integrity Protocol <ExternalLink size={10} aria-hidden="true" />
-            </a>
-            <a href="https://github.com/xibalbatechsol/xibalba-shield" target="_blank" rel="noopener noreferrer">
-              Xibalba Shield (EDR) <ExternalLink size={10} aria-hidden="true" />
-            </a>
-            <a href="https://github.com/xibalbatechsol" target="_blank" rel="noopener noreferrer">
-              GitHub Organization <ExternalLink size={10} aria-hidden="true" />
-            </a>
           </div>
 
           {/* Direct Contact Column */}
@@ -762,7 +750,7 @@ export function Landing({ next }) {
         {/* Bottom Bar */}
         <div className="footer-bottom">
           <div className="footer-bottom-copy">
-            &copy; {new Date().getFullYear()} <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">Xibalba Solutions LLC</a>. All rights reserved. Registered in Wisconsin, USA.
+            &copy; {new Date().getFullYear()} Xibalba Shield. All rights reserved.
           </div>
           <div className="footer-bottom-specs">
             <span className="spec-tag">Local-First · Host-Authoritative · RFC 8628 DIDs</span>
