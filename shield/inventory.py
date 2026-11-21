@@ -49,7 +49,7 @@ def collect_inventory(*, max_processes: int = 256, max_packages: int = 512) -> d
         "schema": "xibalba.shield.inventory.v1",
         "os": {"system": platform.system(), "release": platform.release()[:128], "machine": platform.machine()[:64]},
         "hardware": {"cpu_count": os.cpu_count() or 0, "memory_bytes": psutil.virtual_memory().total},
-        "posture": {"secure_boot": "unknown", "disk_encryption": "unknown", "tpm": "unknown"},
+        "posture": _posture(),
         "processes": processes,
         "packages": packages,
         "limits": {"max_processes": max_processes, "max_packages": max_packages},
@@ -58,6 +58,28 @@ def collect_inventory(*, max_processes: int = 256, max_packages: int = 512) -> d
         json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return snapshot
+
+
+def _posture() -> dict[str, str]:
+    """Read only coarse host posture; unavailable evidence remains explicitly unknown."""
+    posture = {"secure_boot": "unknown", "disk_encryption": "unknown", "tpm": "unknown"}
+    if platform.system() != "Linux":
+        return posture
+    secure_boot = "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+    if os.path.exists(secure_boot):
+        try:
+            data = open(secure_boot, "rb").read()
+            posture["secure_boot"] = "enabled" if data[-1:] == b"\x01" else "disabled"
+        except OSError:
+            pass
+    try:
+        result = subprocess.run(["lsblk", "-o", "TYPE", "-n"], capture_output=True, text=True, timeout=3, check=False)
+        if result.returncode == 0:
+            posture["disk_encryption"] = "enabled" if "crypt" in result.stdout.split() else "disabled"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    posture["tpm"] = "enabled" if os.path.exists("/dev/tpm0") else "disabled"
+    return posture
 
 
 def inventory_drift(previous: dict[str, Any] | None, current: dict[str, Any]) -> dict[str, Any]:
