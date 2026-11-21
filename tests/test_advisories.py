@@ -20,3 +20,12 @@ def test_stale_source_is_rejected(tmp_path):
 def test_matching_is_bounded():
     source = {"source_hash":"h", "updated_at":1, "advisories":[{"id":str(i),"package":"x","version":"1"} for i in range(4)]}
     assert len(match_advisories({"packages":[{"name":"x","version":"1"}]}, source, max_findings=2)["known_findings"]) == 2
+
+
+def test_findings_are_prioritized_and_preserve_fix_guidance():
+    source = {"source_hash":"h", "updated_at":1, "advisories":[
+        {"id":"low","package":"x","version":"1","severity":"low"},
+        {"id":"critical","package":"x","version":"1","severity":"critical","fixed_version":"2"},
+    ]}
+    findings = match_advisories({"packages":[{"name":"x","version":"1"}]}, source)["known_findings"]
+    assert findings[0]["id"] == "critical" and findings[0]["fixed_version"] == "2"

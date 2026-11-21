@@ -29,8 +29,11 @@ def match_advisories(inventory: dict[str, Any], source: dict[str, Any], *, max_f
         if not isinstance(advisory, dict):
             continue
         if (advisory.get("package"), advisory.get("version")) in packages:
-            findings.append({k: advisory.get(k) for k in ("id", "package", "version", "severity", "summary")})
+            finding = {k: advisory.get(k) for k in ("id", "package", "version", "severity", "summary", "fixed_version")}
+            finding["priority"] = {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(str(finding.get("severity")).lower(), 0)
+            findings.append(finding)
             if len(findings) >= max_findings:
                 break
+    findings.sort(key=lambda item: item["priority"], reverse=True)
     return {"status": "matched", "source_hash": source.get("source_hash"),
             "updated_at": source.get("updated_at"), "known_findings": findings}
