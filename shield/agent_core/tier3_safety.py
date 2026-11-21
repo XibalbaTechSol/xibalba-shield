@@ -69,3 +69,11 @@ def process_identity_matches(expected: ProcessInfo, actual: ProcessInfo) -> bool
     if expected.cgroup_id and actual.cgroup_id != expected.cgroup_id:
         return False
     return bool(expected.start_time or expected.cgroup_id)
+
+
+def verified_resume(broker: object, expected: ProcessInfo, read_identity: Callable[[int], ProcessInfo]):
+    """Resume only when a fresh PID identity matches; otherwise fail closed."""
+    actual = read_identity(expected.pid)
+    if not process_identity_matches(expected, actual):
+        raise RuntimeError("refusing resume: PID identity changed or is unverifiable")
+    return broker.resume(expected.pid)

@@ -1,4 +1,4 @@
-from shield.agent_core.tier3_safety import BoundedAdjudicationStore, Tier3DispatchGate, process_identity_matches
+from shield.agent_core.tier3_safety import BoundedAdjudicationStore, Tier3DispatchGate, process_identity_matches, verified_resume
 from shield.schemas.events import Decision, EscalationResponse, ProcessInfo
 
 
@@ -34,3 +34,15 @@ def test_pid_identity_requires_start_or_cgroup_and_matches():
     assert process_identity_matches(expected, ProcessInfo(pid=42, name="other", start_time=100, cgroup_id=7))
     assert not process_identity_matches(expected, ProcessInfo(pid=42, name="x", start_time=101, cgroup_id=7))
     assert not process_identity_matches(ProcessInfo(pid=42, name="x"), ProcessInfo(pid=42, name="x"))
+
+
+def test_verified_resume_refuses_pid_reuse():
+    class Broker:
+        def resume(self, pid): raise AssertionError("must not resume")
+    expected = ProcessInfo(pid=42, name="x", start_time=100)
+    try:
+        verified_resume(Broker(), expected, lambda pid: ProcessInfo(pid=pid, name="new", start_time=101))
+    except RuntimeError as exc:
+        assert "identity" in str(exc)
+    else:
+        raise AssertionError("PID reuse was not rejected")
