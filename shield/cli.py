@@ -635,6 +635,25 @@ def _run(args: argparse.Namespace) -> int:
         print(f"shield run: {exc}", file=sys.stderr)
         return 1
 
+    tier3_backend = None
+    tier3_consumer = None
+    if getattr(args, "tier3_backend", "none") == "http":
+        try:
+            from .agent_core.tier3_consumer import Tier3Consumer
+            from .agent_core.tier3_http_backend import HttpTier3Backend
+            tier3_backend = HttpTier3Backend(args.tier3_endpoint, timeout_seconds=args.tier3_timeout_seconds,
+                                             token=args.tier3_token)
+            tier3_consumer = Tier3Consumer(
+                args.tier3_store, mode=args.tier3_mode, action_broker=action_broker,
+                max_actions_per_window=args.tier3_max_actions,
+                window_seconds=args.tier3_window_seconds,
+                disabled_flag_path=args.tier3_disable_file,
+                pid_identity=None,
+                receipt_dir=args.tier3_receipt_dir,
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"shield run: Tier 3 disabled; invalid configuration: {exc}", file=sys.stderr)
+
     from .agent_core.cortex_memory import CortexMemoryProvider
     # Cortex publication is downstream of enforcement: if its outbox cannot be opened
     # (permissions, read-only path, disk), run without it rather than crash-loop the
@@ -750,6 +769,8 @@ def _run(args: argparse.Namespace) -> int:
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
+                         tier3_backend=tier3_backend,
+                         tier3_sink=tier3_consumer.apply if tier3_consumer else None,
                          # local-run builds its own Namespace without this flag; default = enforce.
                          enforcement_mode=getattr(args, "enforcement_mode", "enforce"),
                          decision_sink=evidence_publisher.publish_decision,
@@ -1046,6 +1067,7 @@ def _local_run(args: argparse.Namespace) -> int:
             args.no_containment = True
             args.log_integrity_key = None
             args.slm_backend = "none"
+            args.tier3_backend = "none"
             args.cortex_url = None
             args.cortex_token = None
             args.watchdog_interval = 15.0
@@ -1338,6 +1360,16 @@ def main(argv: list[str] | None = None) -> int:
                             "(default, unchanged behavior), 'simulated' (deterministic, synthetic "
                             "pattern match -- no model required), 'local' (real Qwen2.5-0.5B "
                             "inference, requires llama-cpp-python + slm_training/models/)")
+    p_run.add_argument("--tier3-backend", choices=("none", "http"), default="none")
+    p_run.add_argument("--tier3-endpoint", default="")
+    p_run.add_argument("--tier3-token", default="")
+    p_run.add_argument("--tier3-timeout-seconds", type=float, default=20.0)
+    p_run.add_argument("--tier3-mode", choices=("shadow", "enforce"), default="shadow")
+    p_run.add_argument("--tier3-max-actions", type=int, default=10)
+    p_run.add_argument("--tier3-window-seconds", type=float, default=60.0)
+    p_run.add_argument("--tier3-disable-file", type=Path, default=None)
+    p_run.add_argument("--tier3-store", type=Path, default=Path("~/.xibalba-shield/tier3.db").expanduser())
+    p_run.add_argument("--tier3-receipt-dir", type=Path, default=None)
     p_run.add_argument("--cortex-url", default=None, help="optional redacted Cortex memory endpoint; also accepts XIBALBA_CORTEX_URL")
     p_run.add_argument("--cortex-token", default=None, help="optional Cortex memory token; also accepts XIBALBA_CORTEX_TOKEN")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,
