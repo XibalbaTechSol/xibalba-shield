@@ -3702,7 +3702,13 @@ def default_ui_dir() -> Path | None:
         return candidate.resolve() if (candidate / "index.html").is_file() else None
     repo_root = Path(__file__).resolve().parent.parent.parent
     candidate = repo_root / "ui" / "dist"
-    return candidate.resolve() if (candidate / "index.html").is_file() else None
+    if (candidate / "index.html").is_file():
+        return candidate.resolve()
+    if "site-packages" in str(Path(__file__).resolve()):
+        dev_candidate = Path.home() / "Projects" / "xibalba-shield" / "ui" / "dist"
+        if (dev_candidate / "index.html").is_file():
+            return dev_candidate.resolve()
+    return None
 
 
 def run_server(
@@ -3874,6 +3880,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _console_html() -> str:
+    """Minimal dark-mode fallback console when ui/dist is not present."""
     return """<!doctype html>
 <html lang="en">
 <head>
@@ -3881,458 +3888,73 @@ def _console_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Xibalba Shield</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #f6f7f9; color: #20242a; }
-    header { background: #ffffff; border-bottom: 1px solid #d8dee6; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    h1 { font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 0; }
-    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
-    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    input, button { height: 36px; border: 1px solid #b8c0cc; border-radius: 6px; padding: 0 10px; font: inherit; background: #fff; }
-    button { cursor: pointer; font-weight: 600; background: #263238; color: #fff; border-color: #263238; }
-    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
-    .panel { background: #fff; border: 1px solid #d8dee6; border-radius: 8px; padding: 14px; }
-    .metric { font-size: 28px; font-weight: 700; margin-top: 6px; }
-    .label { color: #5d6875; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d8dee6; }
-    th, td { padding: 10px; border-bottom: 1px solid #e7ebf0; text-align: left; font-size: 14px; vertical-align: top; }
-    th { color: #485361; background: #f8fafc; font-size: 12px; text-transform: uppercase; }
-    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .graph-shell { background: #fff; border: 1px solid #d8dee6; border-radius: 8px; margin: 18px 0; overflow: hidden; }
-    .graph-header { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #e7ebf0; align-items: center; flex-wrap: wrap; }
-    .graph-header h2 { margin: 0; }
-    .graph-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .graph-controls select, .graph-controls button { height: 32px; border: 1px solid #b8c0cc; border-radius: 6px; padding: 0 8px; font: inherit; }
-    .graph-controls button { width: 36px; background: #263238; color: #fff; border-color: #263238; }
-    .graph-controls label { color: #5d6875; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-    .graph-stage { position: relative; min-height: 420px; }
-    canvas { display: block; width: 100%; height: 420px; }
-    .key { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 14px; border-top: 1px solid #e7ebf0; background: #f8fafc; }
-    .key h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; color: #485361; }
-    .key-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; color: #38424e; }
-    .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.14); flex: 0 0 auto; }
-    .line-swatch { width: 24px; height: 0; border-top: 3px solid #6b7280; display: inline-block; flex: 0 0 auto; }
-    code { white-space: pre-wrap; overflow-wrap: anywhere; }
-    .pill { display: inline-block; border-radius: 999px; padding: 3px 8px; background: #e9eef3; font-size: 12px; }
-    .deny, .contain, .escalate { background: #ffe8e2; color: #82240f; }
-    .allow, .log_only { background: #e6f4ea; color: #1f6b38; }
-    .health-ok { color: #1f6b38; }
-    .health-warn { color: #b45309; }
-    .health-bad { color: #82240f; }
-    .health-unknown { color: #5d6875; }
-    .health-cell { font-size: 12px; line-height: 1.5; }
-    @media (max-width: 820px) { .grid, .split, .key { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; background: #080c14; color: #f1f5f9; padding: 24px; font-size: 14px; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 20px; font-weight: 700; color: #38bdf8; }
+    .badge { font-size: 11px; padding: 4px 8px; border-radius: 4px; background: #1e293b; color: #94a3b8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; }
+    .card h2 { margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+    pre { background: #060911; border: 1px solid #1e293b; border-radius: 4px; padding: 12px; font-family: monospace; font-size: 12px; overflow-x: auto; color: #cbd5e1; }
+    a { color: #38bdf8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <header>
     <h1>Xibalba Shield</h1>
-    <div class="toolbar">
-      <input id="tenant" value="demo-tenant" aria-label="tenant id">
-      <input id="token" value="" placeholder="admin token" aria-label="admin token">
-      <button onclick="loadSummary()">Refresh</button>
-      <button onclick="seedDemo()">Seed Demo</button>
-    </div>
+    <span class="badge">DAEMON ACTIVE</span>
   </header>
-  <main>
-    <section class="grid">
-      <div class="panel"><div class="label">Devices</div><div class="metric" id="deviceCount">0</div></div>
-      <div class="panel"><div class="label">Allows</div><div class="metric" id="allowCount">0</div></div>
-      <div class="panel"><div class="label">Denies</div><div class="metric" id="denyCount">0</div></div>
-      <div class="panel"><div class="label">Escalations</div><div class="metric" id="escalateCount">0</div></div>
-    </section>
-    <section class="graph-shell" aria-label="3D Shield graph">
-      <div class="graph-header">
-        <h2>3D Evidence Graph</h2>
-        <div class="graph-controls">
-          <label for="graphBackground">Background</label>
-          <select id="graphBackground" onchange="setGraphBackground(this.value)">
-            <option value="light">Light grid</option>
-            <option value="dark">Dark grid</option>
-            <option value="plain">Plain</option>
-            <option value="blueprint">Blueprint</option>
-          </select>
-          <label for="edgeType">Connection</label>
-          <select id="edgeType" onchange="setEdgeType(this.value)">
-            <option value="all">All</option>
-            <option value="enrollment">Enrollment</option>
-            <option value="policy">Policy</option>
-            <option value="decision">Decision</option>
-            <option value="export">Export</option>
-            <option value="integration">Integration</option>
-            <option value="metrics">Metrics</option>
-          </select>
-          <button type="button" title="Fit graph" onclick="fitGraph()">Fit</button>
-          <button type="button" title="Zoom in" onclick="zoomGraph(1.18)">+</button>
-          <button type="button" title="Zoom out" onclick="zoomGraph(0.84)">-</button>
-          <button type="button" title="Move left" onclick="panGraph(-32, 0)">L</button>
-          <button type="button" title="Move right" onclick="panGraph(32, 0)">R</button>
-        </div>
-      </div>
-      <div class="graph-stage">
-        <canvas id="evidenceGraph" width="1100" height="420"></canvas>
-      </div>
-      <div class="key">
-        <div>
-          <h3>Nodes</h3>
-          <div class="key-row"><span class="swatch" style="background:#334155"></span>Tenant root and control plane scope.</div>
-          <div class="key-row"><span class="swatch" style="background:#2563eb"></span>Device enrolled with Shield backend.</div>
-          <div class="key-row"><span class="swatch" style="background:#7c3aed"></span>Policy bundle and trusted hash boundary.</div>
-          <div class="key-row"><span class="swatch" style="background:#dc2626"></span>Deny, escalate, contain, or export-gap decision.</div>
-          <div class="key-row"><span class="swatch" style="background:#16a34a"></span>Allowed/log-only decision or healthy export path.</div>
-        </div>
-        <div>
-          <h3>Connections</h3>
-          <div class="key-row"><span class="line-swatch" style="border-color:#64748b"></span>Enrollment links tenant to devices.</div>
-          <div class="key-row"><span class="line-swatch" style="border-color:#7c3aed"></span>Policy links device to active bundle metadata.</div>
-          <div class="key-row"><span class="line-swatch" style="border-color:#f97316"></span>Decision links device to observed policy outcome.</div>
-          <div class="key-row"><span class="line-swatch" style="border-color:#0f766e"></span>Export, integration, and metrics links show evidence flow.</div>
-        </div>
-      </div>
-    </section>
-    <section class="split">
-      <div>
-        <h2>Devices</h2>
-        <table><thead><tr><th>Device</th><th>Role</th><th>Policy</th><th>Last Seen</th></tr></thead><tbody id="devices"></tbody></table>
-      </div>
-      <div>
-        <h2>Latest Decisions</h2>
-        <table><thead><tr><th>Action</th><th>Rule</th><th>Event</th><th>Export</th></tr></thead><tbody id="decisions"></tbody></table>
-      </div>
-    </section>
-    <section>
+  <p style="color: #94a3b8; margin-bottom: 24px;">
+    The modern React operator console is served from <code>ui/dist</code>. For the production UI, visit <a href="https://xibalba-shield.onrender.com/">xibalba-shield.onrender.com</a>.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h2>Latest Decisions</h2>
+      <pre id="decisions">Loading decisions from /api/shield/decisions...</pre>
+    </div>
+    <div class="card">
       <h2>Device Health &amp; Exporter Status</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Device</th><th>DID Preflight</th><th>Policy</th><th>Sensors</th>
-            <th>Exporter</th><th>Spool</th><th>Updated</th>
-          </tr>
-        </thead>
-        <tbody id="exporterStatus"></tbody>
-      </table>
-    </section>
-    <section>
+      <pre id="exporterStatus">Loading exporter status...</pre>
+    </div>
+    <div class="card">
       <h2>Containment Outcomes</h2>
-      <table>
-        <thead><tr><th>Device</th><th>Action</th><th>Result</th><th>Escalated</th><th>Error</th><th>When</th></tr></thead>
-        <tbody id="containmentOutcomes"></tbody>
-      </table>
-    </section>
-    <section>
-      <h2>Latest Burn-In Metrics</h2>
-      <div class="panel"><code id="metrics">No metrics yet.</code></div>
-    </section>
-    <section>
-      <h2>Detection Quality</h2>
-      <div class="panel"><code id="detectionQuality">No detection-quality samples yet.</code></div>
-    </section>
-  </main>
+      <pre id="containmentOutcomes">Loading containment outcomes...</pre>
+    </div>
+  </div>
   <script>
-    let summaryData = null;
-    let graphState = { zoom: 1, panX: 0, panY: 0, background: 'light', edgeType: 'all' };
-    let graphNodes = [];
-    let graphEdges = [];
-    let containmentOutcomesData = [];
-
-    async function loadSummary() {
-      const tenant = document.getElementById('tenant').value;
-      const token = document.getElementById('token').value;
-      const res = await fetch(`/api/shield/dashboard-summary?tenant_id=${encodeURIComponent(tenant)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || 'request failed'); return; }
-      const counts = data.decisions_by_action || {};
-      document.getElementById('deviceCount').textContent = data.device_count || 0;
-      document.getElementById('allowCount').textContent = counts.allow || 0;
-      document.getElementById('denyCount').textContent = counts.deny || 0;
-      document.getElementById('escalateCount').textContent = counts.escalate || 0;
-      document.getElementById('devices').innerHTML = (data.devices || []).map(d =>
-        `<tr><td>${escapeHtml(d.device_id)}</td><td>${escapeHtml(d.device_role || '')}</td><td>${escapeHtml(d.policy_version || '')}<br><code>${escapeHtml(d.policy_hash || '')}</code></td><td>${escapeHtml(d.last_seen_at || '')}</td></tr>`
-      ).join('');
-      document.getElementById('decisions').innerHTML = (data.latest_decisions || []).map(item => {
-        const d = item.decision || {};
-        const action = (d.decision || {}).action || '';
-        const exp = d.export || {};
-        const synthetic = d.synthetic ? '<br><span class="pill">synthetic</span>' : '';
-        return `<tr><td><span class="pill ${escapeHtml(action)}">${escapeHtml(action)}</span>${synthetic}</td><td>${escapeHtml((d.rule || {}).rule_id || '')}</td><td>${escapeHtml((d.event_ref || {}).class || d.class || '')}</td><td>${exp.decision_exported ? 'ok' : 'gap'}</td></tr>`;
-      }).join('');
-      document.getElementById('metrics').textContent = data.latest_metrics ? JSON.stringify(data.latest_metrics, null, 2) : 'No metrics yet.';
-      document.getElementById('detectionQuality').textContent = data.latest_detection_quality ? JSON.stringify(data.latest_detection_quality.aggregate, null, 2) : 'No detection-quality samples yet.';
-      summaryData = data;
-      // Fetched before buildGraph() so containment-outcome nodes/edges (see buildGraph's
-      // own containment section) can be included in the same graph build, not bolted on
-      // as a separate, un-integrated fetch.
-      await loadContainmentOutcomes();
-      buildGraph(data);
-      drawGraph();
-      await loadExporterStatus();
-    }
-    function healthSpan(ok, label) {
-      // ok: true/false/null -- null means "not checked" (e.g. no oracle_url configured,
-      // or this device predates the real preflight/spool telemetry, e.g. --no-exporter).
-      const cls = ok === true ? 'health-ok' : ok === false ? 'health-bad' : 'health-unknown';
-      return `<span class="${cls}">${escapeHtml(label)}</span>`;
-    }
     async function loadExporterStatus() {
-      const tenant = document.getElementById('tenant').value;
-      const token = document.getElementById('token').value;
-      const res = await fetch(`/api/shield/exporter-status?tenant_id=${encodeURIComponent(tenant)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (!res.ok) { return; }
-      document.getElementById('exporterStatus').innerHTML = (data.exporter_status || []).map(row => {
-        const s = row.status || {};
-        const pre = s.did_preflight || null;
-        // did_preflight (real, per-device check -- see shield/integrity_exporter/preflight.py)
-        // takes precedence; falls back to the older demo-seed did_registered/oracle_readback/
-        // bcc_middleware fields for devices/tenants that only have those (e.g. the demo seed).
-        let didCell;
-        if (pre) {
-          didCell = [
-            healthSpan(pre.did_loaded, pre.did_loaded ? `DID ${escapeHtml(pre.did || '')}` : 'DID load failed'),
-            healthSpan(pre.bcc_middleware_reachable, `bcc_middleware ${pre.bcc_middleware_reachable ? 'reachable' : 'unreachable'}`),
-            pre.oracle_configured
-              ? healthSpan(pre.oracle_registered, `oracle ${pre.oracle_registered === false ? 'not yet registered' : pre.oracle_registered === true ? 'registered' : 'reachable, registration unknown'}`)
-              : healthSpan(null, 'oracle not configured'),
-          ].join('<br>');
-        } else {
-          didCell = [
-            healthSpan(s.did_registered === true ? true : s.did_registered === false ? false : null, `DID ${s.did_registered === undefined ? 'unknown' : s.did_registered}`),
-            healthSpan(null, `oracle_readback ${escapeHtml(String(s.oracle_readback ?? 'unknown'))}`),
-          ].join('<br>');
-        }
-        const policy = s.policy || {};
-        const policyCell = healthSpan(policy.healthy, policy.healthy === undefined ? 'unknown' : (policy.healthy ? 'healthy' : 'unhealthy'))
-          + (policy.active_policy_hash ? `<br><code>${escapeHtml(String(policy.active_policy_hash).slice(0, 10))}…</code>` : '');
-        const sensors = s.sensors || {};
-        const sensorsCell = sensors.attached === undefined
-          ? healthSpan(null, 'no sensor data')
-          : healthSpan(sensors.attached, sensors.attached ? 'attached' : 'not attached')
-            + `<br>lost_events: ${sensors.lost_events ?? 0}`;
-        const exporter = s.exporter || {};
-        const exporterCell = exporter.export_failures === undefined
-          ? healthSpan(null, 'no exporter data')
-          : healthSpan(exporter.export_failures === 0, `export_failures: ${exporter.export_failures}`)
-            + `<br>queue_depth: ${exporter.queue_depth ?? 'n/a'}`;
-        const spoolCell = exporter.spool_pending === undefined
-          ? healthSpan(null, 'no spool data')
-          : healthSpan(exporter.spool_pending === 0, `pending: ${exporter.spool_pending}`)
-            + (exporter.spool_oldest_age_seconds != null ? `<br>oldest: ${Math.round(exporter.spool_oldest_age_seconds)}s` : '');
-        return `<tr class="health-cell"><td>${escapeHtml(row.device_id)}</td><td>${didCell}</td><td>${policyCell}</td><td>${sensorsCell}</td><td>${exporterCell}</td><td>${spoolCell}</td><td>${escapeHtml(row.updated_at || '')}</td></tr>`;
-      }).join('');
-      await loadContainmentOutcomes();
+      try {
+        const res = await fetch('/api/shield/exporter-status');
+        const data = await res.json();
+        const preflight = data.did_preflight || 'unknown';
+        document.getElementById('exporterStatus').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('exporterStatus').textContent = 'Error: ' + e.message;
+      }
     }
     async function loadContainmentOutcomes() {
-      const tenant = document.getElementById('tenant').value;
-      const token = document.getElementById('token').value;
-      const res = await fetch(`/api/shield/enforcement-outcomes?tenant_id=${encodeURIComponent(tenant)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (!res.ok) { return; }
-      containmentOutcomesData = data.enforcement_outcomes || [];
-      document.getElementById('containmentOutcomes').innerHTML = containmentOutcomesData.map(row => {
-        const o = row.outcome || {};
-        const resultCell = healthSpan(o.completed, o.completed ? 'completed' : 'FAILED');
-        return `<tr class="health-cell"><td>${escapeHtml(o.device_id || '')}</td><td>${escapeHtml(o.action || '')}</td><td>${resultCell}</td><td>${o.escalated ? 'yes' : 'no'}</td><td>${escapeHtml(o.error || '')}</td><td>${escapeHtml(row.received_at || '')}</td></tr>`;
-      }).join('');
-    }
-    async function seedDemo() {
-      const tenant = document.getElementById('tenant').value;
-      const token = document.getElementById('token').value;
-      const res = await fetch('/api/shield/demo/seed', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant_id: tenant })
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || 'seed failed'); return; }
-      await loadSummary();
-    }
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
-    function buildGraph(data) {
-      const nodes = [{ id: `tenant:${data.tenant_id}`, label: data.tenant_id || 'tenant', type: 'tenant', x: -260, y: 0, z: 0 }];
-      const edges = [];
-      const devices = data.devices || [];
-      devices.forEach((device, index) => {
-        const y = (index - (devices.length - 1) / 2) * 105;
-        const deviceId = `device:${device.device_id}`;
-        nodes.push({ id: deviceId, label: device.device_id, type: 'device', x: -70, y, z: 38 - index * 12 });
-        edges.push({ from: nodes[0].id, to: deviceId, type: 'enrollment' });
-        if (device.policy_version || device.policy_hash) {
-          const policyId = `policy:${device.device_id}`;
-          nodes.push({ id: policyId, label: device.policy_version || 'policy', type: 'policy', x: 118, y: y - 42, z: -24 });
-          edges.push({ from: deviceId, to: policyId, type: 'policy' });
-        }
-      });
-      (data.latest_decisions || []).slice(0, 10).forEach((item, index) => {
-        const decision = item.decision || {};
-        const deviceId = `device:${decision.device_id || ((devices[0] || {}).device_id || '')}`;
-        const action = (decision.decision || {}).action || 'decision';
-        const eventClass = (decision.event_ref || {}).class || decision.class || 'event';
-        const nodeId = `decision:${index}:${action}:${eventClass}`;
-        nodes.push({
-          id: nodeId,
-          label: `${action} ${eventClass}`.trim(),
-          type: action === 'allow' || action === 'log_only' ? 'decision-ok' : 'decision-risk',
-          x: 245,
-          y: (index - 4.5) * 48,
-          z: index % 2 ? 48 : -42
-        });
-        if (deviceId !== 'device:') edges.push({ from: deviceId, to: nodeId, type: 'decision' });
-        if ((decision.export || {}).decision_exported || (decision.export || {}).authorized) {
-          const exportId = 'export:integrity';
-          if (!nodes.some(n => n.id === exportId)) nodes.push({ id: exportId, label: 'Integrity export', type: 'export', x: 430, y: -82, z: 22 });
-          edges.push({ from: nodeId, to: exportId, type: 'export' });
-        }
-      });
-      if (data.latest_metrics) {
-        nodes.push({ id: 'metrics:latest', label: 'burn-in metrics', type: 'metrics', x: 430, y: 82, z: -16 });
-        devices.forEach(device => edges.push({ from: `device:${device.device_id}`, to: 'metrics:latest', type: 'metrics' }));
-      }
-      if (data.latest_detection_quality) {
-        const adr = data.latest_detection_quality.aggregate && data.latest_detection_quality.aggregate.shield_adr;
-        nodes.push({ id: 'quality:latest', label: `Shield ADR ${adr === null || adr === undefined ? 'n/a' : adr}`, type: 'metrics', x: 520, y: 28, z: 34 });
-        devices.forEach(device => edges.push({ from: `device:${device.device_id}`, to: 'quality:latest', type: 'metrics' }));
-      }
-      (data.integrations || []).slice(0, 4).forEach((integration, index) => {
-        const nodeId = `integration:${integration.integration_id}`;
-        nodes.push({ id: nodeId, label: integration.integration_id, type: 'integration', x: 430, y: 162 + index * 42, z: 18 });
-        nodes.filter(n => n.type === 'export').forEach(exportNode => edges.push({ from: exportNode.id, to: nodeId, type: 'integration' }));
-      });
-      graphNodes = nodes;
-      graphEdges = edges;
-      fitGraph();
-    }
-    function project(node, canvas) {
-      const depth = 620;
-      const scale = graphState.zoom * depth / (depth + node.z);
-      return {
-        x: canvas.width / 2 + (node.x * scale) + graphState.panX,
-        y: canvas.height / 2 + (node.y * scale * 0.78) + graphState.panY,
-        r: Math.max(5, 10 * scale),
-        scale
-      };
-    }
-    function drawGraph() {
-      const canvas = document.getElementById('evidenceGraph');
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = Math.max(720, Math.floor(rect.width));
-      canvas.height = 420;
-      const ctx = canvas.getContext('2d');
-      drawBackground(ctx, canvas);
-      const filtered = graphState.edgeType === 'all' ? graphEdges : graphEdges.filter(edge => edge.type === graphState.edgeType);
-      const connected = new Set(filtered.flatMap(edge => [edge.from, edge.to]));
-      const byId = Object.fromEntries(graphNodes.map(node => [node.id, node]));
-      filtered.forEach(edge => {
-        if (!byId[edge.from] || !byId[edge.to]) return;
-        const a = project(byId[edge.from], canvas);
-        const b = project(byId[edge.to], canvas);
-        ctx.strokeStyle = edgeColor(edge.type);
-        ctx.lineWidth = edge.type === graphState.edgeType ? 3 : 2;
-        ctx.globalAlpha = 0.78;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      });
-      ctx.globalAlpha = 1;
-      graphNodes
-        .map(node => ({ node, point: project(node, canvas) }))
-        .sort((a, b) => a.node.z - b.node.z)
-        .forEach(({ node, point }) => {
-          const dim = graphState.edgeType !== 'all' && !connected.has(node.id);
-          ctx.globalAlpha = dim ? 0.28 : 1;
-          ctx.fillStyle = nodeColor(node.type);
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(point.x, point.y, point.r + (node.type === 'tenant' ? 4 : 0), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = graphState.background === 'dark' || graphState.background === 'blueprint' ? '#f8fafc' : '#111827';
-          ctx.font = '12px Inter, system-ui, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(trimLabel(node.label), point.x, point.y + point.r + 16);
-        });
-      ctx.globalAlpha = 1;
-    }
-    function drawBackground(ctx, canvas) {
-      const fills = { light: '#f8fafc', dark: '#101820', plain: '#ffffff', blueprint: '#0f2a43' };
-      ctx.fillStyle = fills[graphState.background] || fills.light;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      if (graphState.background === 'plain') return;
-      ctx.strokeStyle = graphState.background === 'light' ? '#e2e8f0' : 'rgba(255,255,255,.12)';
-      ctx.lineWidth = 1;
-      for (let x = -canvas.width; x < canvas.width * 2; x += 36) {
-        ctx.beginPath();
-        ctx.moveTo(x + graphState.panX % 36, 0);
-        ctx.lineTo(x + graphState.panX % 36 + 140, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += 36) {
-        ctx.beginPath();
-        ctx.moveTo(0, y + graphState.panY % 36);
-        ctx.lineTo(canvas.width, y + graphState.panY % 36);
-        ctx.stroke();
+      try {
+        const res = await fetch('/api/shield/enforcement-outcomes');
+        const data = await res.json();
+        document.getElementById('containmentOutcomes').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('containmentOutcomes').textContent = 'Error: ' + e.message;
       }
     }
-    function nodeColor(type) {
-      return {
-        tenant: '#334155',
-        device: '#2563eb',
-        policy: '#7c3aed',
-        'decision-risk': '#dc2626',
-        'decision-ok': '#16a34a',
-        export: '#0f766e',
-        integration: '#0891b2',
-        metrics: '#ca8a04'
-      }[type] || '#64748b';
+    async function loadDecisions() {
+      try {
+        const res = await fetch('/api/shield/decisions');
+        const data = await res.json();
+        document.getElementById('decisions').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('decisions').textContent = 'Error: ' + e.message;
+      }
     }
-    function edgeColor(type) {
-      return {
-        enrollment: '#64748b',
-        policy: '#7c3aed',
-        decision: '#f97316',
-        export: '#0f766e',
-        integration: '#0891b2',
-        metrics: '#ca8a04'
-      }[type] || '#6b7280';
-    }
-    function trimLabel(value) {
-      const text = String(value || '');
-      return text.length > 24 ? `${text.slice(0, 21)}...` : text;
-    }
-    function setGraphBackground(value) {
-      graphState.background = value;
-      drawGraph();
-    }
-    function setEdgeType(value) {
-      graphState.edgeType = value;
-      drawGraph();
-    }
-    function fitGraph() {
-      graphState.zoom = 1;
-      graphState.panX = 0;
-      graphState.panY = 0;
-      drawGraph();
-    }
-    function zoomGraph(multiplier) {
-      graphState.zoom = Math.min(2.4, Math.max(0.45, graphState.zoom * multiplier));
-      drawGraph();
-    }
-    function panGraph(dx, dy) {
-      graphState.panX += dx;
-      graphState.panY += dy;
-      drawGraph();
-    }
-    window.addEventListener('resize', drawGraph);
-    loadSummary();
+    loadExporterStatus();
+    loadContainmentOutcomes();
+    loadDecisions();
   </script>
 </body>
 </html>"""
