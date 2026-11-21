@@ -14,6 +14,7 @@ import {
   Layers,
   LockKeyhole,
   Mail,
+  MapPin,
   Phone,
   Radar,
   RotateCcw,
@@ -181,22 +182,53 @@ export function Landing({ next }) {
             </a>
           </div>
 
-          <div className="hero-checks">
-            <div className="hero-check-item">
-              <ShieldCheck size={16} aria-hidden="true" />
-              <span>Standalone host containment</span>
+          <div className="hero-metrics-bar" role="region" aria-label="Key system invariants">
+            <div className="hero-metric-card">
+              <div className="hero-metric-header">
+                <span className="hero-metric-status" aria-hidden="true" />
+                <ShieldCheck size={18} aria-hidden="true" />
+                <h3>Host-Authoritative</h3>
+              </div>
+              <p>Reversible SIGSTOP, cgroup freeze, and nftables destination drop executed directly on the physical host.</p>
+              <div className="hero-metric-footer">
+                <code>FAIL-CLOSED · LOCAL ENFORCER</code>
+              </div>
             </div>
-            <div className="hero-check-item">
-              <LockKeyhole size={16} aria-hidden="true" />
-              <span>Hash-bound EDR response gates</span>
+
+            <div className="hero-metric-card">
+              <div className="hero-metric-header">
+                <span className="hero-metric-status" aria-hidden="true" />
+                <Cpu size={18} aria-hidden="true" />
+                <h3>Zero Kernel Modules</h3>
+              </div>
+              <p>Native Linux procfs, eBPF CO-RE, and socket tables without kernel panics or out-of-tree drivers.</p>
+              <div className="hero-metric-footer">
+                <code>LINUX 4.18+ / 5.x / 6.x</code>
+              </div>
             </div>
-            <div className="hero-check-item">
-              <Cpu size={16} aria-hidden="true" />
-              <span>Zero kernel module requirement</span>
+
+            <div className="hero-metric-card">
+              <div className="hero-metric-header">
+                <span className="hero-metric-status" aria-hidden="true" />
+                <LockKeyhole size={18} aria-hidden="true" />
+                <h3>Cryptographic Gateways</h3>
+              </div>
+              <p>EDR containment, process termination, and policy actions gated by actor DID and OPA hash bundles.</p>
+              <div className="hero-metric-footer">
+                <code>RFC 8628 · BOUNDARY VERIFIED</code>
+              </div>
             </div>
-            <div className="hero-check-item">
-              <FileCheck2 size={16} aria-hidden="true" />
-              <span>Tamper-evident Ed25519 ledger</span>
+
+            <div className="hero-metric-card">
+              <div className="hero-metric-header">
+                <span className="hero-metric-status" aria-hidden="true" />
+                <FileCheck2 size={18} aria-hidden="true" />
+                <h3>Ed25519 Hash Ledger</h3>
+              </div>
+              <p>Every sensor event, gate evaluation, and responder outcome written to an append-only cryptographic chain.</p>
+              <div className="hero-metric-footer">
+                <code>100% OFFLINE · IMMUTABLE EVIDENCE</code>
+              </div>
             </div>
           </div>
         </div>
@@ -453,51 +485,102 @@ export function Landing({ next }) {
       </section>
 
       <footer className="site-footer">
-        <div className="footer-main" style={{ gridTemplateColumns: 'minmax(240px, 1.4fr) repeat(auto-fit, minmax(130px, 1fr))' }}>
+        <div className="footer-main">
           <div className="footer-brand">
             <Brand />
-            <p>Deterministic endpoint security for autonomous systems—local decisions, bounded response, verifiable outcomes.</p>
-            <div style={{ marginBottom: '14px' }}>
-              <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-text)', textDecoration: 'none', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <Globe size={12} /> Part of Xibalba Solutions LLC
+            <p>
+              Deterministic Linux endpoint defense, response governance, and fail-closed host containment for autonomous agent systems.
+            </p>
+            <div className="footer-brand-meta">
+              <a
+                href="https://xibalbasolutions.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footer-brand-parent"
+              >
+                <Globe size={13} aria-hidden="true" />
+                <span>Commercial vertical of Xibalba Solutions LLC</span>
               </a>
+              <div className="footer-brand-badge">
+                <span className="status-dot green" aria-hidden="true" />
+                <span>Local-first · Zero cloud runtime dependency</span>
+              </div>
             </div>
-            <span><span className="status-dot green" /> Local-first by design</span>
           </div>
+
           <div className="footer-links">
             <h3>Platform</h3>
             <a href="#install">Install &amp; Quickstart</a>
-            <a href="#loop">Control loop</a>
-            <a href="#platform">Capabilities</a>
-            <a href="#architecture">Architecture</a>
-            <a href="#agent-security">Agent security</a>
+            <a href="#loop">Control Loop Spec</a>
+            <a href="#platform">Endpoint Capabilities</a>
+            <a href="#architecture">Kernel Telemetry</a>
+            <a href="#responders">Proof-Gated Responders</a>
           </div>
+
           <div className="footer-links">
-            <h3>Security</h3>
-            <a href="#proof">Trust model</a>
-            <a href="#assurance">Assurance</a>
-            <button onClick={next}>Operator console</button>
+            <h3>Ecosystem</h3>
+            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">
+              Xibalba Solutions LLC
+            </a>
+            <a href="#loop">Integrity Protocol</a>
+            <a href="#loop">Super-Cortex AIS Memory</a>
+            <a href="#agent-security">Agent0 ERC-8004 Identity</a>
+            <a href="#install">Zero-Trust Device Pairing</a>
           </div>
+
           <div className="footer-links">
-            <h3>Contact</h3>
-            <a href="mailto:jacob@xibalbasolutions.com" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Mail size={12} /> jacob@xibalbasolutions.com
-            </a>
-            <a href="tel:+12628641589" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Phone size={12} /> 1 (262) 864-1589
-            </a>
-            <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Globe size={12} /> xibalbasolutions.com
-            </a>
-            <span style={{ color: 'var(--dim)', fontSize: '11px', marginTop: '4px' }}>Wisconsin, USA</span>
+            <h3>Governance</h3>
+            <a href="#proof">Default-Deny Invariants</a>
+            <a href="#responders">Two-Person Sign-off</a>
+            <a href="#assurance">Host Containment Bounds</a>
+            <a href="#proof">Ed25519 Hash Ledger</a>
+            <button onClick={next} className="footer-console-btn">
+              Operator Console <ArrowRight size={12} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="footer-contact">
+            <h3>Executive Inquiries</h3>
+            <p className="footer-contact-desc">
+              Direct engineering access for enterprise deployments, custom eBPF telemetry, and closed control loop integrations.
+            </p>
+            <div className="footer-contact-list">
+              <a href="mailto:jacob@xibalbasolutions.com" className="footer-contact-item">
+                <Mail size={13} aria-hidden="true" />
+                <span>jacob@xibalbasolutions.com</span>
+              </a>
+              <a href="tel:+12628641589" className="footer-contact-item">
+                <Phone size={13} aria-hidden="true" />
+                <span>+1 (262) 864-1589</span>
+              </a>
+              <a
+                href="https://xibalbasolutions.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footer-contact-item"
+              >
+                <Globe size={13} aria-hidden="true" />
+                <span>xibalbasolutions.com</span>
+              </a>
+              <div className="footer-contact-item footer-location">
+                <MapPin size={13} aria-hidden="true" />
+                <span>Wisconsin, United States</span>
+              </div>
+            </div>
           </div>
         </div>
+
         <div className="footer-bottom">
-          <small>© {new Date().getFullYear()} <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>Xibalba Solutions LLC</a>. All rights reserved.</small>
-          <div style={{ display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <a href="mailto:jacob@xibalbasolutions.com" style={{ color: 'inherit', textDecoration: 'none' }}>jacob@xibalbasolutions.com</a>
-            <a href="tel:+12628641589" style={{ color: 'inherit', textDecoration: 'none' }}>1 (262) 864-1589</a>
-            <span>Linux-first · Policy-driven · Evidence-backed</span>
+          <div className="footer-bottom-copy">
+            <small>
+              © {new Date().getFullYear()} <a href="https://xibalbasolutions.com" target="_blank" rel="noopener noreferrer">Xibalba Solutions LLC</a>. All rights reserved. Registered in Wisconsin, USA.
+            </small>
+          </div>
+          <div className="footer-bottom-specs">
+            <span className="spec-tag">LINUX 4.18+ / 5.x / 6.x</span>
+            <span className="spec-tag">RFC 8628 DID &amp; OPA REGO</span>
+            <span className="spec-tag">ED25519 HASH CHAIN</span>
+            <span className="spec-tag">FAIL-CLOSED ENFORCER</span>
           </div>
         </div>
       </footer>
