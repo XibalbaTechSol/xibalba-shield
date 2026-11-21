@@ -86,6 +86,13 @@ The web-based Cloud Control Plane Console has been consolidated from 9 fragmente
 4. **Response**: Incident approval queue, containment actions, and historical execution ledgers.
 5. **Settings**: Node identity, RFC 8628 commissioning ladder, telemetry export, and billing tiers.
 
+### 8. Public Landing Page & Web Presence
+Shield features a unified, aerospace cyber-minimalist public landing page (`ui/src/components/Landing.jsx`):
+- **Sovereign Host Defense Narrative**: Highlights Shield's dual role as an independent, zero-cloud Linux endpoint defense runtime and as the physical plant execution enforcer in the Integrity closed loop.
+- **Unified Containment & Operational Assurance**: Integrates local-first kernel sensing, microsecond policy evaluations, surgically scoped PID/cgroup mitigations, and Ed25519 hash-chain receipts into a cohesive assurance architecture.
+- **Dual-Layer Protection Boundary**: Maps out the exact separation between Layer 1 (Semantic Agent Intent Gating) and Layer 2 (Kernel Execution Enforcing) bridged by cryptographic invocation nonces.
+- **Architectural Harmony**: Fully aligned with Super-Cortex visual styling and typography, with an ultra-compact, balanced 3-column footer.
+
 See [`integrity-core/docs/architecture/ecosystem-dependencies.md`](https://github.com/XibalbaTechSol/integrity-core/blob/main/docs/architecture/ecosystem-dependencies.md) for the canonical ownership boundaries.
 
 ## What Shield Protects
