@@ -18,10 +18,48 @@ export default function App() {
     }
   }
 
-  const [view, setView] = useState(() => {
-    if (isPairRoute()) return 'pair'
-    return readSession('shield-session') ? 'dashboard' : 'landing'
-  })
+  const getInitialRouteState = () => {
+    try {
+      const hash = window.location.hash || ''
+      if (isPairRoute()) return { view: 'pair', mode: 'login' }
+      if (hash.startsWith('#signup')) return { view: 'signin', mode: 'signup' }
+      if (hash.startsWith('#signin') || hash.startsWith('#login')) return { view: 'signin', mode: 'login' }
+      if (hash.startsWith('#dashboard') || hash.startsWith('#console')) {
+        return readSession('shield-session')
+          ? { view: 'dashboard', mode: 'login' }
+          : { view: 'signin', mode: 'login' }
+      }
+      return readSession('shield-session')
+        ? { view: 'dashboard', mode: 'login' }
+        : { view: 'landing', mode: 'login' }
+    } catch {
+      return { view: 'landing', mode: 'login' }
+    }
+  }
+
+  const [routeState, setRouteState] = useState(getInitialRouteState)
+  const view = routeState.view
+  const authMode = routeState.mode
+
+  const setView = (newView, mode = 'login') => {
+    const validMode = mode === 'signup' ? 'signup' : 'login'
+    setRouteState({ view: newView, mode: validMode })
+    try {
+      if (newView === 'signin') {
+        window.location.hash = validMode === 'signup' ? '#signup' : '#signin'
+      } else if (newView === 'landing') {
+        if (window.location.hash.startsWith('#signin') || window.location.hash.startsWith('#signup') || window.location.hash.startsWith('#pair')) {
+          window.history.replaceState(null, '', window.location.pathname)
+        }
+      } else if (newView === 'dashboard') {
+        if (window.location.hash.startsWith('#signin') || window.location.hash.startsWith('#signup')) {
+          window.location.hash = '#dashboard'
+        }
+      }
+    } catch {
+      /* ignore hash errors */
+    }
+  }
 
   const [connection, setConnection] = useState(() =>
     JSON.parse(readSession('shield-connection', '{}'))
@@ -39,7 +77,20 @@ export default function App() {
 
   useEffect(() => {
     const handleHash = () => {
-      if (isPairRoute()) setView('pair')
+      const hash = window.location.hash || ''
+      if (isPairRoute()) {
+        setRouteState({ view: 'pair', mode: 'login' })
+      } else if (hash.startsWith('#signup')) {
+        setRouteState({ view: 'signin', mode: 'signup' })
+      } else if (hash.startsWith('#signin') || hash.startsWith('#login')) {
+        setRouteState({ view: 'signin', mode: 'login' })
+      } else if (hash.startsWith('#dashboard') || hash.startsWith('#console')) {
+        if (readSession('shield-session')) {
+          setRouteState({ view: 'dashboard', mode: 'login' })
+        } else {
+          setRouteState({ view: 'signin', mode: 'login' })
+        }
+      }
     }
     window.addEventListener('hashchange', handleHash)
     return () => window.removeEventListener('hashchange', handleHash)
@@ -166,11 +217,17 @@ export default function App() {
   }
 
   if (view === 'landing') {
-    return <Landing next={() => setView('signin')} />
+    return <Landing next={(mode = 'login') => setView('signin', mode)} />
   }
 
   if (view === 'signin') {
-    return <SignIn back={() => setView(isPairRoute() ? 'pair' : 'landing')} connect={connect} />
+    return (
+      <SignIn
+        back={() => setView(isPairRoute() ? 'pair' : 'landing')}
+        connect={connect}
+        initialMode={authMode}
+      />
+    )
   }
 
   if (view === 'pair') {
@@ -182,7 +239,7 @@ export default function App() {
           }
           setView(readSession('shield-session') ? 'dashboard' : 'landing')
         }}
-        onSignInRequired={() => setView('signin')}
+        onSignInRequired={() => setView('signin', 'login')}
       />
     )
   }
