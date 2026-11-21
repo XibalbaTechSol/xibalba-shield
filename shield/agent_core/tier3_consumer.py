@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Callable, Literal
 
 from shield.schemas.events import EscalationResponse, Tier3Verdict
+from shield.gate_receipts import GateReceiptWriter
+from integrity_sdk.did import Keypair
 
 
 @dataclass(frozen=True)
@@ -27,7 +29,8 @@ class Tier3Consumer:
                  mode: Literal["shadow", "enforce"] = "shadow",
                  max_actions_per_window: int = 10, window_seconds: float = 60.0,
                  disabled_flag_path: Path | None = None,
-                 pid_identity: Callable[[int], str | None] | None = None) -> None:
+                 pid_identity: Callable[[int], str | None] | None = None,
+                 receipt_dir: Path | None = None) -> None:
         if mode not in {"shadow", "enforce"}:
             raise ValueError("mode must be shadow or enforce")
         self.path = Path(store_path)
@@ -39,6 +42,11 @@ class Tier3Consumer:
         self.window_seconds = window_seconds
         self.disabled_flag_path = Path(disabled_flag_path) if disabled_flag_path else None
         self.pid_identity = pid_identity
+        self.receipt_writer = None
+        if receipt_dir is not None:
+            self.receipt_writer = GateReceiptWriter(Path(receipt_dir), signer=Keypair.generate(),
+                                                    hmac_key=__import__("os").urandom(32),
+                                                    log_id="shield-tier3")
         self._action_times: list[float] = []
         self._limit_lock = threading.Lock()
         self._tripped = False
@@ -78,6 +86,15 @@ class Tier3Consumer:
             return Tier3Outcome(False, response.verdict, "pid_gone", disagree)
         if current != expected:
             return Tier3Outcome(False, response.verdict, "pid_identity_mismatch", disagree)
+        if self.receipt_writer is not None:
+            try:
+                self.receipt_writer.record(
+                    agent_did="shield-tier3", device_id="local", tool_name="process-resume",
+                    tool_input_sha256=None, event_class="tier3_adjudication", pack_hash="sha256:" + "0" * 64,
+                    decision="permit", reason_code="TIER3_RELEASE", mode="enforce",
+                )
+            except Exception as exc:  # noqa: BLE001 -- receipt is a release precondition
+                return Tier3Outcome(False, response.verdict, f"receipt_failed: {exc}", disagree)
         try:
             self.action_broker.resume(pid)
         except Exception as exc:  # noqa: BLE001 -- leave process contained
