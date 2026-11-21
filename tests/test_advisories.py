@@ -1,7 +1,7 @@
 import json
 import time
 import pytest
-from shield.advisories import load_advisories, match_advisories
+from shield.advisories import build_remediation_plan, load_advisories, match_advisories
 
 def test_advisory_source_loads_with_provenance(tmp_path):
     p = tmp_path / "db.json"
@@ -29,3 +29,10 @@ def test_findings_are_prioritized_and_preserve_fix_guidance():
     ]}
     findings = match_advisories({"packages":[{"name":"x","version":"1"}]}, source)["known_findings"]
     assert findings[0]["id"] == "critical" and findings[0]["fixed_version"] == "2"
+
+
+def test_remediation_plan_requires_approval_and_never_executes():
+    plan = build_remediation_plan([{"id": "CVE-1", "package": "x", "version": "1", "fixed_version": "2", "priority": 4}], maintenance_window="sunday")
+    assert plan["status"] == "approval_required"
+    assert plan["actions"][0]["requires_approval"] is True
+    assert plan["executed"] is False

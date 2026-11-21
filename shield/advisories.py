@@ -37,3 +37,18 @@ def match_advisories(inventory: dict[str, Any], source: dict[str, Any], *, max_f
     findings.sort(key=lambda item: item["priority"], reverse=True)
     return {"status": "matched", "source_hash": source.get("source_hash"),
             "updated_at": source.get("updated_at"), "known_findings": findings}
+
+
+def build_remediation_plan(findings: list[dict[str, Any]], *, maintenance_window: str | None = None) -> dict[str, Any]:
+    """Build approval-required remediation intent; this function never executes a package change."""
+    actions = []
+    for finding in findings[:256]:
+        fixed = finding.get("fixed_version")
+        if not fixed:
+            continue
+        actions.append({"package": finding.get("package"), "from_version": finding.get("version"),
+                        "to_version": fixed, "advisory_id": finding.get("id"),
+                        "priority": finding.get("priority", 0), "requires_approval": True})
+    return {"status": "approval_required", "maintenance_window": maintenance_window,
+            "actions": sorted(actions, key=lambda item: item["priority"], reverse=True),
+            "executed": False}
