@@ -49,6 +49,13 @@ The Shield Cloud Console is reimagined around 5 canonical operational surfaces m
 - **SIEM & Connectors**: Export pipelines to enterprise SIEM/SOAR platforms.
 - **Assurance & Audit Evidence**: Generation of cryptographic audit bundles verifiable against the Integrity Protocol.
 
+### 6. Public Product Surface & Landing Page (`Landing.jsx`)
+- **Aerospace-Grade Visuals**: High-density cyber-minimalist design language aligned with Super-Cortex, utilizing dark monochrome surfaces, gold accenting (`#d4af37`), and ultra-fine monospace typography (`JetBrains Mono`).
+- **Independent Linux Host Defense & Integrity Loop**: Communicates Shield's standalone sovereign defense capabilities on local Linux hosts alongside its role as the physical plant execution enforcer in the Integrity closed loop.
+- **Proof-Gated Containment & Operational Assurance**: Merged, cohesive architecture presenting microsecond local sensing, Ed25519 hash-chain audit receipts, surgically scoped PID/cgroup containments, and reversible fail-closed mitigations.
+- **Dual-Layer Protection Boundary**: Visualizes the two distinct enforcement domains—Layer 1 Semantic Agent Intent Gating (OPA pre-action argument validation) and Layer 2 Kernel Execution Enforcing (eBPF CO-RE & procfs post-action reality checks)—bridged by cryptographic invocation nonces.
+- **Balanced 3-Column Footer**: Compact, 124px height-balanced footer featuring brand mission, streamlined platform navigation, and direct enterprise contact information.
+
 ---
 
 ## Authentication & Device Pairing Flow
