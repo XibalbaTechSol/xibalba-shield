@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Literal, Protocol
 
@@ -45,6 +46,7 @@ from .eventlog import EventLog
 from .registry import AgentRegistry, DeviceContext
 from .slm_backend import SlmBackend
 from .tier3_backend import Tier3Backend
+from .tier3_safety import BoundedAdjudicationStore, Tier3DispatchGate
 
 logger = logging.getLogger("shield.agent_core.router")
 tracer = get_tracer("xibalba-shield")
@@ -87,6 +89,8 @@ class EventRouter:
         jev_analyzer: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
         tier3_backend: Tier3Backend | None = None,
         tier3_sink: Callable[[EscalationResponse], None] | None = None,
+        tier3_store: BoundedAdjudicationStore | None = None,
+        tier3_gate: Tier3DispatchGate | None = None,
         enforcement_mode: Literal["observe", "enforce"] = "enforce",
     ) -> None:
         if enforcement_mode not in {"observe", "enforce"}:
@@ -114,6 +118,8 @@ class EventRouter:
         self.jev_analyzer = jev_analyzer
         self.tier3_backend = tier3_backend
         self.tier3_sink = tier3_sink
+        self.tier3_store = tier3_store
+        self.tier3_gate = tier3_gate or Tier3DispatchGate()
         self._tier3_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="shield-tier3") if tier3_backend else None
         # Compatibility default remains enforcement for existing Shield callers.
         # The policy-pack rollout can pass observe explicitly, then change the
@@ -152,7 +158,9 @@ class EventRouter:
             self.registry.touch(event.agent.agent_id)
 
         decision = self.policy_engine.evaluate(event, self._context())
-        tier1_decision = decision.decision
+        # Preserve an immutable snapshot: fail-closed normalization mutates the live decision
+        # from escalate to contain, but Tier 3 must receive the original trail.
+        tier1_decision = deepcopy(decision.decision)
 
         # Tier-2 escalation: only for events Tier 1 (the deterministic PolicyEngine) already
         # flagged `escalate` -- an SLM backend is never the first evaluator an event sees, and
@@ -287,7 +295,10 @@ class EventRouter:
                 tier2_decision=decision.decision,
                 reason=decision.decision.reason,
             )
-            self._tier3_executor.submit(self._dispatch_tier3, request)
+            if self.tier3_gate.acquire():
+                self._tier3_executor.submit(self._dispatch_tier3, request)
+            else:
+                logger.warning("Tier-3 dispatch rate/concurrency cap reached; skipping adjudication")
 
         if self.jev_analyzer is not None:
             try:
@@ -406,7 +417,11 @@ class EventRouter:
             if not isinstance(response, EscalationResponse):
                 logger.error("Tier-3 backend returned an invalid response; ignoring")
                 return
+            if self.tier3_store is not None:
+                self.tier3_store.record(response)
             if self.tier3_sink is not None:
                 self.tier3_sink(response)
         except Exception:  # noqa: BLE001 -- Tier 3 is downstream of local enforcement
             logger.exception("Tier-3 adjudication failed; local decision remains authoritative")
+        finally:
+            self.tier3_gate.release()
