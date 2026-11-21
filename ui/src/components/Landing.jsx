@@ -287,7 +287,7 @@ export function Landing({ next }) {
         </div>
         <MermaidDiagram chart={CONTROL_LOOP_FLOW} label="Closed control loop: Signed pack, Hook, Agent plant, Shield sensor, Oracle, AIS, and Settlement chain" />
         <p className="diagram-caption">
-          <LockKeyhole size={14} /> Shield is the physical plant sensor and runtime enforcer ($y = Cx + v$). It measures ground truth on the host and executes fail-closed physical containment if the hook reverts.
+          <LockKeyhole size={14} /> Shield is the physical plant sensor and runtime enforcer (y = C x + v). It measures ground truth on the host and executes fail-closed physical containment if the hook reverts.
         </p>
         <div className="loop-callout-grid">
           <article className="loop-callout-card">
@@ -346,7 +346,7 @@ export function Landing({ next }) {
                 <span className="terminal-dot red" />
                 <span className="terminal-dot yellow" />
                 <span className="terminal-dot green" />
-                <span style={{ marginLeft: '8px', opacity: 0.8 }}>shield@{activeInstall.id}:~</span>
+                <span className="terminal-title">shield@{activeInstall.id}:~</span>
               </div>
               <button
                 className="copy-snippet-btn"

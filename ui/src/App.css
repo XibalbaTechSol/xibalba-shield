@@ -702,7 +702,7 @@ h1, h2, h3, h4, b {
   max-width: 1440px;
   width: 100%;
   margin: 0 auto;
-  padding: 100px 32px;
+  padding: 80px 32px;
 }
 .landing-loop, .landing-install, .landing-response { border-top: 1px solid var(--line); }
 .landing-section-copy {
@@ -819,6 +819,13 @@ h1, h2, h3, h4, b {
   background: rgba(0, 0, 0, 0.25);
   font: 11px var(--font-mono);
   color: var(--accent-text);
+}
+
+.terminal-title {
+  margin-left: 10px;
+  color: #e6edf3;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .terminal-dots {
@@ -1018,13 +1025,16 @@ h1, h2, h3, h4, b {
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
+}
+.landing-assurance .landing-section-copy {
+  margin-bottom: 8px;
 }
 .landing-agent-security {
   max-width: 1440px;
   width: 100%;
   margin: 0 auto;
-  padding: 100px 32px;
+  padding: 80px 32px;
   border-top: 1px solid var(--line);
 }
 .agent-security-intro {
@@ -1055,7 +1065,7 @@ h1, h2, h3, h4, b {
 .agent-security-details ul { margin: 20px 0 0; padding: 0; list-style: none; }
 .agent-security-details li { position: relative; margin-top: 9px; padding-left: 16px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
 .agent-security-details li::before { content: ''; position: absolute; top: .55em; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-fill); }
-.metadata-rail { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.metadata-rail { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 24px; padding: 18px 0; border-bottom: 1px solid var(--line); }
 .metadata-rail span { margin-right: 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .metadata-rail b { padding: 7px 10px; border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); border-radius: 0; background: color-mix(in srgb, var(--accent) 5%, transparent); color: var(--text); font-size: 10px; font-weight: 600; }
 .agent-security-boundary { display: flex; align-items: center; gap: 8px; margin: 18px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
@@ -3772,7 +3782,7 @@ h1, h2, h3, h4, b {
 .auth b { font-family: 'Barlow Condensed', var(--font-heading), sans-serif; }
 
 .landing .site-header {
-  background: rgba(20,23,26,.96);
+  background: #14171a;
   border-bottom: 1px solid var(--line);
   backdrop-filter: none;
 }
@@ -3837,7 +3847,7 @@ h1, h2, h3, h4, b {
    console, so the landing page does not switch to a rounded neon surface. */
 .landing .mermaid-frame {
   min-height: 330px;
-  padding: 24px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 0;
   background: var(--panel);
