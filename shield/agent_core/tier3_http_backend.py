@@ -29,6 +29,13 @@ class HttpTier3Backend:
                 raise ValueError("response must be an object")
             verdict = parse_verdict(body.get("verdict"))
             reason = body.get("reason", "") if isinstance(body.get("reason", ""), str) else ""
-            return EscalationResponse(Decision("contain", tier="tier3"), verdict=verdict, reason=reason[:512])
+            result = EscalationResponse(Decision("contain", tier="tier3"), verdict=verdict, reason=reason[:512])
+            process = getattr(request.event, "process", None)
+            if process is not None and isinstance(getattr(process, "pid", None), int):
+                result.pid = process.pid  # type: ignore[attr-defined]
+                start = getattr(process, "start_time", 0)
+                cgroup = getattr(process, "cgroup_id", 0)
+                result.pid_identity = f"start:{start}:cgroup:{cgroup}"  # type: ignore[attr-defined]
+            return result
         except Exception:  # noqa: BLE001 -- provider failure is fail-closed
             return EscalationResponse(Decision("contain", tier="tier3"), verdict="uncertain", reason="provider_unavailable")

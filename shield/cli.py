@@ -643,12 +643,21 @@ def _run(args: argparse.Namespace) -> int:
             from .agent_core.tier3_http_backend import HttpTier3Backend
             tier3_backend = HttpTier3Backend(args.tier3_endpoint, timeout_seconds=args.tier3_timeout_seconds,
                                              token=args.tier3_token)
+            def _tier3_pid_identity(pid: int) -> str | None:
+                try:
+                    from .sensors.ebpf.loader import _read_proc_cgroup_id, _read_proc_start_time
+                    start = _read_proc_start_time(pid)
+                    cgroup = _read_proc_cgroup_id(pid)
+                    return None if not start and not cgroup else f"start:{start}:cgroup:{cgroup}"
+                except (OSError, ValueError, TypeError):
+                    return None
+
             tier3_consumer = Tier3Consumer(
                 args.tier3_store, mode=args.tier3_mode, action_broker=action_broker,
                 max_actions_per_window=args.tier3_max_actions,
                 window_seconds=args.tier3_window_seconds,
                 disabled_flag_path=args.tier3_disable_file,
-                pid_identity=None,
+                pid_identity=_tier3_pid_identity,
                 receipt_dir=args.tier3_receipt_dir,
             )
         except (OSError, ValueError, RuntimeError) as exc:
