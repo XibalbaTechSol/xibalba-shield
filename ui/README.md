@@ -56,6 +56,12 @@ The Shield Cloud Console is reimagined around 5 canonical operational surfaces m
 - **Dual-Layer Protection Boundary**: Visualizes the two distinct enforcement domains—Layer 1 Semantic Agent Intent Gating (OPA pre-action argument validation) and Layer 2 Kernel Execution Enforcing (eBPF CO-RE & procfs post-action reality checks)—bridged by cryptographic invocation nonces.
 - **Balanced 3-Column Footer**: Compact, 124px height-balanced footer featuring brand mission, streamlined platform navigation, and direct enterprise contact information.
 
+### 7. Unified 2-Column Authentication & Device Pairing (`SignIn.jsx`, `DevicePair.jsx`)
+- **Canonical 2-Column Architecture**: Brand story and cryptographic guarantees on the left (`.auth-story`), and streamlined interaction card on the right (`.auth-form`).
+- **Side-by-Side SSO Grid**: Google and GitHub SSO buttons arranged in a responsive 2-column grid (`.auth-sso-grid`), with fallback email authentication.
+- **Hardware-Isolated Endpoint Pairing**: `DevicePair.jsx` leverages the same 2-column layout for pairing code entry and device authorization, enforcing Industry dark theme tokens without vertical overflow.
+- **Zero-Scroll Reachability**: Sized compactly to ensure submit action buttons are directly reachable on standard and compact viewports without vertical scrolling.
+
 ---
 
 ## Authentication & Device Pairing Flow
