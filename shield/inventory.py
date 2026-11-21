@@ -25,16 +25,26 @@ def collect_inventory(*, max_processes: int = 256, max_packages: int = 512) -> d
         except (psutil.Error, OSError):
             continue
     packages: list[dict[str, str]] = []
-    if platform.system() == "Linux":
-        try:
-            raw = subprocess.run(["dpkg-query", "-W", "-f=${Package}\t${Version}\n"],
-                                 capture_output=True, text=True, timeout=5, check=False)
+    if platform.system() in {"Linux", "Darwin"}:
+        commands = {
+            "Linux": [["dpkg-query", "-W", "-f=${Package}\t${Version}\n"],
+                      ["rpm", "-qa", "--qf", "%{NAME}\t%{VERSION}-%{RELEASE}\n"]],
+            "Darwin": [["brew", "list", "--versions"]],
+        }[platform.system()]
+        for command in commands:
+          try:
+            raw = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+            if raw.returncode != 0:
+                continue
             for line in raw.stdout.splitlines()[:max_packages]:
-                name, _, version = line.partition("\t")
+                fields = line.split()
+                name, version = (fields[0], fields[1]) if len(fields) >= 2 else line.partition("\t")[::2]
                 if name and version:
                     packages.append({"name": name[:128], "version": version[:256]})
-        except (OSError, subprocess.SubprocessError):
-            pass
+            if packages:
+                break
+          except (OSError, subprocess.SubprocessError):
+            continue
     snapshot = {
         "schema": "xibalba.shield.inventory.v1",
         "os": {"system": platform.system(), "release": platform.release()[:128], "machine": platform.machine()[:64]},
