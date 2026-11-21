@@ -19,6 +19,7 @@ to reason about between this thread and the main sensor loop.
 from __future__ import annotations
 
 import logging
+import json
 import threading
 import time
 from pathlib import Path
@@ -50,11 +51,13 @@ class Watchdog:
         evidence_publisher: Any | None = None,
         responder_status: dict[str, Any] | None = None,
         sensor_status_file: Path | str | None = None,
+        inventory_state_file: Path | str | None = None,
     ) -> None:
         self._interval = interval
         # Opt-in (`shield run --sensor-status-file`): a local copy of each tick's sensor health for
         # the gate daemon's sensor-silence check (`shield.gate_zone`). None writes nothing.
         self._sensor_status_file = Path(sensor_status_file) if sensor_status_file is not None else None
+        self._inventory_state_file = Path(inventory_state_file) if inventory_state_file is not None else None
         self._device_config = device_config
         self._policy_engine = policy_engine
         self._reloader = reloader
@@ -75,7 +78,7 @@ class Watchdog:
             "last_sync_at": None,
             "error": "not synchronized",
         }
-        self._previous_inventory: dict[str, Any] | None = None
+        self._previous_inventory: dict[str, Any] | None = self._load_inventory_baseline()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -233,7 +236,28 @@ class Watchdog:
             snapshot = collect_inventory()
             drift = inventory_drift(self._previous_inventory, snapshot)
             self._previous_inventory = {"snapshot_hash": snapshot.get("snapshot_hash")}
+            self._save_inventory_baseline(self._previous_inventory)
             return {"healthy": True, "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     "snapshot_hash": snapshot.get("snapshot_hash"), "drift": drift}
         except Exception as exc:  # noqa: BLE001 -- inventory is observational
             return {"healthy": False, "error": str(exc)}
+
+    def _load_inventory_baseline(self) -> dict[str, Any] | None:
+        if self._inventory_state_file is None:
+            return None
+        try:
+            value = json.loads(self._inventory_state_file.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) and isinstance(value.get("snapshot_hash"), str) else None
+        except (OSError, ValueError, TypeError):
+            return None
+
+    def _save_inventory_baseline(self, baseline: dict[str, Any]) -> None:
+        if self._inventory_state_file is None:
+            return
+        try:
+            self._inventory_state_file.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._inventory_state_file.with_suffix(self._inventory_state_file.suffix + ".tmp")
+            tmp.write_text(json.dumps(baseline, sort_keys=True), encoding="utf-8")
+            tmp.replace(self._inventory_state_file)
+        except OSError:
+            logger.warning("watchdog: could not persist inventory baseline", exc_info=True)

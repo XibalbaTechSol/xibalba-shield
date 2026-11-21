@@ -825,6 +825,7 @@ def _run(args: argparse.Namespace) -> int:
         responder_status=action_broker.status() if action_broker is not None else {"capabilities": {}, "readiness": {"ready": {}, "proofs": {}, "missing": {}}},
         # `local-run` reaches here with its own namespace, which has no such option.
         sensor_status_file=getattr(args, "sensor_status_file", None),
+        inventory_state_file=getattr(args, "inventory_state_file", None),
     )
     watchdog.start()
 
@@ -1379,6 +1380,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--tier3-disable-file", type=Path, default=None)
     p_run.add_argument("--tier3-store", type=Path, default=Path("~/.xibalba-shield/tier3.db").expanduser())
     p_run.add_argument("--tier3-receipt-dir", type=Path, default=None)
+    p_run.add_argument("--inventory-state-file", type=Path, default=None,
+                       help="persist only the previous endpoint inventory hash for restart-safe drift detection")
     p_run.add_argument("--cortex-url", default=None, help="optional redacted Cortex memory endpoint; also accepts XIBALBA_CORTEX_URL")
     p_run.add_argument("--cortex-token", default=None, help="optional Cortex memory token; also accepts XIBALBA_CORTEX_TOKEN")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,
