@@ -1,6 +1,45 @@
-import { Activity, ArrowRight, Crosshair, ExternalLink, FileCheck2, Fingerprint, Globe, LockKeyhole, Mail, Phone, Radar, RotateCcw, Settings2, Shield, ShieldCheck, SquareTerminal, Workflow } from 'lucide-react'
+import { useState } from 'react'
+import {
+  Activity,
+  ArrowRight,
+  Check,
+  Copy,
+  Cpu,
+  Crosshair,
+  Download,
+  ExternalLink,
+  FileCheck2,
+  Fingerprint,
+  Globe,
+  Layers,
+  LockKeyhole,
+  Mail,
+  Phone,
+  Radar,
+  RotateCcw,
+  Server,
+  Settings2,
+  Shield,
+  ShieldCheck,
+  Sliders,
+  SquareTerminal,
+  Terminal,
+  Workflow,
+} from 'lucide-react'
 import { Brand } from './Brand'
 import { MermaidDiagram } from './MermaidDiagram'
+
+const CONTROL_LOOP_FLOW = `flowchart LR
+  SP["Signed pack<br/>setpoint · constraint vector C"] --> SUM(("Σ"))
+  SUM --> HK["Hook<br/>evaluates C on post-state"]
+  HK -->|admit / revert<br/>fail-closed| AG["Agent & Workload<br/>the plant"]
+  AG -->|"what actually happened"| SH["🛡️ Shield Endpoint Defense<br/><b>The Plant Sensor & Enforcer</b><br/>kernel procfs · eBPF · EDR · nftables"]
+  SH -->|"evidence spans"| OR["Oracle<br/>verify · epoch · anchor"]
+  OR -->|"verified state estimate"| SUM
+  OR -->|"verified"| AIS["AIS<br/>bounded gain"]
+  AIS -.->|"widen finite bound"| SP
+  AG -->|"settle"| CH["Chain<br/>anchors · settlement"]
+  SH -.->|"anchorRoot"| CH`
 
 const DECISION_FLOW = `flowchart LR
   A[Kernel & EDR telemetry<br/>Falcon · Defender · eBPF] --> B[Normalize<br/>deduplicate · enrich]
@@ -34,13 +73,65 @@ const AGENT_FLOW = `flowchart LR
   H -. governs .-> D
   I[Sensors & EDR connectors] -. observes .-> E`
 
+const INSTALL_OPTIONS = [
+  {
+    id: 'daemon',
+    label: 'Linux Daemon',
+    icon: Server,
+    desc: 'Deploy the hardened systemd service with automatic service account isolation, capability bounding (CAP_BPF, CAP_PERFMON, CAP_NET_ADMIN), and local Ed25519 identity generation.',
+    cmd: 'curl -sSL https://raw.githubusercontent.com/XibalbaTechSol/xibalba-shield/main/scripts/install_linux_agent.sh | sudo bash',
+    verify: 'sudo systemctl status xibalba-shield --no-pager',
+    details: 'Installs binary to /opt/xibalba-shield, configs to /etc/xibalba-shield, and loads local OPA policy bundles.'
+  },
+  {
+    id: 'cli',
+    label: 'Python Package / CLI',
+    icon: Terminal,
+    desc: 'Install directly into your Python 3.12+ environment or uv virtualenv. Ideal for local developer workstations, AI agent host sandboxes, and offline testing.',
+    cmd: 'pip install xibalba-shield\nshield run --sensor process-exec --local',
+    verify: 'shield status',
+    details: 'Runs procfs & socket monitoring loop, evaluates deterministic policies, and writes hash-chained logs to ~/.xibalba-shield/.'
+  },
+  {
+    id: 'pair',
+    label: 'Zero-Trust Device Pairing',
+    icon: Cpu,
+    desc: 'Pair an endpoint device with your Shield console using RFC 8628 Device Authorization. Binds local host hardware keys and Ed25519 DID to tenant policy.',
+    cmd: 'shield pair --tenant <tenant-id>',
+    verify: 'shield verify-log',
+    details: 'Generates user code & URL, binds device DID, and synchronizes signed OPA Rego policy bundles.'
+  },
+  {
+    id: 'docker',
+    label: 'Container / Edge Node',
+    icon: Layers,
+    desc: 'Deploy as an isolated containerized agent mounting host procfs and network namespaces for continuous container and host monitoring.',
+    cmd: 'docker run -d --name xibalba-shield \\\n  --privileged \\\n  --net=host \\\n  -v /proc:/host/proc:ro \\\n  -v /etc/xibalba-shield:/etc/xibalba-shield:ro \\\n  ghcr.io/xibalbatechsol/xibalba-shield:latest',
+    verify: 'docker logs xibalba-shield --tail 20',
+    details: 'Inspects host TCP sockets and process trees without requiring kernel headers or custom driver compilation.'
+  }
+]
+
 export function Landing({ next }) {
+  const [activeInstallTab, setActiveInstallTab] = useState('daemon')
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const activeInstall = INSTALL_OPTIONS.find((opt) => opt.id === activeInstallTab) || INSTALL_OPTIONS[0]
+
   return (
     <main className="landing">
       <header className="site-header">
         <nav className="site-nav" aria-label="Main Navigation">
           <a className="brand-link" href="#top" aria-label="Xibalba Shield home"><Brand /></a>
           <div className="nav-links">
+            <a href="#install">Install</a>
+            <a href="#loop">Control loop</a>
             <a href="#platform">Platform</a>
             <a href="#architecture">Architecture</a>
             <a href="#responders">Responders</a>
@@ -67,23 +158,26 @@ export function Landing({ next }) {
             height="691"
           />
           <p className="eyebrow">
-            <span aria-hidden="true" /> VERIFIABLE RESPONSE GOVERNANCE &amp; BOUNDARY GATING
+            <span aria-hidden="true" /> INDEPENDENT ENDPOINT SECURITY &amp; RESPONSE GOVERNANCE
           </p>
           <h1>
             The EDR detects and acts.<br />
             <em>Shield proves who authorized it.</em>
           </h1>
           <p className="lede">
-            Cryptographic topology, zero-probability boundary gating, and verifiable response governance across enterprise EDRs and autonomous AI agents. Anchored to the Integrity Protocol.
+            Deterministic Linux endpoint defense, kernel telemetry, zero-probability boundary gating, and fail-closed host containment. Built as an autonomous endpoint platform that operates completely standalone or serves as the ground-truth sensor and enforcer in closed control loops.
           </p>
           <div className="hero-actions">
-            <button className="primary big" onClick={next}>
-              Explore the console <ArrowRight aria-hidden="true" />
+            <a href="#install" className="primary big" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={18} aria-hidden="true" /> Install Shield
+            </a>
+            <button className="quiet big" onClick={next}>
+              Explore console <ArrowRight aria-hidden="true" />
             </button>
-            <a href="#platform" className="learn-more-link">See how it works</a>
+            <a href="#loop" className="learn-more-link">See control loop</a>
           </div>
           <div className="checks">
-            <span><ShieldCheck aria-hidden="true" /> Zero-probability boundary gating</span>
+            <span><ShieldCheck aria-hidden="true" /> Standalone host containment</span>
             <span><ShieldCheck aria-hidden="true" /> Hash-bound EDR response governance</span>
             <span><ShieldCheck aria-hidden="true" /> Tamper-evident ledger &amp; HIPAA packets</span>
           </div>
@@ -111,7 +205,7 @@ export function Landing({ next }) {
       <section className="proof" id="proof" aria-label="Key architectural properties">
         <div>
           <b>Kernel-level</b>
-          <span>eBPF sensor coverage</span>
+          <span>procfs &amp; eBPF coverage</span>
         </div>
         <div>
           <b>Default deny</b>
@@ -148,6 +242,134 @@ export function Landing({ next }) {
               </button>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="landing-loop" id="loop" aria-labelledby="loop-heading">
+        <div className="landing-section-copy">
+          <div>
+            <p className="eyebrow">CONTROL THEORY &amp; CLOSED-LOOP INTEGRITY</p>
+            <h2 id="loop-heading">Where Shield works in the <em>control loop.</em></h2>
+          </div>
+          <p>
+            A feedback controller cannot stabilize a system without accurate plant measurements. Prompt guardrails fail because reinforcement learning agents treat them as thermodynamic friction and optimize around them. Shield is the physical plant sensor and fail-closed enforcer: observing what actually happened at the OS and network layer, executing containment when bounds revert, and publishing signed evidence spans to close the control loop.
+          </p>
+        </div>
+        <MermaidDiagram chart={CONTROL_LOOP_FLOW} label="Closed control loop: Signed pack, Hook, Agent plant, Shield sensor, Oracle, AIS, and Settlement chain" />
+        <p className="diagram-caption">
+          <LockKeyhole size={14} /> Shield is the physical plant sensor and runtime enforcer ($y = Cx + v$). It measures ground truth on the host and executes fail-closed physical containment if the hook reverts.
+        </p>
+        <div className="loop-callout-grid">
+          <article className="loop-callout-card">
+            <h3><Radar size={16} /> 1. The Plant Sensor (Observation)</h3>
+            <p>
+              Shield sits alongside the agent workload, monitoring raw Linux telemetry: /proc/net/tcp socket tables, process exec events, file writes, and network flows. It captures ground truth regardless of what the LLM claims it did.
+            </p>
+          </article>
+          <article className="loop-callout-card">
+            <h3><Sliders size={16} /> 2. Fail-Closed Enforcer (Containment)</h3>
+            <p>
+              When a policy gate or boundary hook evaluates constraint vector C and reverts, Shield enforces physical containment on the host: dropping egress via nftables, issuing SIGSTOP, freezing cgroups, or terminating rogue processes.
+            </p>
+          </article>
+          <article className="loop-callout-card">
+            <h3><ShieldCheck size={16} /> 3. Evidence Spans to Oracle (Feedback)</h3>
+            <p>
+              Shield emits signed, tamper-evident evidence spans to the Oracle. The Oracle verifies state estimates, updates the Autonomous Integrity Score (AIS), and anchors Merkle roots to the settlement chain—preventing reward hacking.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section className="landing-install" id="install" aria-labelledby="install-heading">
+        <div className="landing-section-copy">
+          <div>
+            <p className="eyebrow">DEPLOYMENT &amp; QUICKSTART</p>
+            <h2 id="install-heading">Install Shield on any <em>Linux host or cluster.</em></h2>
+          </div>
+          <p>
+            Shield operates as a self-contained endpoint defense agent. Whether deployed as a hardened systemd daemon on bare-metal servers, containerized on Kubernetes edge nodes, or run via CLI on developer workstations, Shield brings kernel-level visibility and fail-closed containment to your infrastructure.
+          </p>
+        </div>
+
+        <div className="install-container">
+          <div className="install-tabs" role="tablist" aria-label="Installation methods">
+            {INSTALL_OPTIONS.map((opt) => {
+              const Icon = opt.icon
+              const isActive = activeInstallTab === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`install-tab-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveInstallTab(opt.id)}
+                >
+                  <Icon size={15} aria-hidden="true" />
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="install-terminal">
+            <div className="terminal-header">
+              <div className="terminal-dots">
+                <span className="terminal-dot red" />
+                <span className="terminal-dot yellow" />
+                <span className="terminal-dot green" />
+                <span style={{ marginLeft: '8px', opacity: 0.8 }}>shield@{activeInstall.id}:~</span>
+              </div>
+              <button
+                className="copy-snippet-btn"
+                onClick={() => handleCopy(activeInstall.cmd)}
+                aria-label="Copy installation command"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+                {copied ? 'Copied' : 'Copy command'}
+              </button>
+            </div>
+            <div className="terminal-content">
+              <p className="terminal-description">{activeInstall.desc}</p>
+              <pre className="terminal-code-block"><code>{activeInstall.cmd}</code></pre>
+              <div className="terminal-verify-block">
+                <span className="terminal-verify-label">Verification Command</span>
+                <code className="terminal-verify-code">{activeInstall.verify}</code>
+                <small style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '2px' }}>{activeInstall.details}</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="install-features-grid">
+            <div className="install-feature-item">
+              <Cpu size={16} aria-hidden="true" />
+              <div>
+                <b>No Kernel Modules Required</b>
+                <span>Runs cleanly via native Linux procfs, eBPF CO-RE, or socket helpers without kernel patching.</span>
+              </div>
+            </div>
+            <div className="install-feature-item">
+              <LockKeyhole size={16} aria-hidden="true" />
+              <div>
+                <b>Fail-Closed Local Containment</b>
+                <span>Reversible SIGSTOP, cgroup freeze, and nftables rules execute locally without cloud roundtrips.</span>
+              </div>
+            </div>
+            <div className="install-feature-item">
+              <Fingerprint size={16} aria-hidden="true" />
+              <div>
+                <b>Cryptographic Hash Chains</b>
+                <span>Every decision and outcome is signed with a local Ed25519 node keypair in tamper-evident logs.</span>
+              </div>
+            </div>
+            <div className="install-feature-item">
+              <ShieldCheck size={16} aria-hidden="true" />
+              <div>
+                <b>Air-Gap &amp; Standalone Ready</b>
+                <span>Full OPA policy execution, sensor loops, and local containment function without external internet.</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -227,6 +449,8 @@ export function Landing({ next }) {
           </div>
           <div className="footer-links">
             <h3>Platform</h3>
+            <a href="#install">Install &amp; Quickstart</a>
+            <a href="#loop">Control loop</a>
             <a href="#platform">Capabilities</a>
             <a href="#architecture">Architecture</a>
             <a href="#agent-security">Agent security</a>
