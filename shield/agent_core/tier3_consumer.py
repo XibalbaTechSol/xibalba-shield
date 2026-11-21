@@ -7,7 +7,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from shield.schemas.events import EscalationResponse, Tier3Verdict
 
@@ -26,7 +26,8 @@ class Tier3Consumer:
     def __init__(self, store_path: Path, *, action_broker=None,
                  mode: Literal["shadow", "enforce"] = "shadow",
                  max_actions_per_window: int = 10, window_seconds: float = 60.0,
-                 disabled_flag_path: Path | None = None) -> None:
+                 disabled_flag_path: Path | None = None,
+                 pid_identity: Callable[[int], str | None] | None = None) -> None:
         if mode not in {"shadow", "enforce"}:
             raise ValueError("mode must be shadow or enforce")
         self.path = Path(store_path)
@@ -37,6 +38,7 @@ class Tier3Consumer:
         self.max_actions = max_actions_per_window
         self.window_seconds = window_seconds
         self.disabled_flag_path = Path(disabled_flag_path) if disabled_flag_path else None
+        self.pid_identity = pid_identity
         self._action_times: list[float] = []
         self._limit_lock = threading.Lock()
         self._tripped = False
@@ -65,7 +67,22 @@ class Tier3Consumer:
                 self._tripped = True
                 return Tier3Outcome(False, response.verdict, "tier3_action_cap", disagree)
             self._action_times.append(now)
-        return Tier3Outcome(False, response.verdict, "release requires verified process identity", disagree)
+        pid = getattr(response, "pid", None)
+        expected = getattr(response, "pid_identity", None)
+        if not isinstance(pid, int) or not isinstance(expected, str):
+            return Tier3Outcome(False, response.verdict, "release requires verified process identity", disagree)
+        if self.pid_identity is None:
+            return Tier3Outcome(False, response.verdict, "release requires verified process identity", disagree)
+        current = self.pid_identity(pid)
+        if current is None:
+            return Tier3Outcome(False, response.verdict, "pid_gone", disagree)
+        if current != expected:
+            return Tier3Outcome(False, response.verdict, "pid_identity_mismatch", disagree)
+        try:
+            self.action_broker.resume(pid)
+        except Exception as exc:  # noqa: BLE001 -- leave process contained
+            return Tier3Outcome(False, response.verdict, f"resume_failed: {exc}", disagree)
+        return Tier3Outcome(True, response.verdict, "resumed", disagree)
 
     @property
     def tripped(self) -> bool:
