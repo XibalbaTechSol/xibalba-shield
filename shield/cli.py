@@ -100,8 +100,20 @@ def _status(args: argparse.Namespace) -> int:
 
 def _inventory(args: argparse.Namespace) -> int:
     from .inventory import collect_inventory
+    from .advisories import load_advisories, match_advisories
+    import hashlib
+    import json
     import json
     snapshot = collect_inventory(max_processes=args.max_processes, max_packages=args.max_packages)
+    if args.advisory_source:
+        try:
+            source = load_advisories(args.advisory_source, max_age_seconds=args.advisory_max_age)
+            snapshot["vulnerability"] = match_advisories(snapshot, source)
+        except (OSError, ValueError, TypeError) as exc:
+            snapshot["vulnerability"] = {"status": "unavailable", "known_findings": None, "error": str(exc)}
+        unsigned = dict(snapshot)
+        unsigned.pop("snapshot_hash", None)
+        snapshot["snapshot_hash"] = hashlib.sha256(json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if args.hash_only:
         print(json.dumps({"schema": snapshot["schema"], "snapshot_hash": snapshot["snapshot_hash"]}, sort_keys=True))
     else:
@@ -1241,6 +1253,8 @@ def main(argv: list[str] | None = None) -> int:
     p_inventory.add_argument("--max-processes", type=int, default=256)
     p_inventory.add_argument("--max-packages", type=int, default=512)
     p_inventory.add_argument("--hash-only", action="store_true", help="print only the canonical snapshot hash")
+    p_inventory.add_argument("--advisory-source", type=Path, default=None)
+    p_inventory.add_argument("--advisory-max-age", type=int, default=86400)
     p_inventory.set_defaults(func=_inventory)
 
     p_events = sub.add_parser("events", help="show recent policy decisions")
