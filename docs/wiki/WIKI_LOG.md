@@ -1,5 +1,13 @@
 # Xibalba Shield Wiki — Log
 
+## [2026-11-21] feat | Auth0 OIDC unification, Google SSO fix, and 2-column UI visual audit
+
+- Unified OAuth authentication across Xibalba Shield with Auth0 OIDC tenant (`dev-2acdt0dlqgi0pqcu.us.auth0.com`, Client ID `Yj3RdbTXctEWUQPYc2gLvQ7OTQkL5t6u`).
+- Added `shield/backend/auth0_auth.py` providing RS256 JWKS token verification, claim extraction, and session creation via `/api/shield/auth/auth0/session`.
+- Fixed Google Social SSO by routing directly through Auth0's verified Google Social connection (`connection=google-oauth2`), resolving unapproved client ID redirect errors.
+- Redesigned Sign In and Create Account interfaces (`ui/src/components/SignIn.jsx`) into a responsive 2-column card architecture with 0-scroll button reachability and polished dark aerospace styling.
+- Created audit matrix in `docs/audits/2026-11-21-visual-audit-and-ui-cleanup.md` and wiki concept in `concepts/ui-auth-and-pairing.md`.
+
 ## [2026-11-20] feat | Agent0 mesh, procfs telemetry, policy studio, and 5-surface UI
 
 - Registered Base Sepolia ERC-8004 tokens for `shield.local` (#4, model `jev-fast-classifier`, scope `agent:shield.local`) and `shield.cloud` (#5, model `hermes-3-70b`, scope `agent:shield.cloud`) with mutual DID verification over RFC 8785 canonical A2A.
