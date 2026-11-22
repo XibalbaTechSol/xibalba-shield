@@ -114,6 +114,7 @@ def publish_runtime_status(
     did_preflight_detail: dict[str, Any] | None = None,
     responder_status: dict[str, Any] | None = None,
     settings_status: dict[str, Any] | None = None,
+    inventory_status: dict[str, Any] | None = None,
     timeout: float = 1.0,
 ) -> bool:
     """Publish status without ever affecting local enforcement or process exit."""
@@ -133,6 +134,8 @@ def publish_runtime_status(
         status["responders"] = responder_status
     if settings_status is not None:
         status["settings"] = settings_status
+    if inventory_status is not None:
+        status["inventory"] = inventory_status
     payload = {
         "tenant_id": device_config.tenant_id,
         "device_id": device_config.device_id,

@@ -32,16 +32,21 @@ from __future__ import annotations
 import json
 import logging
 import time
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Literal, Protocol
 
 from integrity_sdk.telemetry.tracing import get_tracer
 
-from ..schemas.events import AgentEvent, EnforcementOutcome, ExportStatus, NormalizedEvent, PolicyDecision
+from ..schemas.events import (AgentEvent, Decision, EnforcementOutcome, EscalationRequest,
+                              EscalationResponse, ExportStatus, NormalizedEvent, PolicyDecision)
 from ..policy_engine.engine import EvaluationContext, PolicyEngine
 from .action_broker import ActionBroker
 from .eventlog import EventLog
 from .registry import AgentRegistry, DeviceContext
 from .slm_backend import SlmBackend
+from .tier3_backend import Tier3Backend
+from .tier3_safety import BoundedAdjudicationStore, Tier3DispatchGate
 
 logger = logging.getLogger("shield.agent_core.router")
 tracer = get_tracer("xibalba-shield")
@@ -82,6 +87,10 @@ class EventRouter:
         memory_provider: MemoryProviderLike | None = None,
         hermes_publisher: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
         jev_analyzer: Callable[[NormalizedEvent, PolicyDecision], None] | None = None,
+        tier3_backend: Tier3Backend | None = None,
+        tier3_sink: Callable[[EscalationResponse], None] | None = None,
+        tier3_store: BoundedAdjudicationStore | None = None,
+        tier3_gate: Tier3DispatchGate | None = None,
         enforcement_mode: Literal["observe", "enforce"] = "enforce",
     ) -> None:
         if enforcement_mode not in {"observe", "enforce"}:
@@ -107,6 +116,11 @@ class EventRouter:
         # already happened and before downstream evidence export; its failure cannot change the
         # PolicyDecision or block the router.
         self.jev_analyzer = jev_analyzer
+        self.tier3_backend = tier3_backend
+        self.tier3_sink = tier3_sink
+        self.tier3_store = tier3_store
+        self.tier3_gate = tier3_gate or Tier3DispatchGate()
+        self._tier3_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="shield-tier3") if tier3_backend else None
         # Compatibility default remains enforcement for existing Shield callers.
         # The policy-pack rollout can pass observe explicitly, then change the
         # deployment default only after its signed-bundle path is enabled.
@@ -144,6 +158,9 @@ class EventRouter:
             self.registry.touch(event.agent.agent_id)
 
         decision = self.policy_engine.evaluate(event, self._context())
+        # Preserve an immutable snapshot: fail-closed normalization mutates the live decision
+        # from escalate to contain, but Tier 3 must receive the original trail.
+        tier1_decision = deepcopy(decision.decision)
 
         # Tier-2 escalation: only for events Tier 1 (the deterministic PolicyEngine) already
         # flagged `escalate` -- an SLM backend is never the first evaluator an event sees, and
@@ -269,6 +286,20 @@ class EventRouter:
                     )
                 )
 
+        # Tier 3 is strictly post-containment and asynchronous. The local decision is already
+        # authoritative; a slow, broken, or unavailable backend cannot delay or alter it.
+        if self.tier3_backend is not None and tier1_decision.action == "escalate":
+            request = EscalationRequest(
+                event=event,
+                tier1_decision=tier1_decision,
+                tier2_decision=decision.decision,
+                reason=decision.decision.reason,
+            )
+            if self.tier3_gate.acquire():
+                self._tier3_executor.submit(self._dispatch_tier3, request)
+            else:
+                logger.warning("Tier-3 dispatch rate/concurrency cap reached; skipping adjudication")
+
         if self.jev_analyzer is not None:
             try:
                 self.jev_analyzer(event, decision)
@@ -378,3 +409,19 @@ class EventRouter:
                 logger.exception("failed to publish redacted Hermes event for %s", decision.event_ref.event_id)
 
         return decision
+
+    def _dispatch_tier3(self, request: EscalationRequest) -> None:
+        """Best-effort post-containment dispatch; never feeds back into `handle()`."""
+        try:
+            response = self.tier3_backend.adjudicate(request)  # type: ignore[union-attr]
+            if not isinstance(response, EscalationResponse):
+                logger.error("Tier-3 backend returned an invalid response; ignoring")
+                return
+            if self.tier3_store is not None:
+                self.tier3_store.record(response)
+            if self.tier3_sink is not None:
+                self.tier3_sink(response)
+        except Exception:  # noqa: BLE001 -- Tier 3 is downstream of local enforcement
+            logger.exception("Tier-3 adjudication failed; local decision remains authoritative")
+        finally:
+            self.tier3_gate.release()

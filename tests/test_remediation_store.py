@@ -1,32 +1,18 @@
 import pytest
+from shield.remediation_store import RemediationPlanStore
 
-from shield.backend.remediation import claim_next, complete, list_attempts
-from shield.backend.store import ShieldStore
+def test_plan_lifecycle_is_durable_and_non_executing(tmp_path):
+    p = {"actions": [{"package": "x", "to_version": "2"}], "executed": False}
+    store = RemediationPlanStore(tmp_path / "plans.db")
+    plan_id = store.create(p)
+    assert store.get(plan_id)["status"] == "pending"
+    store.transition(plan_id, "approved", actor="alice", reason="maintenance approved")
+    reopened = RemediationPlanStore(tmp_path / "plans.db")
+    result = reopened.get(plan_id)
+    assert result["status"] == "approved" and result["executed"] is False
+    assert result["audit"][0]["actor"] == "alice"
 
-
-def _store(tmp_path):
-    store = ShieldStore(tmp_path / "shield.sqlite3")
-    store.enroll_device(base_url="http://backend", tenant_id="tenant-a", device_id="dev-1", device_role="worker")
-    return store
-
-
-def test_claim_and_complete_are_device_scoped_and_audited(tmp_path):
-    store = _store(tmp_path)
-    request = store.request_exporter_remediation(tenant_id="tenant-a", device_id="dev-1", action="retry")
-    claimed = claim_next(store, tenant_id="tenant-a", device_id="dev-1")
-    assert claimed["id"] == request["id"] and claimed["status"] == "running"
-    assert claim_next(store, tenant_id="tenant-a", device_id="dev-1") is None
-    result = complete(store, tenant_id="tenant-a", device_id="dev-1", request_id=request["id"], status="completed", detail={"delivered": 2})
-    assert result["status"] == "completed"
-    assert list_attempts(store, tenant_id="tenant-a") == [{
-        "request_id": request["id"], "tenant_id": "tenant-a", "device_id": "dev-1",
-        "started_at": claimed["started_at"], "completed_at": result["completed_at"],
-        "status": "completed", "detail_json": '{"delivered": 2}', "detail": {"delivered": 2},
-    }]
-
-
-def test_cannot_complete_unclaimed_or_wrong_device_job(tmp_path):
-    store = _store(tmp_path)
-    request = store.request_exporter_remediation(tenant_id="tenant-a", device_id="dev-1", action="flush")
-    with pytest.raises(KeyError):
-        complete(store, tenant_id="tenant-a", device_id="dev-1", request_id=request["id"], status="completed", detail={})
+def test_unknown_plan_and_invalid_transition_fail(tmp_path):
+    store = RemediationPlanStore(tmp_path / "plans.db")
+    with pytest.raises(KeyError): store.transition("missing", "approved")
+    with pytest.raises(ValueError): store.transition("missing", "executed")

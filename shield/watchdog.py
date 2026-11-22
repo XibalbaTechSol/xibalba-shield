@@ -19,7 +19,9 @@ to reason about between this thread and the main sensor loop.
 from __future__ import annotations
 
 import logging
+import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -49,11 +51,17 @@ class Watchdog:
         evidence_publisher: Any | None = None,
         responder_status: dict[str, Any] | None = None,
         sensor_status_file: Path | str | None = None,
+        inventory_state_file: Path | str | None = None,
+        advisory_source: Path | str | None = None,
+        advisory_max_age: int = 86400,
     ) -> None:
         self._interval = interval
         # Opt-in (`shield run --sensor-status-file`): a local copy of each tick's sensor health for
         # the gate daemon's sensor-silence check (`shield.gate_zone`). None writes nothing.
         self._sensor_status_file = Path(sensor_status_file) if sensor_status_file is not None else None
+        self._inventory_state_file = Path(inventory_state_file) if inventory_state_file is not None else None
+        self._advisory_source = Path(advisory_source) if advisory_source is not None else None
+        self._advisory_max_age = advisory_max_age
         self._device_config = device_config
         self._policy_engine = policy_engine
         self._reloader = reloader
@@ -74,6 +82,7 @@ class Watchdog:
             "last_sync_at": None,
             "error": "not synchronized",
         }
+        self._previous_inventory: dict[str, Any] | None = self._load_inventory_baseline()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -222,4 +231,45 @@ class Watchdog:
             did_preflight_detail=self._did_preflight_status,
             responder_status=self._responder_status,
             settings_status=self._settings_status,
+            inventory_status=self._inventory_status(),
         )
+
+    def _inventory_status(self) -> dict[str, object]:
+        try:
+            from .inventory import collect_inventory, inventory_drift
+            snapshot = collect_inventory()
+            if getattr(self, "_advisory_source", None) is not None:
+                from .advisories import load_advisories, match_advisories
+                try:
+                    snapshot["vulnerability"] = match_advisories(
+                        snapshot, load_advisories(self._advisory_source, max_age_seconds=getattr(self, "_advisory_max_age", 86400))
+                    )
+                except (OSError, ValueError, TypeError) as exc:
+                    snapshot["vulnerability"] = {"status": "unavailable", "known_findings": None, "error": str(exc)}
+            drift = inventory_drift(self._previous_inventory, snapshot)
+            self._previous_inventory = {"snapshot_hash": snapshot.get("snapshot_hash")}
+            self._save_inventory_baseline(self._previous_inventory)
+            return {"healthy": True, "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "snapshot_hash": snapshot.get("snapshot_hash"), "drift": drift}
+        except Exception as exc:  # noqa: BLE001 -- inventory is observational
+            return {"healthy": False, "error": str(exc)}
+
+    def _load_inventory_baseline(self) -> dict[str, Any] | None:
+        if self._inventory_state_file is None:
+            return None
+        try:
+            value = json.loads(self._inventory_state_file.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) and isinstance(value.get("snapshot_hash"), str) else None
+        except (OSError, ValueError, TypeError):
+            return None
+
+    def _save_inventory_baseline(self, baseline: dict[str, Any]) -> None:
+        if self._inventory_state_file is None:
+            return
+        try:
+            self._inventory_state_file.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._inventory_state_file.with_suffix(self._inventory_state_file.suffix + ".tmp")
+            tmp.write_text(json.dumps(baseline, sort_keys=True), encoding="utf-8")
+            tmp.replace(self._inventory_state_file)
+        except OSError:
+            logger.warning("watchdog: could not persist inventory baseline", exc_info=True)

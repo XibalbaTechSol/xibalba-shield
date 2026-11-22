@@ -106,6 +106,16 @@ def test_runtime_status_includes_sensors_and_exporter_when_given(mock_urlopen):
 
 
 @patch("shield.runtime_status.urlopen", return_value=_Response())
+def test_runtime_status_includes_inventory_when_given(mock_urlopen):
+    import json
+    config = DeviceConfig(device_id="dev-1", tenant_id="tenant-1", device_token="secret", backend_url="http://backend")
+    assert publish_runtime_status(device_config=config, policy_status={}, opa_status={},
+                                  inventory_status={"healthy": True, "snapshot": {"schema": "xibalba.shield.inventory.v1"}})
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["status"]["inventory"]["snapshot"]["schema"] == "xibalba.shield.inventory.v1"
+
+
+@patch("shield.runtime_status.urlopen", return_value=_Response())
 def test_runtime_status_includes_did_preflight_when_given(mock_urlopen):
     import json
 

@@ -98,6 +98,70 @@ def _status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _inventory(args: argparse.Namespace) -> int:
+    from .inventory import collect_inventory
+    from .advisories import build_remediation_plan, load_advisories, match_advisories
+    import hashlib
+    import json
+    import json
+    snapshot = collect_inventory(max_processes=args.max_processes, max_packages=args.max_packages)
+    if args.advisory_source:
+        try:
+            expected_key = getattr(args, "advisory_key", None)
+            require_sig = bool(getattr(args, "require_advisory_signature", False))
+            source = load_advisories(
+                args.advisory_source,
+                max_age_seconds=args.advisory_max_age,
+                expected_key=expected_key,
+                require_signature=require_sig,
+            )
+            snapshot["vulnerability"] = match_advisories(snapshot, source)
+            if args.remediation_plan:
+                snapshot["vulnerability"]["remediation_plan"] = build_remediation_plan(
+                    snapshot["vulnerability"].get("known_findings", []),
+                    maintenance_window=args.maintenance_window,
+                )
+        except (OSError, ValueError, TypeError) as exc:
+            snapshot["vulnerability"] = {"status": "unavailable", "known_findings": None, "error": str(exc)}
+        unsigned = dict(snapshot)
+        unsigned.pop("snapshot_hash", None)
+        snapshot["snapshot_hash"] = hashlib.sha256(json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if args.hash_only:
+        print(json.dumps({"schema": snapshot["schema"], "snapshot_hash": snapshot["snapshot_hash"]}, sort_keys=True))
+    else:
+        print(json.dumps(snapshot, indent=2, sort_keys=True))
+    return 0
+
+
+def _remediation(args: argparse.Namespace) -> int:
+    from .remediation_store import RemediationPlanStore
+    import json
+    store = RemediationPlanStore(args.store)
+    try:
+        if args.action == "create":
+            if args.plan is None:
+                raise ValueError("--plan is required for create")
+            plan = json.loads(args.plan.read_text(encoding="utf-8"))
+            print(json.dumps({"plan_id": store.create(plan), "executed": False}, sort_keys=True))
+        elif args.action == "show":
+            if not args.plan_id:
+                raise ValueError("--plan-id is required for show")
+            result = store.get(args.plan_id)
+            if result is None:
+                print(f"unknown plan: {args.plan_id}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            if not args.plan_id:
+                raise ValueError("--plan-id is required for approval transitions")
+            store.transition(args.plan_id, args.action, actor=args.actor, reason=args.reason)
+            print(json.dumps(store.get(args.plan_id), sort_keys=True))
+        return 0
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        print(f"shield remediation: {exc}", file=sys.stderr)
+        return 1
+
+
 def _events(args: argparse.Namespace) -> int:
     log = EventLog(args.log_path)
     rows = log.recent(args.recent)
@@ -635,6 +699,34 @@ def _run(args: argparse.Namespace) -> int:
         print(f"shield run: {exc}", file=sys.stderr)
         return 1
 
+    tier3_backend = None
+    tier3_consumer = None
+    if getattr(args, "tier3_backend", "none") == "http":
+        try:
+            from .agent_core.tier3_consumer import Tier3Consumer
+            from .agent_core.tier3_http_backend import HttpTier3Backend
+            tier3_backend = HttpTier3Backend(args.tier3_endpoint, timeout_seconds=args.tier3_timeout_seconds,
+                                             token=args.tier3_token)
+            def _tier3_pid_identity(pid: int) -> str | None:
+                try:
+                    from .sensors.ebpf.loader import _read_proc_cgroup_id, _read_proc_start_time
+                    start = _read_proc_start_time(pid)
+                    cgroup = _read_proc_cgroup_id(pid)
+                    return None if not start and not cgroup else f"start:{start}:cgroup:{cgroup}"
+                except (OSError, ValueError, TypeError):
+                    return None
+
+            tier3_consumer = Tier3Consumer(
+                args.tier3_store, mode=args.tier3_mode, action_broker=action_broker,
+                max_actions_per_window=args.tier3_max_actions,
+                window_seconds=args.tier3_window_seconds,
+                disabled_flag_path=args.tier3_disable_file,
+                pid_identity=_tier3_pid_identity,
+                receipt_dir=args.tier3_receipt_dir,
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"shield run: Tier 3 disabled; invalid configuration: {exc}", file=sys.stderr)
+
     from .agent_core.cortex_memory import CortexMemoryProvider
     # Cortex publication is downstream of enforcement: if its outbox cannot be opened
     # (permissions, read-only path, disk), run without it rather than crash-loop the
@@ -750,6 +842,8 @@ def _run(args: argparse.Namespace) -> int:
     router = EventRouter(device=device, registry=registry, policy_engine=policy_engine,
                          exporter=exporter, action_broker=action_broker, event_log=event_log,
                          slm_backend=slm_backend,
+                         tier3_backend=tier3_backend,
+                         tier3_sink=tier3_consumer.apply if tier3_consumer else None,
                          # local-run builds its own Namespace without this flag; default = enforce.
                          enforcement_mode=getattr(args, "enforcement_mode", "enforce"),
                          decision_sink=evidence_publisher.publish_decision,
@@ -795,6 +889,9 @@ def _run(args: argparse.Namespace) -> int:
         responder_status=action_broker.status() if action_broker is not None else {"capabilities": {}, "readiness": {"ready": {}, "proofs": {}, "missing": {}}},
         # `local-run` reaches here with its own namespace, which has no such option.
         sensor_status_file=getattr(args, "sensor_status_file", None),
+        inventory_state_file=getattr(args, "inventory_state_file", None),
+        advisory_source=getattr(args, "advisory_source", None),
+        advisory_max_age=getattr(args, "advisory_max_age", 86400),
     )
     watchdog.start()
 
@@ -1046,6 +1143,7 @@ def _local_run(args: argparse.Namespace) -> int:
             args.no_containment = True
             args.log_integrity_key = None
             args.slm_backend = "none"
+            args.tier3_backend = "none"
             args.cortex_url = None
             args.cortex_token = None
             args.watchdog_interval = 15.0
@@ -1194,6 +1292,28 @@ def main(argv: list[str] | None = None) -> int:
     p_status = sub.add_parser("status", help="show a summary of what Shield has observed")
     p_status.set_defaults(func=_status)
 
+    p_inventory = sub.add_parser("inventory", help="show bounded endpoint metadata and posture")
+    p_inventory.add_argument("--max-processes", type=int, default=256)
+    p_inventory.add_argument("--max-packages", type=int, default=512)
+    p_inventory.add_argument("--hash-only", action="store_true", help="print only the canonical snapshot hash")
+    p_inventory.add_argument("--advisory-source", type=Path, default=None)
+    p_inventory.add_argument("--advisory-max-age", type=int, default=86400)
+    p_inventory.add_argument("--advisory-key", default=None, help="optional secret/public key to verify advisory signature")
+    p_inventory.add_argument("--require-advisory-signature", action="store_true", help="require valid signature on advisory source")
+    p_inventory.add_argument("--remediation-plan", action="store_true",
+                             help="include an approval-required patch plan; never applies updates")
+    p_inventory.add_argument("--maintenance-window", default=None)
+    p_inventory.set_defaults(func=_inventory)
+
+    p_remediation = sub.add_parser("remediation", help="manage approval-only vulnerability remediation plans")
+    p_remediation.add_argument("action", choices=("create", "show", "approved", "rejected"))
+    p_remediation.add_argument("--store", type=Path, required=True)
+    p_remediation.add_argument("--plan", type=Path, default=None)
+    p_remediation.add_argument("--plan-id", default=None)
+    p_remediation.add_argument("--actor", default="operator")
+    p_remediation.add_argument("--reason", default="")
+    p_remediation.set_defaults(func=_remediation)
+
     p_events = sub.add_parser("events", help="show recent policy decisions")
     p_events.add_argument("--recent", type=int, default=20)
     p_events.set_defaults(func=_events)
@@ -1338,6 +1458,22 @@ def main(argv: list[str] | None = None) -> int:
                             "(default, unchanged behavior), 'simulated' (deterministic, synthetic "
                             "pattern match -- no model required), 'local' (real Qwen2.5-0.5B "
                             "inference, requires llama-cpp-python + slm_training/models/)")
+    p_run.add_argument("--tier3-backend", choices=("none", "http"), default="none")
+    p_run.add_argument("--tier3-endpoint", default="")
+    p_run.add_argument("--tier3-token", default="")
+    p_run.add_argument("--tier3-timeout-seconds", type=float, default=20.0)
+    p_run.add_argument("--tier3-mode", choices=("shadow", "enforce"), default="shadow")
+    p_run.add_argument("--tier3-max-actions", type=int, default=10)
+    p_run.add_argument("--tier3-window-seconds", type=float, default=60.0)
+    p_run.add_argument("--tier3-disable-file", type=Path, default=None)
+    p_run.add_argument("--tier3-store", type=Path, default=Path("~/.xibalba-shield/tier3.db").expanduser())
+    p_run.add_argument("--tier3-receipt-dir", type=Path, default=None)
+    p_run.add_argument("--inventory-state-file", type=Path, default=None,
+                       help="persist only the previous endpoint inventory hash for restart-safe drift detection")
+    p_run.add_argument("--advisory-source", type=Path, default=None,
+                       help="optional local advisory database for watchdog vulnerability matching")
+    p_run.add_argument("--advisory-max-age", type=int, default=86400,
+                       help="maximum advisory database age in seconds")
     p_run.add_argument("--cortex-url", default=None, help="optional redacted Cortex memory endpoint; also accepts XIBALBA_CORTEX_URL")
     p_run.add_argument("--cortex-token", default=None, help="optional Cortex memory token; also accepts XIBALBA_CORTEX_TOKEN")
     p_run.add_argument("--log-integrity-key", type=Path, default=None,

@@ -1659,6 +1659,32 @@ def make_handler(
                     return
                 self._send_json({"requests": store.list_exporter_remediation_requests(tenant_id=tenant_id, device_id=query.get("device_id", [None])[0]), "attempts": remediation.list_attempts(store, tenant_id=tenant_id, device_id=query.get("device_id", [None])[0])})
                 return
+            if parsed.path == "/api/shield/remediation/plans":
+                tenant_id = self._tenant_from_query_or_error(query)
+                if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                    return
+                status_filter = query.get("status", [None])[0]
+                limit_str = query.get("limit", ["100"])[0]
+                try:
+                    limit_val = int(limit_str)
+                except ValueError:
+                    limit_val = 100
+                plans = store.remediation.list_plans(tenant_id=tenant_id, status=status_filter, limit=limit_val)
+                self._send_json({"status": "ok", "tenant_id": tenant_id, "plans": plans})
+                return
+            if parsed.path.startswith("/api/shield/remediation/plans/"):
+                sub_path = parsed.path[len("/api/shield/remediation/plans/") :]
+                plan_id = sub_path.split("/")[0]
+                if plan_id:
+                    tenant_id = self._tenant_from_query_or_error(query)
+                    if tenant_id is None or not self._require_admin(tenant_id=tenant_id):
+                        return
+                    plan_record = store.remediation.get(plan_id, tenant_id=tenant_id)
+                    if plan_record is None:
+                        self._send_error(HTTPStatus.NOT_FOUND, f"plan not found: {plan_id}")
+                        return
+                    self._send_json({"status": "ok", "plan": plan_record})
+                    return
             if parsed.path == "/api/shield/integrations":
                 tenant_id = self._tenant_from_query_or_error(query)
                 if tenant_id is None:
@@ -2132,6 +2158,59 @@ def make_handler(
                     self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                     return
                 self._send_json(request, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path == "/api/shield/remediation/plans":
+                tenant_id = str(body.get("tenant_id") or "default")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                plan_content = body.get("plan")
+                if not isinstance(plan_content, dict):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "plan object is required")
+                    return
+                plan_id = store.remediation.create(plan_content, tenant_id=tenant_id)
+                self._send_json({"status": "ok", "plan_id": plan_id, "executed": False}, status=HTTPStatus.CREATED)
+                return
+
+            if parsed.path.startswith("/api/shield/remediation/plans/") and parsed.path.endswith("/transition"):
+                sub_path = parsed.path[len("/api/shield/remediation/plans/") : -len("/transition")]
+                plan_id = sub_path.strip("/")
+                tenant_id = str(body.get("tenant_id") or "default")
+                if not self._require_admin(tenant_id=tenant_id):
+                    return
+                new_status = str(body.get("status") or "")
+                if new_status not in ("approved", "rejected"):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "status must be approved or rejected")
+                    return
+                reason = str(body.get("reason") or "")
+
+                token = self._current_admin_token()
+                session = store.session_for_token(token) if token else None
+                if session is not None:
+                    actor = session.get("email") or session.get("display_name") or "operator"
+                    actor_id = session.get("account_id") or ""
+                else:
+                    actor = "operator"
+                    actor_id = "admin"
+
+                try:
+                    store.remediation.transition(
+                        plan_id,
+                        new_status,
+                        actor=actor,
+                        actor_id=actor_id,
+                        reason=reason,
+                        tenant_id=tenant_id,
+                    )
+                except KeyError:
+                    self._send_error(HTTPStatus.NOT_FOUND, f"plan not found: {plan_id}")
+                    return
+                except ValueError as exc:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+
+                updated = store.remediation.get(plan_id, tenant_id=tenant_id)
+                self._send_json({"status": "ok", "plan": updated})
                 return
 
             if parsed.path == "/api/shield/auth/oidc/login":
@@ -3922,8 +4001,21 @@ def _console_html() -> str:
       <h2>Containment Outcomes</h2>
       <pre id="containmentOutcomes">Loading containment outcomes...</pre>
     </div>
+    <div class="card">
+      <h2>Vulnerability Remediation Plans (Read-Only)</h2>
+      <pre id="remediationPlans">Loading remediation plans from /api/shield/remediation/plans...</pre>
+    </div>
   </div>
   <script>
+    async function loadRemediationPlans() {
+      try {
+        const res = await fetch('/api/shield/remediation/plans?tenant_id=default');
+        const data = await res.json();
+        document.getElementById('remediationPlans').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('remediationPlans').textContent = 'Error: ' + e.message;
+      }
+    }
     async function loadExporterStatus() {
       try {
         const res = await fetch('/api/shield/exporter-status');
@@ -3955,6 +4047,7 @@ def _console_html() -> str:
     loadExporterStatus();
     loadContainmentOutcomes();
     loadDecisions();
+    loadRemediationPlans();
   </script>
 </body>
 </html>"""

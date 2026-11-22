@@ -24,6 +24,7 @@ from .plans_store import PlanStore
 from .response_store import ResponseLedgerStore
 from .usage_ledger import UsageLedgerStore
 from .shield_billing import ShieldBilling, supabase_durability
+from ..remediation_store import RemediationPlanStore
 
 
 def _binding_bytes(*, tenant_id: str, device_id: str, agent_id: str) -> bytes:
@@ -179,6 +180,8 @@ class ShieldStore:
         self.billing.init_schema()
         self.free_tier = FreeTierPressure(self._conn, self.plans, self.billing)
         self.free_tier.init_schema()
+        self.remediation = RemediationPlanStore(self._conn)
+        self.remediation.init_schema()
 
     def close(self) -> None:
         self._conn.close()
