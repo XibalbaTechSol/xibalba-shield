@@ -147,7 +147,7 @@ def _remediation(args: argparse.Namespace) -> int:
         else:
             if not args.plan_id:
                 raise ValueError("--plan-id is required for approval transitions")
-            store.transition(args.plan_id, args.action)
+            store.transition(args.plan_id, args.action, actor=args.actor, reason=args.reason)
             print(json.dumps(store.get(args.plan_id), sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
@@ -1301,6 +1301,8 @@ def main(argv: list[str] | None = None) -> int:
     p_remediation.add_argument("--store", type=Path, required=True)
     p_remediation.add_argument("--plan", type=Path, default=None)
     p_remediation.add_argument("--plan-id", default=None)
+    p_remediation.add_argument("--actor", default="operator")
+    p_remediation.add_argument("--reason", default="")
     p_remediation.set_defaults(func=_remediation)
 
     p_events = sub.add_parser("events", help="show recent policy decisions")
