@@ -107,7 +107,14 @@ def _inventory(args: argparse.Namespace) -> int:
     snapshot = collect_inventory(max_processes=args.max_processes, max_packages=args.max_packages)
     if args.advisory_source:
         try:
-            source = load_advisories(args.advisory_source, max_age_seconds=args.advisory_max_age)
+            expected_key = getattr(args, "advisory_key", None)
+            require_sig = bool(getattr(args, "require_advisory_signature", False))
+            source = load_advisories(
+                args.advisory_source,
+                max_age_seconds=args.advisory_max_age,
+                expected_key=expected_key,
+                require_signature=require_sig,
+            )
             snapshot["vulnerability"] = match_advisories(snapshot, source)
             if args.remediation_plan:
                 snapshot["vulnerability"]["remediation_plan"] = build_remediation_plan(
@@ -1291,6 +1298,8 @@ def main(argv: list[str] | None = None) -> int:
     p_inventory.add_argument("--hash-only", action="store_true", help="print only the canonical snapshot hash")
     p_inventory.add_argument("--advisory-source", type=Path, default=None)
     p_inventory.add_argument("--advisory-max-age", type=int, default=86400)
+    p_inventory.add_argument("--advisory-key", default=None, help="optional secret/public key to verify advisory signature")
+    p_inventory.add_argument("--require-advisory-signature", action="store_true", help="require valid signature on advisory source")
     p_inventory.add_argument("--remediation-plan", action="store_true",
                              help="include an approval-required patch plan; never applies updates")
     p_inventory.add_argument("--maintenance-window", default=None)
