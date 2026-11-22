@@ -4,6 +4,7 @@ from .output import OutputBlocked, guard_output
 from .post_action_verification import PostActionAnomaly, verify_post_action
 from .retrieval_context import RetrievalDenied, guard_retrieval
 from .tool_execution import ToolCallDenied, guard_tool_call
+from .sentry_gate import SentryGatingError, guard_sentry_tool_call
 
 __all__ = [
     "IngressDenied",
@@ -18,4 +19,6 @@ __all__ = [
     "guard_retrieval",
     "ToolCallDenied",
     "guard_tool_call",
+    "SentryGatingError",
+    "guard_sentry_tool_call",
 ]
