@@ -126,6 +126,35 @@ def _inventory(args: argparse.Namespace) -> int:
     return 0
 
 
+def _remediation(args: argparse.Namespace) -> int:
+    from .remediation_store import RemediationPlanStore
+    import json
+    store = RemediationPlanStore(args.store)
+    try:
+        if args.action == "create":
+            if args.plan is None:
+                raise ValueError("--plan is required for create")
+            plan = json.loads(args.plan.read_text(encoding="utf-8"))
+            print(json.dumps({"plan_id": store.create(plan), "executed": False}, sort_keys=True))
+        elif args.action == "show":
+            if not args.plan_id:
+                raise ValueError("--plan-id is required for show")
+            result = store.get(args.plan_id)
+            if result is None:
+                print(f"unknown plan: {args.plan_id}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            if not args.plan_id:
+                raise ValueError("--plan-id is required for approval transitions")
+            store.transition(args.plan_id, args.action)
+            print(json.dumps(store.get(args.plan_id), sort_keys=True))
+        return 0
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        print(f"shield remediation: {exc}", file=sys.stderr)
+        return 1
+
+
 def _events(args: argparse.Namespace) -> int:
     log = EventLog(args.log_path)
     rows = log.recent(args.recent)
@@ -1266,6 +1295,13 @@ def main(argv: list[str] | None = None) -> int:
                              help="include an approval-required patch plan; never applies updates")
     p_inventory.add_argument("--maintenance-window", default=None)
     p_inventory.set_defaults(func=_inventory)
+
+    p_remediation = sub.add_parser("remediation", help="manage approval-only vulnerability remediation plans")
+    p_remediation.add_argument("action", choices=("create", "show", "approved", "rejected"))
+    p_remediation.add_argument("--store", type=Path, required=True)
+    p_remediation.add_argument("--plan", type=Path, default=None)
+    p_remediation.add_argument("--plan-id", default=None)
+    p_remediation.set_defaults(func=_remediation)
 
     p_events = sub.add_parser("events", help="show recent policy decisions")
     p_events.add_argument("--recent", type=int, default=20)
