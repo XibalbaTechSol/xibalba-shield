@@ -223,3 +223,18 @@ class CanaryManager:
 
     def get_trap(self, canary_id: str) -> CanaryTrap | None:
         return self._traps.get(canary_id)
+
+    def strip_canaries(self, text: str) -> str:
+        """Strips zero-width canary tokens and delimiters from text."""
+        if not text:
+            return ""
+        out = text
+        while True:
+            start_pos = out.find(CANARY_PREFIX)
+            if start_pos == -1:
+                break
+            end_pos = out.find(CANARY_SUFFIX, start_pos + len(CANARY_PREFIX))
+            if end_pos == -1:
+                break
+            out = out[:start_pos] + out[end_pos + len(CANARY_SUFFIX) :]
+        return out

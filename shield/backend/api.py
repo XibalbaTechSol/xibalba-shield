@@ -1372,6 +1372,12 @@ def make_handler(
                 self._send_json({"ok": True, "tenant_id": tenant_id, "count": len(formatted), "events": formatted})
                 return
 
+            if parsed.path == "/api/sentry/audit/summary":
+                tenant_id = query.get("tenant_id", ["default"])[0]
+                summary = store.sentry.get_audit_summary(tenant_id)
+                self._send_json({"ok": True, "tenant_id": tenant_id, "summary": summary})
+                return
+
             if parsed.path == "/api/shield/nurse-rachel/policy-pack":
                 from ..nurse_rachel.policy_pack import load_nurse_rachel_policy_pack
                 manifest = load_nurse_rachel_policy_pack()
@@ -2161,6 +2167,8 @@ def make_handler(
                 taint_level = body.get("taint_level", "TRUSTED_AXIOM")
                 decontamination_proof = body.get("decontamination_proof")
                 ttl_seconds = body.get("ttl_seconds")
+                human_approval = body.get("human_approval")
+                require_human_approval = body.get("require_human_approval")
 
                 try:
                     ticket = sentry_poj_engine.authorize_action(
@@ -2171,6 +2179,8 @@ def make_handler(
                         causal_memory_hashes=causal_memory_hashes,
                         taint_level=taint_level,
                         decontamination_proof=decontamination_proof,
+                        human_approval=human_approval,
+                        require_human_approval=require_human_approval,
                         ttl_seconds=int(ttl_seconds) if ttl_seconds is not None else None,
                     )
                 except PoJAuthorizationError as exc:
@@ -2231,6 +2241,27 @@ def make_handler(
                     return
 
                 self._send_json({"ok": True, "ticket_id": ticket_id, "verified": True, "consumed": True})
+                return
+
+            if parsed.path == "/api/sentry/hitl/approve":
+                approver_id = str(body.get("approver_id") or "").strip()
+                tool_name = str(body.get("tool_name") or "").strip()
+                params = body.get("params", {})
+                ttl_seconds = int(body.get("ttl_seconds") or 300)
+                reason = str(body.get("reason") or "Approved by operator").strip()
+
+                if not approver_id or not tool_name:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "approver_id and tool_name required")
+                    return
+
+                approval = sentry_poj_engine.mint_human_approval(
+                    approver_id=approver_id,
+                    tool_name=tool_name,
+                    params=params,
+                    ttl_seconds=ttl_seconds,
+                    reason=reason,
+                )
+                self._send_json({"ok": True, "approval": approval})
                 return
 
             if parsed.path == "/api/v1/policy/push":
