@@ -22,6 +22,14 @@ from .justification import (
 from .ocsf import OCSFActivityId, OCSFSeverityId, OCSFEventBuilder
 from .enclave import TenantEnclave, EnclaveError
 from .store import SentryDefenseStore
+from .client import (
+    ShieldSentryClient,
+    IngressResult,
+    CanaryCheckResult,
+    ActionExecutionResult,
+    SentryClientError,
+    SentryDeniedError,
+)
 
 __all__ = [
     "TaintLevel",
@@ -42,4 +50,10 @@ __all__ = [
     "TenantEnclave",
     "EnclaveError",
     "SentryDefenseStore",
+    "ShieldSentryClient",
+    "IngressResult",
+    "CanaryCheckResult",
+    "ActionExecutionResult",
+    "SentryClientError",
+    "SentryDeniedError",
 ]

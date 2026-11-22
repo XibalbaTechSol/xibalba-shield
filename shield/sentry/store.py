@@ -258,3 +258,36 @@ class SentryDefenseStore:
         if not row:
             return None
         return json.loads(row[0])
+
+    # --- Audit Summary ---
+    def get_audit_summary(self, tenant_id: str) -> dict[str, Any]:
+        cur = self._conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM sentry_canaries WHERE tenant_id = ?) as total_canaries,
+                (SELECT COUNT(*) FROM sentry_canaries WHERE tenant_id = ? AND tripped = 1) as tripped_canaries,
+                (SELECT COUNT(*) FROM sentry_tickets WHERE tenant_id = ?) as total_tickets,
+                (SELECT COUNT(*) FROM sentry_tickets WHERE tenant_id = ? AND consumed = 1) as consumed_tickets,
+                (SELECT COUNT(*) FROM sentry_ocsf_events WHERE tenant_id = ?) as total_ocsf_events,
+                (SELECT COUNT(*) FROM sentry_ocsf_events WHERE tenant_id = ? AND event_type = 'poj_denied') as denied_actions
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id, tenant_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {
+                "total_canaries": 0,
+                "tripped_canaries": 0,
+                "total_tickets": 0,
+                "consumed_tickets": 0,
+                "total_ocsf_events": 0,
+                "denied_actions": 0,
+            }
+        return {
+            "total_canaries": row[0],
+            "tripped_canaries": row[1],
+            "total_tickets": row[2],
+            "consumed_tickets": row[3],
+            "total_ocsf_events": row[4],
+            "denied_actions": row[5],
+        }

@@ -71,6 +71,12 @@ class ExecutionTicket:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ExecutionTicket:
+        import dataclasses
+        valid_fields = {f.name for f in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in valid_fields})
+
 
 class ToolRiskPolicy:
     """Configures default risk levels for agent tool invocations."""
@@ -128,13 +134,67 @@ class ProofOfJustificationEngine:
         secret_key: str | bytes = "",
         policy: ToolRiskPolicy | None = None,
         default_ttl_seconds: int = 60,
+        require_human_approval_for_critical: bool = False,
     ) -> None:
         self._secret = (
             secret_key.encode("utf-8") if isinstance(secret_key, str) else secret_key
         ) or secrets.token_bytes(32)
         self.policy = policy or ToolRiskPolicy()
         self.default_ttl = default_ttl_seconds
+        self.require_human_approval_for_critical = require_human_approval_for_critical
         self._quarantined_memory_hashes: set[str] = set()
+
+    def mint_human_approval(
+        self,
+        *,
+        approver_id: str,
+        tool_name: str,
+        params: Any,
+        ttl_seconds: int = 300,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Issues an approval signed by the engine key."""
+        now_ts = time.time()
+        expires_ts = now_ts + ttl_seconds
+        p_hash = compute_params_hash(params)
+        canonical = f"{approver_id}|{tool_name.lower().strip()}|{p_hash}|{int(expires_ts)}".encode("utf-8")
+        sig = hmac.new(self._secret, canonical, hashlib.sha256).hexdigest()
+        return {
+            "approver_id": approver_id,
+            "tool_name": tool_name.lower().strip(),
+            "params_hash": p_hash,
+            "expires_at": int(expires_ts),
+            "reason": reason,
+            "signature": sig,
+        }
+
+    def verify_human_approval(
+        self,
+        approval: Mapping[str, Any],
+        *,
+        tool_name: str,
+        params: Any,
+    ) -> bool:
+        """Verifies signature, tool_name match, params_hash match, and expiration of an approval."""
+        try:
+            approver_id = str(approval["approver_id"])
+            appr_tool = str(approval["tool_name"]).lower().strip()
+            p_hash = str(approval["params_hash"])
+            expires_at = int(approval["expires_at"])
+            sig = str(approval["signature"])
+        except (KeyError, ValueError, TypeError):
+            return False
+
+        if time.time() > expires_at:
+            return False
+        if appr_tool != tool_name.lower().strip():
+            return False
+        if not hmac.compare_digest(p_hash, compute_params_hash(params)):
+            return False
+
+        canonical = f"{approver_id}|{appr_tool}|{p_hash}|{expires_at}".encode("utf-8")
+        expected_sig = hmac.new(self._secret, canonical, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig)
 
     def quarantine_memory(self, memory_hash: str) -> None:
         """Marks a compromised memory hash as quarantined."""
@@ -156,6 +216,8 @@ class ProofOfJustificationEngine:
         causal_memory_hashes: Sequence[str] = (),
         taint_level: TaintLevel | str = TaintLevel.TRUSTED_AXIOM,
         decontamination_proof: Mapping[str, Any] | None = None,
+        human_approval: Mapping[str, Any] | None = None,
+        require_human_approval: bool | None = None,
         ttl_seconds: int | None = None,
     ) -> ExecutionTicket:
         """
@@ -193,6 +255,20 @@ class ProofOfJustificationEngine:
                     "POJ_QUARANTINED_JUSTIFICATION",
                     f"Causal memory '{h}' is quarantined due to suspected poisoning/malicious injection.",
                     {"quarantined_hash": h},
+                )
+
+        # 4. Human-in-the-Loop Check: CRITICAL tools require verified human approval when enforced
+        needs_hitl = (
+            require_human_approval
+            if require_human_approval is not None
+            else self.require_human_approval_for_critical
+        )
+        if risk == ToolRiskLevel.CRITICAL and needs_hitl:
+            if not human_approval or not self.verify_human_approval(human_approval, tool_name=tool_name, params=params):
+                raise PoJAuthorizationError(
+                    "POJ_REQUIRES_HUMAN_APPROVAL",
+                    f"Action '{tool_name}' (risk CRITICAL) requires cryptographic human approval before execution ticket issuance.",
+                    {"tool_name": tool_name, "risk": risk.name, "params_hash": params_hash},
                 )
 
         # 4. Generate Ticket
