@@ -38,8 +38,8 @@ REV_ZW_MAP = {
 }
 
 ZW_CHARS = set(REV_ZW_MAP.keys())
-CANARY_PREFIX = "\u200b\u200c\ufeff\u200d"
-CANARY_SUFFIX = "\u200d\ufeff\u200c\u200b"
+CANARY_PREFIX = "\u2060\u200b\u200c\ufeff\u200d"
+CANARY_SUFFIX = "\u200d\ufeff\u200c\u200b\u2060"
 
 
 def encode_bytes_to_zw(data: bytes) -> str:
