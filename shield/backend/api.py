@@ -1261,6 +1261,21 @@ def make_handler(
     # store; until then the short assertion TTL plus audience binding is what bounds replay.
     _device_replay_guard = ReplayGuard()
 
+    from ..sentry import (
+        TaintLevel,
+        TaintLatticeTracker,
+        CanaryManager,
+        scrub_secrets_and_pii,
+        ProofOfJustificationEngine,
+        PoJAuthorizationError,
+        OCSFActivityId,
+        OCSFSeverityId,
+        OCSFEventBuilder,
+    )
+    sentry_canary_mgr = CanaryManager(default_secret=admin_token or "shield-canary-secret")
+    sentry_taint_tracker = TaintLatticeTracker()
+    sentry_poj_engine = ProofOfJustificationEngine(secret_key=admin_token or "shield-poj-secret")
+
     auth_attempts: dict[str, list[float]] = {}
 
     def auth_allowed(identity: str) -> bool:
@@ -1315,6 +1330,46 @@ def make_handler(
 
             if parsed.path == "/api/shield/auth/providers":
                 self._send_json({"google": True, "github": True})
+                return
+
+            if parsed.path == "/api/sentry/status":
+                self._send_json(
+                    {
+                        "ok": True,
+                        "subsystem": "xibalba-shield-sentry",
+                        "version": "1.0.0",
+                        "phases": {
+                            "phase1_ingress_taint_and_canary": "active",
+                            "phase2_proof_of_justification": "active",
+                            "phase3_ocsf_siem_and_enclaves": "active",
+                        },
+                        "security_lattice": [level.name for level in TaintLevel],
+                    }
+                )
+                return
+
+            if parsed.path == "/api/sentry/siem/ocsf":
+                tenant_id = query.get("tenant_id", ["default"])[0]
+                limit_val = int(query.get("limit", ["100"])[0])
+                profile = query.get("profile", ["ocsf"])[0]
+                output_fmt = query.get("format", ["json"])[0]
+
+                events = store.sentry.list_ocsf_events(tenant_id, limit=limit_val)
+                formatted = [
+                    OCSFEventBuilder.format_for_siem(ev["payload"], profile=profile)
+                    for ev in events
+                ]
+                if output_fmt == "jsonl":
+                    body_lines = [json.dumps(f, sort_keys=True) for f in formatted]
+                    body_text = "\n".join(body_lines) + ("\n" if body_lines else "")
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type", "application/x-ndjson")
+                    self.send_header("Content-Length", str(len(body_text.encode("utf-8"))))
+                    self.end_headers()
+                    self.wfile.write(body_text.encode("utf-8"))
+                    return
+
+                self._send_json({"ok": True, "tenant_id": tenant_id, "count": len(formatted), "events": formatted})
                 return
 
             if parsed.path == "/api/shield/nurse-rachel/policy-pack":
@@ -1985,6 +2040,197 @@ def make_handler(
                         },
                     }
                 )
+                return
+
+            if parsed.path == "/api/sentry/ingress/taint":
+                tenant_id = str(body.get("tenant_id") or "default")
+                agent_did = str(body.get("agent_did") or "did:integrity:anonymous")
+                raw_content = str(body.get("content") or "")
+                source = str(body.get("source") or "ingress")
+                source_type = str(body.get("source_type") or "prompt")
+                level_str = str(body.get("taint_level") or "UNTRUSTED_INGEST")
+                scrub_secrets = bool(body.get("scrub_secrets", True))
+                inject_canary = bool(body.get("inject_canary", False))
+
+                processed_content = raw_content
+                scrub_records = []
+                if scrub_secrets:
+                    processed_content, scrub_records = scrub_secrets_and_pii(processed_content)
+                    if scrub_records:
+                        store.sentry.record_ocsf_event(
+                            OCSFEventBuilder.build_event(
+                                activity_id=OCSFActivityId.INPUT_INGEST,
+                                severity_id=OCSFSeverityId.LOW,
+                                tenant_id=tenant_id,
+                                agent_did=agent_did,
+                                tool_name="scrubber",
+                                taint_level=level_str,
+                                message=f"Redacted {len(scrub_records)} secrets/PII patterns",
+                                details={"redactions": [r.kind for r in scrub_records]},
+                            ),
+                            event_type="scrub_secrets",
+                        )
+
+                canary_trap = None
+                canary_id = None
+                if inject_canary:
+                    canary_trap, invisible_token = sentry_canary_mgr.generate_canary(tenant_id, agent_did)
+                    store.sentry.record_canary(canary_trap)
+                    processed_content = sentry_canary_mgr.inject_canary(processed_content, invisible_token)
+                    canary_id = canary_trap.canary_id
+
+                t_level = TaintLevel.from_str(level_str)
+                canaries_seq = [canary_id] if canary_id else []
+                record = sentry_taint_tracker.track_ingest(
+                    processed_content,
+                    source=source,
+                    source_type=source_type,
+                    level=t_level,
+                    canary_ids=canaries_seq,
+                )
+
+                store.sentry.record_ocsf_event(
+                    OCSFEventBuilder.build_event(
+                        activity_id=OCSFActivityId.INPUT_INGEST,
+                        severity_id=OCSFSeverityId.INFORMATIONAL,
+                        tenant_id=tenant_id,
+                        agent_did=agent_did,
+                        taint_level=t_level.name,
+                        message=f"Ingress data tracked at {t_level.name}",
+                        details={"record_id": record.record_id, "canary_id": canary_id},
+                    ),
+                    event_type="ingress_taint",
+                )
+
+                self._send_json(
+                    {
+                        "ok": True,
+                        "record_id": record.record_id,
+                        "content": processed_content,
+                        "taint_level": record.taint_level.name,
+                        "scrubbed_count": len(scrub_records),
+                        "canary_id": canary_id,
+                    }
+                )
+                return
+
+            if parsed.path == "/api/sentry/canary/check":
+                tenant_id = str(body.get("tenant_id") or "default")
+                agent_did = str(body.get("agent_did") or "did:integrity:anonymous")
+                text = str(body.get("text") or "")
+
+                alerts = sentry_canary_mgr.detect_canaries(text)
+                for alert in alerts:
+                    store.sentry.trip_canary(alert.canary_id, alert.snippet)
+                    store.sentry.record_ocsf_event(
+                        OCSFEventBuilder.build_event(
+                            activity_id=OCSFActivityId.CANARY_TRIP,
+                            severity_id=OCSFSeverityId.CRITICAL,
+                            tenant_id=alert.tenant_id or tenant_id,
+                            agent_did=alert.agent_id or agent_did,
+                            message=f"Canary trap {alert.canary_id} tripped! Exfiltration detected.",
+                            details={"canary_id": alert.canary_id, "snippet": alert.snippet},
+                        ),
+                        event_type="canary_trip",
+                    )
+
+                self._send_json(
+                    {
+                        "ok": True,
+                        "tripped": len(alerts) > 0,
+                        "alerts": [
+                            {
+                                "canary_id": a.canary_id,
+                                "tenant_id": a.tenant_id,
+                                "agent_id": a.agent_id,
+                                "detection_time": a.detection_time,
+                                "severity": a.severity,
+                            }
+                            for a in alerts
+                        ],
+                    }
+                )
+                return
+
+            if parsed.path == "/api/sentry/authorize-action":
+                tenant_id = str(body.get("tenant_id") or "default")
+                agent_did = str(body.get("agent_did") or "did:integrity:anonymous")
+                tool_name = str(body.get("tool_name") or "")
+                params = body.get("params", {})
+                causal_memory_hashes = list(body.get("causal_memory_hashes") or [])
+                taint_level = body.get("taint_level", "TRUSTED_AXIOM")
+                decontamination_proof = body.get("decontamination_proof")
+                ttl_seconds = body.get("ttl_seconds")
+
+                try:
+                    ticket = sentry_poj_engine.authorize_action(
+                        tenant_id=tenant_id,
+                        agent_did=agent_did,
+                        tool_name=tool_name,
+                        params=params,
+                        causal_memory_hashes=causal_memory_hashes,
+                        taint_level=taint_level,
+                        decontamination_proof=decontamination_proof,
+                        ttl_seconds=int(ttl_seconds) if ttl_seconds is not None else None,
+                    )
+                except PoJAuthorizationError as exc:
+                    store.sentry.record_ocsf_event(
+                        OCSFEventBuilder.build_event(
+                            activity_id=OCSFActivityId.POLICY_VIOLATION,
+                            severity_id=OCSFSeverityId.HIGH,
+                            tenant_id=tenant_id,
+                            agent_did=agent_did,
+                            tool_name=tool_name,
+                            taint_level=str(taint_level),
+                            message=f"Action authorization rejected: {exc.code}",
+                            details=exc.details,
+                        ),
+                        event_type="poj_denied",
+                    )
+                    self._send_error(HTTPStatus.FORBIDDEN, str(exc))
+                    return
+
+                store.sentry.record_ticket(ticket)
+                store.sentry.record_ocsf_event(
+                    OCSFEventBuilder.build_event(
+                        activity_id=OCSFActivityId.TOOL_GATED,
+                        severity_id=OCSFSeverityId.INFORMATIONAL,
+                        tenant_id=tenant_id,
+                        agent_did=agent_did,
+                        tool_name=tool_name,
+                        taint_level=str(taint_level),
+                        message=f"Action authorization granted for {tool_name}",
+                        details={"ticket_id": ticket.ticket_id, "risk_level": ticket.risk_level},
+                    ),
+                    event_type="poj_granted",
+                )
+
+                self._send_json({"ok": True, "ticket": ticket.to_dict()})
+                return
+
+            if parsed.path == "/api/sentry/verify-ticket":
+                ticket_id = str(body.get("ticket_id") or "")
+                tool_name = str(body.get("tool_name") or "")
+                params = body.get("params", {})
+
+                ticket_data = store.sentry.get_ticket(ticket_id)
+                if not ticket_data:
+                    self._send_error(HTTPStatus.NOT_FOUND, "ticket not found")
+                    return
+                if ticket_data.get("consumed"):
+                    self._send_error(HTTPStatus.CONFLICT, "ticket already consumed (replay prevented)")
+                    return
+
+                if not sentry_poj_engine.verify_ticket(ticket_data, expected_tool=tool_name, expected_params=params):
+                    self._send_error(HTTPStatus.FORBIDDEN, "ticket verification failed (signature, tool, params, or expired)")
+                    return
+
+                consumed = store.sentry.consume_ticket(ticket_id)
+                if not consumed:
+                    self._send_error(HTTPStatus.CONFLICT, "failed to consume ticket")
+                    return
+
+                self._send_json({"ok": True, "ticket_id": ticket_id, "verified": True, "consumed": True})
                 return
 
             if parsed.path == "/api/v1/policy/push":
@@ -3862,6 +4108,37 @@ def run_server(
         server.tls_server = None  # type: ignore[attr-defined]
     server.store = store  # type: ignore[attr-defined]
     return server
+
+
+class BackgroundServer:
+    def __init__(self, httpd: ThreadingHTTPServer) -> None:
+        self._httpd = httpd
+        self.server_address = httpd.server_address
+        self._thread: threading.Thread | None = None
+
+    def start_background(self) -> threading.Thread:
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+        return self._thread
+
+    def shutdown(self) -> None:
+        self._httpd.shutdown()
+        self._httpd.server_close()
+
+    def server_close(self) -> None:
+        pass
+
+
+def make_server(
+    store: ShieldStore,
+    admin_token: str | None = None,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    **kwargs: Any,
+) -> BackgroundServer:
+    handler = make_handler(store=store, admin_token=admin_token, **kwargs)
+    httpd = ThreadingHTTPServer((host, port), handler)
+    return BackgroundServer(httpd)
 
 
 def main(argv: list[str] | None = None) -> int:
