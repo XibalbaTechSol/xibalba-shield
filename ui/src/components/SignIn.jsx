@@ -25,22 +25,24 @@ export function SignIn({ back, connect, initialMode = 'login' }) {
   useEffect(() => {
     removeSession('shield-auth-notice')
     const hash = window.location.hash || ''
-    if (hash && hash.includes('access_token=')) {
+    if (hash && (hash.includes('access_token=') || hash.includes('id_token='))) {
       const params = new URLSearchParams(hash.replace(/^#/, ''))
       const accessToken = params.get('access_token')
-      if (accessToken) {
+      const idToken = params.get('id_token')
+      const presentedToken = idToken || accessToken
+      if (presentedToken) {
         setBusy(true)
         setError('')
-        fetch('/api/shield/auth/supabase/session', {
+        fetch('/api/shield/auth/auth0/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ access_token: accessToken }),
+          body: JSON.stringify({ access_token: accessToken, id_token: idToken }),
         })
           .then(async (res) => {
             const data = await res.json().catch(() => ({}))
             if (!res.ok) {
-              throw new Error(data.error || 'Failed to authenticate with Supabase')
+              throw new Error(data.error || 'Failed to authenticate')
             }
             window.history.replaceState(null, '', window.location.pathname)
             const tenant = data.tenant_id
@@ -184,7 +186,7 @@ export function SignIn({ back, connect, initialMode = 'login' }) {
               <div className="auth-sso-grid">
                 {providers.google && (
                   <a
-                    href={`/api/shield/auth/oauth/google/authorize?mode=${mode}`}
+                    href={`/api/shield/auth/oauth/google/authorize?mode=${mode}&redirect_to=${encodeURIComponent(window.location.origin + '/')}`}
                     className="google-sso-btn"
                     id="google-sso-login-btn"
                   >

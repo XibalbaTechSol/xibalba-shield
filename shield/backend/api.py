@@ -1007,6 +1007,12 @@ def _handle_agent0_talk(
 
 
 
+from .auth0_auth import (
+    Auth0Error,
+    Auth0Verifier,
+    DEFAULT_AUTH0_DOMAIN,
+    DEFAULT_AUTH0_CLIENT_ID,
+)
 from .oidc import (
     OIDCClient,
     OAuthError,
@@ -1018,6 +1024,13 @@ from .supabase_auth import (
     SupabaseAuthError,
     SupabaseAuthVerifier,
 )
+
+
+def init_auth0_verifier() -> Auth0Verifier:
+    return Auth0Verifier()
+
+
+auth0_verifier = init_auth0_verifier()
 
 
 def init_oidc_client() -> OIDCClient | None:
@@ -1239,11 +1252,19 @@ def make_handler(
     auth_secret: str = "",
     ui_dir: Path | None = None,
     supabase_verifier: SupabaseAuthVerifier | None = None,
+    auth0_verifier: Auth0Verifier | None = None,
 ):
     # Resolved once: the containment check below compares against this, and resolving per
     # request would let a symlink swapped in mid-flight change what counts as inside.
     static_root = ui_dir.resolve() if ui_dir is not None else None
     active_oidc_client = oidc_client if oidc_client is not None else globals().get("oidc_client")
+    active_auth0_verifier = (
+        auth0_verifier
+        if auth0_verifier is not None
+        else (globals().get("auth0_verifier") or Auth0Verifier())
+        if (supabase_verifier is None or auth0_verifier is not None)
+        else None
+    )
     active_supabase_verifier = (
         supabase_verifier
         if supabase_verifier is not None
@@ -1314,7 +1335,7 @@ def make_handler(
                 return
 
             if parsed.path == "/api/shield/auth/providers":
-                self._send_json({"google": True, "github": True})
+                self._send_json({"google": True, "github": True, "auth0": True})
                 return
 
             if parsed.path == "/api/shield/nurse-rachel/policy-pack":
@@ -1340,15 +1361,23 @@ def make_handler(
                 "/api/shield/auth/oauth/google/authorize",
                 "/api/shield/auth/oauth/github/authorize",
                 "/api/shield/auth/oauth/authorize",
+                "/api/shield/auth/auth0/authorize",
             ):
                 provider = "github" if "/github/" in parsed.path else query.get("provider", ["google"])[0]
                 default_redirect = f"{public_base_url or self._request_base_url().rstrip('/')}/"
                 redirect_to = query.get("redirect_to", [""])[0] or default_redirect
+                nonce = secrets.token_hex(16)
                 try:
-                    auth_url = active_supabase_verifier.get_authorization_url(provider, redirect_to)
-                except Exception as exc:
-                    self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
-                    return
+                    if active_auth0_verifier and query.get("provider", [""])[0] != "supabase":
+                        auth_url = active_auth0_verifier.get_authorization_url(provider, redirect_to, nonce=nonce)
+                    else:
+                        auth_url = active_supabase_verifier.get_authorization_url(provider, redirect_to)
+                except Exception:
+                    try:
+                        auth_url = active_supabase_verifier.get_authorization_url(provider, redirect_to)
+                    except Exception as exc:
+                        self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+                        return
                 accept = self.headers.get("Accept", "")
                 if query.get("redirect", ["1"])[0] in {"1", "true"} or ("text/html" in accept and "application/json" not in accept):
                     self.send_response(HTTPStatus.SEE_OTHER)
@@ -1364,7 +1393,11 @@ def make_handler(
                 if not active_oidc_client:
                     default_redirect = f"{public_base_url or self._request_base_url().rstrip('/')}/"
                     redirect_to = query.get("redirect_to", [""])[0] or default_redirect
-                    auth_url = active_supabase_verifier.get_authorization_url("google", redirect_to)
+                    nonce = secrets.token_hex(16)
+                    try:
+                        auth_url = active_auth0_verifier.get_authorization_url("google", redirect_to, nonce=nonce)
+                    except Exception:
+                        auth_url = active_supabase_verifier.get_authorization_url("google", redirect_to)
                     accept = self.headers.get("Accept", "")
                     if query.get("redirect", ["1"])[0] in {"1", "true"} or ("text/html" in accept and "application/json" not in accept):
                         self.send_response(HTTPStatus.SEE_OTHER)
@@ -1372,7 +1405,7 @@ def make_handler(
                         self.send_header("Cache-Control", "no-store")
                         self.end_headers()
                         return
-                    self._send_json({"redirect_url": auth_url, "state": "supabase"})
+                    self._send_json({"redirect_url": auth_url, "state": "auth0"})
                     return
                 redirect_uri = self._oidc_redirect_uri()
                 code_verifier, code_challenge = generate_pkce()
@@ -2281,32 +2314,42 @@ def make_handler(
                 )
                 return
 
-            if parsed.path == "/api/shield/auth/supabase/session":
-                access_token = str(body.get("access_token") or "").strip()
-                if not access_token:
-                    self._send_error(HTTPStatus.BAD_REQUEST, "access_token is required")
+            if parsed.path in ("/api/shield/auth/auth0/session", "/api/shield/auth/supabase/session"):
+                presented_token = str(body.get("id_token") or body.get("access_token") or "").strip()
+                if not presented_token:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "access_token or id_token is required")
                     return
+                claims = None
+                # First try Auth0 JWKS verification
                 try:
-                    claims = active_supabase_verifier.verify_token(access_token)
-                except SupabaseAuthError as exc:
-                    self._send_error(HTTPStatus.UNAUTHORIZED, f"Invalid Supabase token: {exc}")
-                    return
+                    claims = active_auth0_verifier.verify_token(presented_token)
+                except Exception:
+                    # Fall back to Supabase verifier
+                    try:
+                        claims = active_supabase_verifier.verify_token(presented_token)
+                    except Exception as exc:
+                        self._send_error(HTTPStatus.UNAUTHORIZED, f"Invalid authentication token: {exc}")
+                        return
 
                 email = str(claims.get("email") or "").strip().lower()
                 sub = str(claims.get("sub") or "").strip()
+                if not email and sub:
+                    email = f"{sub.replace('|', '.')}@auth0.local"
                 if not email or not sub:
-                    self._send_error(HTTPStatus.BAD_REQUEST, "Supabase token missing email or subject")
+                    self._send_error(HTTPStatus.BAD_REQUEST, "Authentication token missing email or subject")
                     return
 
                 user_meta = claims.get("user_metadata") or {}
                 app_meta = claims.get("app_metadata") or {}
                 display_name = str(
-                    user_meta.get("full_name")
+                    claims.get("name")
+                    or claims.get("nickname")
+                    or user_meta.get("full_name")
                     or user_meta.get("name")
                     or user_meta.get("user_name")
                     or email.split("@")[0]
                 ).strip()
-                provider = str(app_meta.get("provider") or "google").strip()
+                provider = str(claims.get("provider") or app_meta.get("provider") or ("google" if "google" in sub.lower() else "auth0")).strip()
                 tenant_id = str(body.get("tenant_id") or "") or None
 
                 try:
@@ -3807,6 +3850,7 @@ def run_server(
     auth_secret: str = "",
     ui_dir: Path | None = None,
     supabase_verifier: SupabaseAuthVerifier | None = None,
+    auth0_verifier: Auth0Verifier | None = None,
 ) -> ThreadingHTTPServer:
     if bool(tls_cert) != bool(tls_key):
         raise ValueError("TLS requires both --tls-cert and --tls-key")
@@ -3842,6 +3886,7 @@ def run_server(
         auth_secret=auth_secret,
         ui_dir=resolved_ui_dir,
         supabase_verifier=supabase_verifier,
+        auth0_verifier=auth0_verifier,
     )
     server = _BoundedThreadingHTTPServer((host, port), handler)
     server.ui_dir_in_use = resolved_ui_dir  # type: ignore[attr-defined]
